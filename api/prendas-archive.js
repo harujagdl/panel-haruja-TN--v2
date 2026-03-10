@@ -4,6 +4,7 @@ const ACTIVE_SHEET = "prendas_admin_activas";
 const ARCHIVE_SHEET = "prendas_admin_archivo";
 const CODE_HEADER = "Código";
 const ARCHIVED_AT_HEADER = "ArchivedAt";
+const REQUIRED_HEADERS = ["Código", "Descripción", "Tipo", "Color", "Talla", "Proveedor", "Precio"];
 
 const createSheetsClient = () => {
   const auth = new google.auth.GoogleAuth({
@@ -25,6 +26,17 @@ const getSheetHeaders = async (sheets, sheetName) => {
     range: `${sheetName}!A1:ZZ1`
   });
   return (response?.data?.values?.[0] || []).map((header) => String(header || "").trim());
+};
+
+const getSpreadsheetSheetNames = async (sheets) => {
+  const metadata = await sheets.spreadsheets.get({
+    spreadsheetId: getSpreadsheetId(),
+    includeGridData: false
+  });
+
+  return (metadata?.data?.sheets || [])
+    .map((sheet) => String(sheet?.properties?.title || "").trim())
+    .filter(Boolean);
 };
 
 const readSheetRows = async (sheets, sheetName) => {
@@ -124,65 +136,80 @@ export default async function handler(req, res) {
 
   try {
     const codigo = String(req.body?.codigo || "").trim();
-    console.log("[prendas-archive] codigo recibido:", codigo);
+    console.log("[archive] payload codigo:", codigo);
     if (!codigo) {
       return res.status(400).json({ ok: false, message: "El campo 'codigo' es obligatorio." });
     }
 
     const sheets = createSheetsClient();
+    const sheetNames = await getSpreadsheetSheetNames(sheets);
+    if (!sheetNames.includes(ACTIVE_SHEET)) {
+      throw new Error("No existe la hoja prendas_admin_activas");
+    }
+    if (!sheetNames.includes(ARCHIVE_SHEET)) {
+      throw new Error("No existe la hoja prendas_admin_archivo");
+    }
+
+    console.log("[archive] leyendo hoja activas");
     const activeData = await readSheetRows(sheets, ACTIVE_SHEET);
-
-    if (!activeData.headers.includes(CODE_HEADER)) {
-      return res.status(500).json({ ok: false, message: "La hoja activa no contiene columna 'Código'." });
-    }
-
+    console.log("[archive] leyendo hoja archivo");
     const archiveHeaders = await getSheetHeaders(sheets, ARCHIVE_SHEET);
-    if (!archiveHeaders.length) {
-      return res.status(500).json({ ok: false, message: "La hoja de archivo no contiene encabezados válidos." });
-    }
+    console.log("[archive] headers activas:", activeData.headers);
+    console.log("[archive] headers archivo:", archiveHeaders);
 
-    const activeRow = activeData.rows.find(
+    REQUIRED_HEADERS.forEach((header) => {
+      if (!activeData.headers.includes(header)) {
+        throw new Error(`La hoja activa no contiene la columna "${header}".`);
+      }
+      if (!archiveHeaders.includes(header)) {
+        if (header === CODE_HEADER) {
+          throw new Error('La hoja de archivo no contiene la columna "Código".');
+        }
+        throw new Error(`La hoja de archivo no contiene la columna "${header}".`);
+      }
+    });
+
+    const rowEncontrada = activeData.rows.find(
       (row) => String(row?.sourceRowObject?.[CODE_HEADER] || "").trim() === codigo
     );
-    console.log("[prendas-archive] fila encontrada en activas:", Boolean(activeRow));
+    console.log("[archive] row encontrada:", rowEncontrada);
 
-    if (!activeRow) {
+    if (!rowEncontrada) {
       return res.status(404).json({ ok: false, message: "Código no encontrado en activas." });
     }
+
+    const sheetRowNumber = rowEncontrada.rowNumber;
+    console.log("[archive] rowNumber activa:", sheetRowNumber);
 
     const extraValues = {};
     if (archiveHeaders.includes(ARCHIVED_AT_HEADER)) {
       extraValues[ARCHIVED_AT_HEADER] = new Date().toISOString();
     }
 
-    const archiveRowValues = buildRowByTargetHeaders(
-      activeRow.sourceRowObject,
+    const rowValuesArchivo = buildRowByTargetHeaders(
+      rowEncontrada.sourceRowObject,
       archiveHeaders,
       extraValues
     );
+    console.log("[archive] values para archivo:", rowValuesArchivo);
 
-    await appendSheetRow(sheets, ARCHIVE_SHEET, archiveRowValues);
-    console.log("[prendas-archive] append realizado en archivo");
+    await appendSheetRow(sheets, ARCHIVE_SHEET, rowValuesArchivo);
 
     const archivedExists = await verifyRowExistsByCodigo(sheets, ARCHIVE_SHEET, codigo);
-    console.log("[prendas-archive] verificación append exitosa:", archivedExists);
 
     if (!archivedExists) {
-      return res.status(500).json({
-        ok: false,
-        message: "No se pudo guardar en archivo; no se eliminó de activas."
-      });
+      throw new Error("No se pudo verificar el guardado en archivo; no se eliminará de activas.");
     }
 
-    await deleteSheetRow(sheets, ACTIVE_SHEET, activeRow.rowNumber);
-    console.log("[prendas-archive] delete realizado en activas");
+    await deleteSheetRow(sheets, ACTIVE_SHEET, sheetRowNumber);
 
     return res.status(200).json({ ok: true, codigo, archived: true });
   } catch (error) {
     console.error("[prendas-archive] error:", error?.message || error);
     return res.status(500).json({
       ok: false,
-      message: "No se pudo guardar en archivo; no se eliminó de activas."
+      message: "Error archivando registro.",
+      error: error.message
     });
   }
 }
