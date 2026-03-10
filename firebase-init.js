@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plan de Lealtad Haruja</title>
+  <link rel="stylesheet" href="/lealtad/lealtad.css" />
+</head>
+<body>
+  <div class="container page page-header-wrapper">
+    <a href="https://paneltb.harujagdl.com/#/panel" class="panel-back-btn">← Volver al panel</a>
+    <div class="topbar" style="align-items:center;">
+      <a class="brandlink" href="https://paneltb.harujagdl.com/#/panel" aria-label="Volver al panel" style="display:flex;align-items:center;text-decoration:none;">
+        <img src="../assets/haruja-logo.png" alt="HarujaGdl" style="height:36px;width:auto;display:block;">
+      </a>
+    </div>
+
+    <header class="header">
+      <h1>Plan de Lealtad Haruja</h1>
+    </header>
+
+    <div class="segmented" role="tablist" aria-label="Vistas de lealtad">
+      <button data-view="panel" class="seg active" type="button">Panel</button>
+      <button data-view="db" class="seg" type="button">Clientes registrados</button>
+    </div>
+
+    <main id="view-panel" class="view active">
+      <div class="two-col">
+        <section class="card" id="card-register">
+          <h2>Registrar cliente</h2>
+          <div class="grid2">
+            <div>
+              <div class="label">Nombre</div>
+              <input id="name" placeholder="Nombre" />
+            </div>
+            <div>
+              <div class="label">Teléfono</div>
+              <input id="phone" placeholder="Teléfono" />
+            </div>
+            <div>
+              <div class="label">Instagram</div>
+              <input id="instagram" placeholder="Instagram" />
+            </div>
+            <div>
+              <div class="label">Email</div>
+              <input id="email" placeholder="Email" />
+            </div>
+          </div>
+          <div class="row top-12">
+            <button class="btn full" id="registerBtn" type="button">Registrar</button>
+          </div>
+        </section>
+
+        <section class="card" id="card-search">
+          <h2>Buscar cliente</h2>
+          <div class="row search-row">
+            <input id="searchInput" placeholder="HCL-0001, teléfono o nombre" />
+            <button class="btn" id="searchBtn" type="button">Buscar</button>
+          </div>
+          <div id="results" class="results top-12"></div>
+        </section>
+      </div>
+
+      <section class="card" id="card-selected" style="display:none">
+        <h2>Cliente seleccionado</h2>
+        <div id="clientSummary"></div>
+        <div class="edit-client-bar top-12">
+          <button class="btn btn-secondary" id="btnEditClient" type="button">Editar datos</button>
+        </div>
+        <div id="editClientForm" class="edit-client-form" style="display:none">
+          <div class="grid2">
+            <div>
+              <div class="label">Nombre</div>
+              <input id="editName" type="text" />
+            </div>
+            <div>
+              <div class="label">Teléfono</div>
+              <input id="editPhone" type="tel" />
+            </div>
+            <div>
+              <div class="label">Instagram</div>
+              <input id="editIg" type="text" />
+            </div>
+            <div>
+              <div class="label">Email</div>
+              <input id="editEmail" type="email" />
+            </div>
+          </div>
+          <div class="edit-actions">
+            <button class="btn" id="btnSaveClient" type="button">Guardar cambios</button>
+            <button class="btn btn-secondary" id="btnCancelEditClient" type="button">Cancelar</button>
+          </div>
+          <div id="editClientMsg" class="muted top-8"></div>
+        </div>
+        <div class="grid2 top-8">
+          <input id="purchaseAmount" type="number" min="1" placeholder="Monto de compra" />
+          <input id="purchaseNotes" placeholder="Notas compra" />
+        </div>
+        <div class="row top-8">
+          <button class="btn full" id="addPurchaseBtn" type="button">Agregar compra</button>
+        </div>
+        <div class="grid2 top-8">
+          <select id="rewardPts"><option value="150">150</option><option value="300">300</option><option value="500">500</option><option value="800">800</option></select>
+          <input id="redeemNotes" placeholder="Notas canje" />
+        </div>
+        <div class="row top-8">
+          <button class="btn full" id="redeemBtn" type="button">Canjear</button>
+        </div>
+      </section>
+    </main>
+
+    <main id="view-db" class="view">
+      <section class="card">
+        <h2>Clientes registrados</h2>
+        <div class="row">
+          <input id="dbSearchInput" placeholder="Buscar por nombre, teléfono o ID" />
+          <button class="btn" id="dbSearchBtn" type="button">Buscar</button>
+          <button class="btn btn-secondary" id="dbReloadBtn" type="button">Recargar</button>
+        </div>
+        <div id="dbResults" class="results top-12"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast"></div>
+  <script src="/lealtad/vendor/qrcode-generator.min.js"></script>
+  <script>
+    const PWA_PUBLIC_BASE_URL = 'https://haruja-panel.vercel.app';
+
+    const api = async (url, options={}) => {
+      const authHeaders = options.headers || {};
+      const res = await fetch(url, {headers:{"Content-Type":"application/json", ...authHeaders}, ...options});
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || "Error en la solicitud");
+      return data;
+    };
+
+    const views = {
+      panel: document.getElementById('view-panel'),
+      db: document.getElementById('view-db')
+    };
+    const segButtons = Array.from(document.querySelectorAll('.seg'));
+    let dbLoaded = false;
+    let selectedClient = null;
+    let saveClientInFlight = false;
+
+    const toast = (msg, ok=true) => {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.style.display = 'block';
+      el.style.background = ok ? '#2563EB' : '#DC2626';
+      setTimeout(() => { el.style.display = 'none'; }, 2200);
+    };
+
+    const setView = async (viewName) => {
+      segButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.view === viewName));
+      Object.entries(views).forEach(([name, el]) => el.classList.toggle('active', name === viewName));
+      if (viewName === 'db' && !dbLoaded) {
+        await loadClientsRegistered();
+      }
+    };
+
+
+    const buildPwaQrLink = (client) => {
+      const token = String(client?.token || '').trim();
+      if (!token) return '#';
+      return `${PWA_PUBLIC_BASE_URL}/tarjeta-lealtad.html?token=${encodeURIComponent(token)}`;
+    };
+
+    function renderQrInto(el, text) {
+      el.innerHTML = '';
+      const qr = qrcode(0, 'M');
+      qr.addData(text);
+      qr.make();
+      el.innerHTML = qr.createSvgTag({ scalable: true, margin: 2 });
+      const svg = el.querySelector('svg');
+      if (svg) {
+        svg.style.width = '220px';
+        svg.style.height = '220px';
+        svg.style.borderRadius = '14px';
+        svg.style.border = '1px solid #E5E7EB';
+        svg.style.background = '#fff';
+      }
+    }
+
+    const renderClient = (client) => {
+      selectedClient = client;
+      const summary = document.getElementById('clientSummary');
+      const card = document.getElementById('card-selected');
+      card.style.display = 'block';
+      const rawQr = String(client?.qrLink || '').trim();
+      const qrLink = (!rawQr || rawQr.toLowerCase().includes('run.app')) ? buildPwaQrLink(client) : rawQr;
+      summary.innerHTML = `
+        <div><b>${client.name}</b> <span class="pill">${client.clientId}</span></div>
+        <div class="muted">Puntos: <b>${client.points}</b> · Nivel: <b>${client.level}</b> · Compras: <b>$${Number(client.totalPurchases||0).toFixed(2)}</b></div>
+        <div class="notice mono">Token: <code>${client.token||'-'}</code></div>
+        <div class="notice mono">QR: <a href="${qrLink}" target="_blank" rel="noopener">${qrLink}</a></div>
+        <div class="qr-section top-8">
+          <div class="qr-wrap"><div id="qrPreview" class="qr" aria-label="QR"></div></div>
+          <div class="qr-actions">
+            <button class="btn" type="button" id="copyQrBtn">Copiar QR Link</button>
+          </div>
+        </div>
+      `;
+      renderQrInto(document.getElementById('qrPreview'), qrLink);
+      fillEditForm(client);
+      const copyBtn = document.getElementById('copyQrBtn');
+      copyBtn.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(qrLink);
+          toast('QR link copiado');
+        } catch (_err) {
+          toast('No se pudo copiar el link', false);
+        }
+      };
+    };
+
+    const fillEditForm = (client) => {
+      document.getElementById('editName').value = client?.name || '';
+      document.getElementById('editPhone').value = client?.phone || '';
+      document.getElementById('editIg').value = client?.instagram || '';
+      document.getElementById('editEmail').value = client?.email || '';
+      document.getElementById('editClientMsg').textContent = '';
+    };
+
+    const toggleEditForm = (show) => {
+      document.getElementById('editClientForm').style.display = show ? 'block' : 'none';
+      if (!show && selectedClient) fillEditForm(selectedClient);
+    };
+
+    const renderSearchItems = (items, targetId, openClientLabel = 'Seleccionar') => {
+      const box = document.getElementById(targetId);
+      box.innerHTML = items.length ? '' : '<p class="muted">Sin resultados</p>';
+      items.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'result-item';
+        row.innerHTML = `
+          <div>
+            <div><b>${item.clientId}</b> · ${item.name}</div>
+            <div class="muted">Tel: ${item.phone || '-'} · Puntos: ${item.points} · Nivel: ${item.level}</div>
+          </div>
+          <button class="btn btn-small" type="button">${openClientLabel}</button>
+        `;
+        row.querySelector('button').onclick = () => {
+          renderClient(item);
+          setView('panel');
+        };
+        box.appendChild(row);
+      });
+    };
+
+    const loadClientsRegistered = async () => {
+      try {
+        const {items} = await api('/api/loyalty/listClients?limit=80');
+        dbLoaded = true;
+        renderSearchItems(items, 'dbResults', 'Abrir');
+      } catch (e) {
+        toast(e.message, false);
+      }
+    };
+
+    const runClientSearch = async (inputId, targetId) => {
+      try {
+        const q = document.getElementById(inputId).value.trim();
+        const {items} = await api(`/api/loyalty/searchClients?q=${encodeURIComponent(q)}`);
+        renderSearchItems(items, targetId);
+      } catch (e) {
+        toast(e.message, false);
+      }
+    };
+
+    document.getElementById('registerBtn').onclick = async () => {
+      try {
+        const payload = {
+          name: document.getElementById('name').value,
+          phone: document.getElementById('phone').value,
+          instagram: document.getElementById('instagram').value,
+          email: document.getElementById('email').value
+        };
+        const {client} = await api('/api/loyalty/registerClient', {method:'POST', body: JSON.stringify(payload)});
+        toast('Cliente registrado');
+        renderClient(client);
+      } catch (e) { toast(e.message, false); }
+    };
+
+    document.getElementById('searchBtn').onclick = () => runClientSearch('searchInput', 'results');
+    document.getElementById('dbSearchBtn').onclick = () => runClientSearch('dbSearchInput', 'dbResults');
+    document.getElementById('dbReloadBtn').onclick = () => loadClientsRegistered();
+    document.getElementById('btnEditClient').onclick = () => {
+      if (!selectedClient) return toast('Selecciona cliente', false);
+      const form = document.getElementById('editClientForm');
+      const shouldShow = form.style.display === 'none';
+      if (shouldShow) fillEditForm(selectedClient);
+      toggleEditForm(shouldShow);
+    };
+    document.getElementById('btnCancelEditClient').onclick = () => toggleEditForm(false);
+    document.getElementById('btnSaveClient').onclick = async () => {
+      if (!selectedClient) return toast('Selecciona cliente', false);
+      if (saveClientInFlight) return;
+      const editMsg = document.getElementById('editClientMsg');
+      const name = document.getElementById('editName').value.trim();
+      const phone = document.getElementById('editPhone').value.trim();
+      const instagram = document.getElementById('editIg').value.trim();
+      const email = document.getElementById('editEmail').value.trim();
+      if (!name) {
+        editMsg.textContent = 'El nombre es obligatorio.';
+        return;
+      }
+      if (email && !/^\S+@\S+\.\S+$/.test(email)) {
+        editMsg.textContent = 'Email inválido.';
+        return;
+      }
+
+      const saveBtn = document.getElementById('btnSaveClient');
+      saveClientInFlight = true;
+      saveBtn.disabled = true;
+      editMsg.textContent = 'Guardando...';
+      try {
+        const {client} = await api('/api/loyalty/updateClientPublic', {
+          method:'PATCH',
+          body: JSON.stringify({
+            clientId: selectedClient.clientId || selectedClient.id,
+            name,
+            phone,
+            instagram,
+            email
+          })
+        });
+        selectedClient = {...selectedClient, ...client};
+        renderClient(selectedClient);
+        toggleEditForm(false);
+        if (dbLoaded) await loadClientsRegistered();
+        editMsg.textContent = 'Guardado ✅';
+        toast('Cliente actualizado');
+      } catch (e) {
+        editMsg.textContent = e.message;
+        toast(e.message, false);
+      } finally {
+        saveClientInFlight = false;
+        saveBtn.disabled = false;
+      }
+    };
+
+    document.getElementById('addPurchaseBtn').onclick = async () => {
+      if (!selectedClient) return toast('Selecciona cliente', false);
+      try {
+        const payload = {
+          clientId: selectedClient.clientId,
+          amount: Number(document.getElementById('purchaseAmount').value),
+          notes: document.getElementById('purchaseNotes').value
+        };
+        const {client} = await api('/api/loyalty/addPurchase', {method:'POST', body: JSON.stringify(payload)});
+        toast('Compra registrada');
+        renderClient({...selectedClient, ...client});
+      } catch (e) { toast(e.message, false); }
+    };
+
+    document.getElementById('redeemBtn').onclick = async () => {
+      if (!selectedClient) return toast('Selecciona cliente', false);
+      try {
+        const payload = {
+          clientId: selectedClient.clientId,
+          rewardPts: Number(document.getElementById('rewardPts').value),
+          notes: document.getElementById('redeemNotes').value
+        };
+        const {client} = await api('/api/loyalty/redeem', {method:'POST', body: JSON.stringify(payload)});
+        toast('Canje aplicado');
+        renderClient({...selectedClient, ...client});
+      } catch (e) { toast(e.message, false); }
+    };
+
+    segButtons.forEach((btn) => {
+      btn.addEventListener('click', () => setView(btn.dataset.view));
+    });
+  </script>
+</body>
+</html>
