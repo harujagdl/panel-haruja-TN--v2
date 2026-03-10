@@ -2802,6 +2802,8 @@ Errores: 0</pre>
         saveRangeMonthlyGoal
       } from "/shared/goalsSales.js";
       import { loadBaseRowsFromSheets } from "/shared/sheets-adapter.js";
+      import { loadDictionariesFromSheets } from "/app/shared/dictionaries-adapter.js";
+      import { createPrendaInSheets } from "/app/shared/prendas-create-adapter.js";
 
       const firebaseConfig = {
         apiKey: "AIzaSyAK5_MuMseQm58AeRZlrPtGyEZ216-Xkno",
@@ -4577,28 +4579,19 @@ Errores: 0</pre>
       };
 
       const loadDictionary = async () => {
-        await ensureFirebaseSession();
-        const categories = Object.keys(COLLECTIONS);
-        let results = await Promise.all(
-          categories.map((category) =>
-            loadCategoryEntries(category, COLLECTIONS[category])
-          )
-        );
-        const totalEntries = results.reduce((acc, result) => acc + result.entries.length, 0);
-        if (!totalEntries) {
-          results = await Promise.all(
-            categories.map((category) => loadCategoryEntriesFromFallback(category))
-          );
-        }
-        const missing = results.filter((result) => result.empty).map((result) => result.category);
-
+        // TODO v2:
+        // Registro y diccionarios ya migran por Sheets.
+        // Mantener helpers Firestore temporalmente por compatibilidad con módulos pendientes.
+        const dictionaries = await loadDictionariesFromSheets();
+        const categories = ["tipos", "proveedores", "colores", "tallas"];
+        const missing = categories.filter((category) => !(dictionaries?.[category] || []).length);
         return {
           empty: missing.length === categories.length,
           missing,
-          tipos: results.find((result) => result.category === "tipos")?.entries ?? [],
-          proveedores: results.find((result) => result.category === "proveedores")?.entries ?? [],
-          colores: results.find((result) => result.category === "colores")?.entries ?? [],
-          tallas: results.find((result) => result.category === "tallas")?.entries ?? []
+          tipos: dictionaries.tipos || [],
+          proveedores: dictionaries.proveedores || [],
+          colores: dictionaries.colores || [],
+          tallas: dictionaries.tallas || []
         };
       };
 
@@ -7930,98 +7923,42 @@ const createPrendaRow = (item) => {
           console.log('[guardarPrenda] proveedorNombre:', proveedorNombre);
           console.log('[guardarPrenda] tipoNombre:', tipoNombre);
 
-          const payloadRaw = {
-            codigo: codigoFinal,
-            code: codigoFinal,
-            codigoBase: codigoBaseFinal,
-            baseCode: codigoBaseFinal,
-            proveedor: proveedorCodigo,
-            proveedorCodigo,
-            proveedorNombre,
-            proveedorLabel,
-            tipo: tipoCodigo,
-            tipoCodigo,
-            tipoNombre,
-            tipoLabel,
-            color: colorCodigo,
-            colorNombre,
-            colorLabel,
-            talla: tallaCodigo,
-            tallaNombre,
-            tallaLabel,
-            providerCode,
-            typeCode,
-            colorCode,
-            tallaCode,
-            providerName,
-            typeName,
-            colorName,
-            tallaName,
-            descripcion,
-            detalles,
-            creadoPor,
+          const now = new Date();
+          const fechaLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+          const costoOverride = String(adminCreateCostoInput?.value || "").trim();
+          const precioOverride = String(adminCreatePVentaInput?.value || "").trim();
+
+          const payload = {
             orden: nextOrden,
-            seqNumber: nextOrden,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
+            codigo: codigoFinal,
+            descripcion,
+            tipo: typeName,
+            color: colorName,
+            talla: tallaName,
+            proveedor: providerName,
+            tn: "N/A",
+            status: "No definido",
+            disponibilidad: "No definido",
+            existencia: 0,
+            fecha: fechaLocal,
+            precio: precioOverride,
+            costo: costoOverride,
+            margen: "",
+            utilidad: "",
+            inventorySource: "manual",
+            lastInventorySyncAt: ""
           };
 
-          const payload = removeUndefinedDeep(payloadRaw);
-
-          const requiredKeysOk =
-            !!payload.codigo &&
-            !!payload.codigoBase &&
-            !!payload.providerCode &&
-            !!payload.typeCode &&
-            !!payload.colorCode &&
-            !!payload.tallaCode;
-
-          if (!requiredKeysOk) {
-            console.error("[guardarPrenda] payload inválido para rules:", payload);
+          if (!payload.codigo || !payload.tipo || !payload.proveedor || !payload.color || !payload.talla) {
             setRegistroStatus("Faltan campos obligatorios para guardar la prenda.", "error");
             return;
           }
 
-          const docId = buildDocIdFromCodigo(codigoFinal);
-          const publicRef = doc(collection(db, "HarujaPrendas_2025_public"), docId);
-
-          console.log("[guardarPrenda] keys payload:", Object.keys(payload).sort());
-          console.log("[guardarPrenda] payload limpio:", payload);
-          console.log('[save] payload final:', payload);
-          console.log('[guardarPrenda] orden:', payload.orden);
-          console.log('[guardarPrenda] seqNumber:', payload.seqNumber);
-          console.log("[guardarPrenda] docId:", docId);
-          console.log('[save] doc path:', publicRef.path);
-          console.log("[firestore] payload:", payload);
-
-          const existingSnap = await safeGetDoc(publicRef, "registroSave:existing");
-          if (existingSnap.exists()) {
-            throw new Error("Ese código ya existe en la base pública.");
+          console.log('[save] payload final sheets:', payload);
+          const saveResult = await createPrendaInSheets(payload);
+          if (!saveResult?.ok) {
+            throw new Error(saveResult?.message || "No se pudo confirmar el guardado en Sheets.");
           }
-
-          try {
-            await setDoc(publicRef, payload);
-          } catch (error) {
-            console.error("[firestore] write error code:", error?.code);
-            console.error("[firestore] write error message:", error?.message);
-            console.error("[firestore] write error stack:", error?.stack);
-            if (String(error?.code || "").includes("permission") || String(error?.message || "").includes("permission")) {
-              setRegistroStatus("No se pudo guardar la prenda. Revisa rules, payload o conectividad.", "error");
-              return;
-            }
-            if (String(error?.message || "").includes("Invalid") || String(error?.message || "").includes("unsupported")) {
-              setRegistroStatus("No se pudo guardar por un campo inválido. Revisar consola.", "error");
-              return;
-            }
-            setRegistroStatus("No se pudo guardar la prenda. Revisar consola para detalle técnico.", "error");
-            return;
-          }
-
-          const savedSnap = await safeGetDoc(publicRef, "registroSave:verify");
-          if (!savedSnap.exists()) {
-            throw new Error("No se confirmó el guardado del documento en Firestore.");
-          }
-
           if (adminCreateCostoInput) adminCreateCostoInput.value = "";
           if (adminCreatePVentaInput) adminCreatePVentaInput.value = "";
           registroPreview = { ...preview };
@@ -8038,15 +7975,15 @@ const createPrendaRow = (item) => {
 
           if (prendasSearchInput) prendasSearchInput.value = codigoFinal;
           if (prendasSearch) prendasSearch.value = codigoFinal;
-          console.log('[save] recargando tabla desde Firestore');
+          console.log('[save] recargando tabla desde la base de datos');
           await loadPrendasPage({ reset: true, reason: "save-garment" });
-          setRegistroStatus("Prenda guardada correctamente.", "success");
+          setRegistroStatus("Prenda guardada correctamente en la base de datos.", "success");
         } catch (error) {
           console.error(error);
           const errorCode = String(error?.code || "");
           const errorMessage = String(error?.message || "");
           if (errorCode.includes("permission") || errorMessage.includes("permission")) {
-            setRegistroStatus("No se pudo guardar la prenda por reglas o permisos de Firestore.", "error");
+            setRegistroStatus("No se pudo guardar la prenda en la base de datos.", "error");
           } else if (errorMessage.includes("Invalid") || errorMessage.includes("unsupported")) {
             setRegistroStatus("No se pudo guardar por un campo inválido. Revisar consola.", "error");
           } else {
@@ -8977,7 +8914,7 @@ document.addEventListener("keydown", (event) => {
           const dictionary = await loadDictionary();
           const dictionaryReady = !dictionary.empty && dictionary.missing.length === 0;
           if (dictionary.empty) {
-            setRegistroStatus("Diccionario vacío: corre el workflow Seed Firestore.", "error");
+            setRegistroStatus("Diccionario vacío en Sheets: revisa las pestañas de diccionario.", "error");
           } else if (dictionary.missing.length) {
             setRegistroStatus(
               `Faltan datos en: ${dictionary.missing.join(", ")}.`,
