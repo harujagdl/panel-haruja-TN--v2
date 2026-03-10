@@ -1,6 +1,7 @@
 {
-  "name": "panel-haruja-v2",
+  "name": "panel-haruja-tn-v2",
   "version": "1.0.0",
+  "private": true,
   "dependencies": {
     "googleapis": "^126.0.0"
   }
