@@ -5529,14 +5529,19 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
       // Render QR local (sin internet)
       var els = Array.from(document.querySelectorAll('.qr'));
       els.forEach(function(el){
-        var value = el.dataset.qr || '';
+        var value = String(el.dataset.qr || '').trim();
         el.innerHTML = ""; // limpia por si acaso
+
+        if (!value || !window.QRCode) {
+          if (!value) el.textContent = 'Sin QR';
+          return;
+        }
 
         // qrcodejs crea canvas/img dentro del contenedor
         new QRCode(el, {
           text: value,
-          width: 220,
-          height: 220,
+          width: 64,
+          height: 64,
           correctLevel: QRCode.CorrectLevel.M
         });
       });
@@ -5615,7 +5620,7 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
 
         const norm = (r) => ({
           id: String(r?.id ?? r?.docId ?? ""),
-          codigo: String(r?.codigo ?? r?.code ?? "").trim(),
+          codigo: String(r?.codigo ?? r?.["Código"] ?? r?.code ?? "").trim(),
           descripcion: String(r?.descripcion ?? r?.desc ?? r?.nombre ?? "").trim(),
           precio: String(r?.precio ?? r?.price ?? r?.pVenta ?? "").trim(),
           talla: String(r?.talla ?? r?.size ?? r?.tallaCode ?? "").trim(),
@@ -5632,12 +5637,13 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
                 // Nota: el layout objetivo usa el logo como texto (harujagdl) debajo del QR,
                 // así que no intentamos renderizar ^GFA aquí para evitar errores por compresión.
                 const labels = rowsToPrint.map((row) => {
-          const codigo = safeString(row.codigo || row.code).trim().toUpperCase();
+          const codigo = safeString(row.codigo || row.code).trim();
+          const qrValue = String(row.codigo || row["Código"] || "").trim();
           const precioNum = getLabelPriceNumber(row);
           return {
             codigo,
             precioTexto: formatLabelPrice(precioNum),
-            qrValue: codigo,
+            qrValue,
             logoSrc
           };
         });
@@ -8121,6 +8127,7 @@ const createPrendaRow = (item) => {
       const buildLabelPrintPages = ({ sku, qty, price, logoSrc }) => {
         if (!printRoot) return;
         printRoot.innerHTML = "";
+        const qrValue = String(sku || "").trim();
 
         for (let i = 0; i < qty; i += 1) {
           const page = document.createElement("div");
@@ -8153,6 +8160,7 @@ const createPrendaRow = (item) => {
           const qrContainer = document.createElement("div");
           qrContainer.className = "label-qr";
           qrContainer.id = `label-qr-${i}`;
+          qrContainer.setAttribute("data-qr", qrValue);
 
           const logo = document.createElement("img");
           logo.className = "label-logo";
@@ -8163,15 +8171,24 @@ const createPrendaRow = (item) => {
           page.append(left, right);
           printRoot.appendChild(page);
 
-          if (window.QRCode) {
-            new QRCode(qrContainer, {
-              text: sku,
-              width: 140,
-              height: 140,
-              correctLevel: QRCode.CorrectLevel.M
-            });
-          }
         }
+
+        const qrContainers = Array.from(printRoot.querySelectorAll(".label-qr[data-qr]"));
+        qrContainers.forEach((qrContainer) => {
+          const value = String(qrContainer.getAttribute("data-qr") || "").trim();
+          qrContainer.innerHTML = "";
+          if (!value || !window.QRCode) {
+            if (!value) qrContainer.textContent = "Sin QR";
+            return;
+          }
+
+          new QRCode(qrContainer, {
+            text: value,
+            width: 64,
+            height: 64,
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        });
       };
 
       const handlePrintLabel = async (event) => {
