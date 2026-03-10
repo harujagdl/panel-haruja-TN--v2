@@ -3,7 +3,6 @@ import { google } from "googleapis";
 const ACTIVE_SHEET = "prendas_admin_activas";
 const ARCHIVE_SHEET = "prendas_admin_archivo";
 const CODE_HEADER = "Código";
-const ARCHIVED_AT_HEADER = "ArchivedAt";
 
 const createSheetsClient = () => {
   const auth = new google.auth.GoogleAuth({
@@ -42,11 +41,9 @@ const readSheetRows = async (sheets, sheetName) => {
     });
     return {
       rowNumber: index + 2,
-      values: row,
       sourceRowObject
     };
   });
-
   return { headers, rows };
 };
 
@@ -124,65 +121,55 @@ export default async function handler(req, res) {
 
   try {
     const codigo = String(req.body?.codigo || "").trim();
-    console.log("[prendas-archive] codigo recibido:", codigo);
+    console.log("[prendas-restore] codigo recibido:", codigo);
     if (!codigo) {
       return res.status(400).json({ ok: false, message: "El campo 'codigo' es obligatorio." });
     }
 
     const sheets = createSheetsClient();
-    const activeData = await readSheetRows(sheets, ACTIVE_SHEET);
+    const archivedData = await readSheetRows(sheets, ARCHIVE_SHEET);
 
-    if (!activeData.headers.includes(CODE_HEADER)) {
-      return res.status(500).json({ ok: false, message: "La hoja activa no contiene columna 'Código'." });
+    if (!archivedData.headers.includes(CODE_HEADER)) {
+      return res.status(500).json({ ok: false, message: "La hoja de archivo no contiene columna 'Código'." });
     }
 
-    const archiveHeaders = await getSheetHeaders(sheets, ARCHIVE_SHEET);
-    if (!archiveHeaders.length) {
-      return res.status(500).json({ ok: false, message: "La hoja de archivo no contiene encabezados válidos." });
+    const activeHeaders = await getSheetHeaders(sheets, ACTIVE_SHEET);
+    if (!activeHeaders.length) {
+      return res.status(500).json({ ok: false, message: "La hoja activa no contiene encabezados válidos." });
     }
 
-    const activeRow = activeData.rows.find(
+    const archivedRow = archivedData.rows.find(
       (row) => String(row?.sourceRowObject?.[CODE_HEADER] || "").trim() === codigo
     );
-    console.log("[prendas-archive] fila encontrada en activas:", Boolean(activeRow));
+    console.log("[prendas-restore] fila encontrada en archivo:", Boolean(archivedRow));
 
-    if (!activeRow) {
-      return res.status(404).json({ ok: false, message: "Código no encontrado en activas." });
+    if (!archivedRow) {
+      return res.status(404).json({ ok: false, message: "Código no encontrado en archivo." });
     }
 
-    const extraValues = {};
-    if (archiveHeaders.includes(ARCHIVED_AT_HEADER)) {
-      extraValues[ARCHIVED_AT_HEADER] = new Date().toISOString();
-    }
+    const restoreRowValues = buildRowByTargetHeaders(archivedRow.sourceRowObject, activeHeaders);
+    await appendSheetRow(sheets, ACTIVE_SHEET, restoreRowValues);
+    console.log("[prendas-restore] append realizado en activas");
 
-    const archiveRowValues = buildRowByTargetHeaders(
-      activeRow.sourceRowObject,
-      archiveHeaders,
-      extraValues
-    );
+    const restoredExists = await verifyRowExistsByCodigo(sheets, ACTIVE_SHEET, codigo);
+    console.log("[prendas-restore] verificación append exitosa:", restoredExists);
 
-    await appendSheetRow(sheets, ARCHIVE_SHEET, archiveRowValues);
-    console.log("[prendas-archive] append realizado en archivo");
-
-    const archivedExists = await verifyRowExistsByCodigo(sheets, ARCHIVE_SHEET, codigo);
-    console.log("[prendas-archive] verificación append exitosa:", archivedExists);
-
-    if (!archivedExists) {
+    if (!restoredExists) {
       return res.status(500).json({
         ok: false,
-        message: "No se pudo guardar en archivo; no se eliminó de activas."
+        message: "No se pudo restaurar el registro."
       });
     }
 
-    await deleteSheetRow(sheets, ACTIVE_SHEET, activeRow.rowNumber);
-    console.log("[prendas-archive] delete realizado en activas");
+    await deleteSheetRow(sheets, ARCHIVE_SHEET, archivedRow.rowNumber);
+    console.log("[prendas-restore] delete realizado en archivo");
 
-    return res.status(200).json({ ok: true, codigo, archived: true });
+    return res.status(200).json({ ok: true, codigo, restored: true });
   } catch (error) {
-    console.error("[prendas-archive] error:", error?.message || error);
+    console.error("[prendas-restore] error:", error?.message || error);
     return res.status(500).json({
       ok: false,
-      message: "No se pudo guardar en archivo; no se eliminó de activas."
+      message: "No se pudo restaurar el registro."
     });
   }
 }

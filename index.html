@@ -2600,6 +2600,24 @@ body.haruja-col-resizing{
       <div class="loader-text">Cargando base de datos…</div>
     </div>
     <div id="prendas-alert" class="prendas-alert" style="display:none; margin:10px 0;"></div>
+    <div id="archivedPanel" class="hidden" style="margin:10px 0; border:1px solid #e5e7eb; border-radius:10px; padding:10px; background:#fff;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+        <strong>Histórico archivado</strong>
+        <button id="btn-archived-close" class="btn btn-muted" type="button">Cerrar</button>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Código</th><th>Descripción</th><th>Tipo</th><th>Color</th><th>Talla</th><th>Precio</th><th>Fecha</th><th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="archivedTbody">
+            <tr><td colspan="8" class="muted">Sin registros archivados.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
     <template id="prendas-empty-template"><tr><td colspan="99" style="padding:18px; text-align:center; color:#6b7280;">Sin resultados</td></tr></template>
 
     <div class="table-wrap tableWrap">
@@ -2808,6 +2826,8 @@ Errores: 0</pre>
       import { createPrendaInSheets } from "/app/shared/prendas-create-adapter.js";
       import { deletePrendaInSheets } from "/app/shared/prendas-delete-adapter.js";
       import { archivePrendaInSheets } from "/app/shared/prendas-archive-adapter.js";
+      import { restorePrendaInSheets } from "/app/shared/prendas-restore-adapter.js";
+      import { loadArchivedPrendasFromSheets } from "/app/shared/prendas-archived-adapter.js";
       import { processCorrectionsFileRows } from "/app/shared/corrections-adapter.js";
 
       const firebaseConfig = {
@@ -3104,6 +3124,8 @@ Errores: 0</pre>
       const labelsPanel = document.getElementById("labels-panel");
       const labelsPrintButton = document.getElementById("labels-print-btn");
       const labelsScopeInputs = document.querySelectorAll("input[name='labels-scope']");
+      const archivedPanel = document.getElementById("archivedPanel");
+      const archivedTbody = document.getElementById("archivedTbody");
       const getSelectAllLabelsCheckbox = () => document.getElementById("select-all-labels");
 
       const adminSplitButton = document.getElementById("admin-split-collections");
@@ -4447,7 +4469,9 @@ Errores: 0</pre>
         selected: new Set(),
         labelsScope: "page",
         labelsPanelOpen: false,
-        archivingCodes: new Set()
+        archivingCodes: new Set(),
+        restoringCodes: new Set(),
+        archivedRows: []
       };
       prendasState.editing = null;
       let isBooting = true;
@@ -5059,6 +5083,7 @@ Errores: 0</pre>
         }
         if (adminEnabled) {
           toolbarButtons.push(mkBtn("btn-upload-corrections", "Subir correcciones"));
+          toolbarButtons.push(mkBtn("btn-archived-toggle", "Ver archivadas"));
         }
         toolbar.replaceChildren(...toolbarButtons);
       };
@@ -7312,21 +7337,131 @@ const createPrendaRow = (item) => {
 
         prendasState.archivingCodes.add(codigo);
         try {
-          await archivePrendaInSheets(codigo);
+          const result = await archivePrendaInSheets(codigo);
+          if (!result?.ok || result?.archived !== true) {
+            throw new Error(result?.message || "No se pudo archivar el registro.");
+          }
           prendasState.baseRows = [];
           prendasState.baseRowsCacheKey = null;
           await loadPrendasPage({ reset: true, reason: "archive" });
-          setPrendasAlert("Registro archivado correctamente.", "success");
+          if (!archivedPanel?.classList.contains("hidden")) {
+            await loadArchivedPanel();
+          }
+          setPrendasAlert("Registro archivado correctamente.");
         } catch (error) {
           const message = safeString(error?.message).toLowerCase();
-          if (message.includes("código no encontrado")) {
-            setPrendasAlert("Código no encontrado en la base activa.", "warning");
+          if (message.includes("no se pudo guardar en archivo")) {
+            setPrendasAlert("No se guardó en archivo; se conservó en activas.");
             return;
           }
-          setPrendasAlert("No se pudo archivar el registro.", "error");
+          if (message.includes("código no encontrado")) {
+            setPrendasAlert("Código no encontrado en la base activa.");
+            return;
+          }
+          setPrendasAlert("No se pudo archivar el registro.");
           throw error;
         } finally {
           prendasState.archivingCodes.delete(codigo);
+        }
+      };
+
+      const renderArchivedRows = (rows = []) => {
+        if (!archivedTbody) return;
+        const safeRows = Array.isArray(rows) ? rows : [];
+        archivedTbody.textContent = "";
+        if (!safeRows.length) {
+          const emptyRow = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.colSpan = 8;
+          cell.className = "muted";
+          cell.textContent = "Sin registros archivados.";
+          emptyRow.appendChild(cell);
+          archivedTbody.appendChild(emptyRow);
+          return;
+        }
+
+        safeRows.forEach((row) => {
+          const tr = document.createElement("tr");
+          const codigo = safeString(row?.["Código"]).trim();
+          const fields = [
+            codigo,
+            row?.["Descripción"] || "--",
+            row?.["Tipo"] || "--",
+            row?.["Color"] || "--",
+            row?.["Talla"] || "--",
+            row?.["Precio"] || "--",
+            row?.["Fecha"] || "--"
+          ];
+          fields.forEach((value) => {
+            const td = document.createElement("td");
+            td.textContent = safeString(value) || "--";
+            tr.appendChild(td);
+          });
+
+          const actionTd = document.createElement("td");
+          const restoreButton = document.createElement("button");
+          restoreButton.type = "button";
+          restoreButton.className = "btn btn-primary archivedRestoreBtn";
+          restoreButton.dataset.codigo = codigo;
+          restoreButton.textContent = "Restaurar";
+          actionTd.appendChild(restoreButton);
+          tr.appendChild(actionTd);
+          archivedTbody.appendChild(tr);
+        });
+      };
+
+      const loadArchivedPanel = async () => {
+        const rows = await loadArchivedPrendasFromSheets();
+        prendasState.archivedRows = rows;
+        renderArchivedRows(rows);
+      };
+
+      const hideArchivedPanel = () => {
+        if (!archivedPanel) return;
+        archivedPanel.classList.add("hidden");
+      };
+
+      const showArchivedPanel = async () => {
+        if (!ensureAdminMode()) return;
+        if (!archivedPanel) return;
+        await loadArchivedPanel();
+        archivedPanel.classList.remove("hidden");
+      };
+
+      const handleRestoreRow = async (rowData) => {
+        if (!rowData) return;
+        if (!ensureAdminMode()) return;
+        const codigo = safeString(rowData?.["Código"] || rowData?.codigo).trim();
+        if (!codigo) {
+          setPrendasAlert("No se pudo restaurar el registro.");
+          return;
+        }
+        if (prendasState.restoringCodes.has(codigo)) return;
+
+        const confirmed = window.confirm(`¿Restaurar ${codigo} a activas?`);
+        if (!confirmed) return;
+
+        prendasState.restoringCodes.add(codigo);
+        try {
+          const result = await restorePrendaInSheets(codigo);
+          if (!result?.ok || result?.restored !== true) {
+            throw new Error(result?.message || "No se pudo restaurar el registro.");
+          }
+          await loadArchivedPanel();
+          prendasState.baseRows = [];
+          prendasState.baseRowsCacheKey = null;
+          await loadPrendasPage({ reset: true, reason: "restore" });
+          setPrendasAlert("Registro restaurado correctamente.");
+        } catch (error) {
+          const message = safeString(error?.message).toLowerCase();
+          if (message.includes("código no encontrado en archivo")) {
+            setPrendasAlert("Código no encontrado en archivo.");
+            return;
+          }
+          setPrendasAlert("No se pudo restaurar el registro.");
+          throw error;
+        } finally {
+          prendasState.restoringCodes.delete(codigo);
         }
       };
 
@@ -8777,6 +8912,21 @@ const createPrendaRow = (item) => {
           return;
         }
 
+        if (event.target.closest("#btn-archived-toggle")) {
+          try {
+            await showArchivedPanel();
+          } catch (error) {
+            console.error(error);
+            setPrendasAlert("No se pudo cargar el histórico archivado.");
+          }
+          return;
+        }
+
+        if (event.target.closest("#btn-archived-close")) {
+          hideArchivedPanel();
+          return;
+        }
+
         if (event.target.closest("#ordenSortBtn")) {
           const current = normalizeSortConfig(prendasState.sort);
           const nextDir = current.dir === "asc" ? "desc" : "asc";
@@ -8866,6 +9016,20 @@ const createPrendaRow = (item) => {
           handleDeleteRow(rowData).catch((error) => {
             console.error(error);
             setPrendasAlert(error?.message || "No se pudo eliminar la prenda.", "error");
+          });
+        });
+      }
+
+      if (archivedTbody) {
+        archivedTbody.addEventListener("click", (event) => {
+          const archivedRestoreButton = event.target.closest(".archivedRestoreBtn");
+          if (!archivedRestoreButton) return;
+          if (!isAdminViewEnabled()) return;
+          const codigo = safeString(archivedRestoreButton.dataset.codigo).trim();
+          const rowData = (prendasState.archivedRows || []).find((row) => safeString(row?.["Código"]).trim() === codigo);
+          handleRestoreRow(rowData).catch((error) => {
+            console.error(error);
+            setPrendasAlert(error?.message || "No se pudo restaurar el registro.");
           });
         });
       }
