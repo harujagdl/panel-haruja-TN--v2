@@ -10,7 +10,7 @@ export async function archivePrendaInSheets(codigo) {
 
   const data = await response.json().catch(() => ({}));
 
-  if (!response.ok || !data?.ok) {
+  if (!response.ok || !data?.ok || data?.archived !== true) {
     throw new Error(data?.message || "No se pudo archivar el registro.");
   }
 
