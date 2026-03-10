@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧷</text></svg>">
     <title>Panel Haruja – TD | Panel</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
@@ -2245,7 +2246,7 @@ body.haruja-col-resizing{
                 </div>
                 <div class="toolcard-body">
                   <div class="toolcard-title">Registro de nuevas prendas</div>
-                  <div class="toolcard-desc">Genera el código y guarda la prenda en Firestore.</div>
+                  <div class="toolcard-desc">Genera el código y guarda la prenda en la fuente de datos.</div>
                   <div class="toolcard-actions">
                     <button type="button" class="btn btn-primary tool-open" id="btnOpenRegistro">Abrir</button>
                   </div>
@@ -2445,7 +2446,7 @@ body.haruja-col-resizing{
         <section class="section" id="registro">
           <button type="button" id="btnBackRegistro" class="secondary js-go-panel" data-go-panel="1">← Volver al panel</button>
           <h2>Registro de nuevas prendas</h2>
-          <p>Selecciona los atributos clave para generar el código y guardar la prenda en Firestore.</p>
+          <p>Selecciona los atributos clave para generar el código y guardar la prenda en la fuente de datos.</p>
           <form class="form form-row" id="registro-form">
             <div>
               <label for="registro-code-mode">Tipo de código *</label>
@@ -2802,20 +2803,18 @@ Errores: 0</pre>
       } from "/shared/goalsSales.js";
       import { loadBaseRowsFromSheets } from "/shared/sheets-adapter.js";
 
-      // ✅ CONFIG FIREBASE (EDITA SOLO ESTE BLOQUE SI CAMBIAS DE PROYECTO)
-// Pega aquí TU CONFIG real de Firebase (Project settings > Your apps > Firebase SDK snippet > Config)
-const firebaseConfig = window.HARUJA_FIREBASE_CONFIG || window.__HARUJA_FIREBASE_CONFIG__ || {};
+      const firebaseConfig = {
+        apiKey: "AIzaSyAK5_MuMseQm58AeRZlrPtGyEZ216-Xkno",
+        authDomain: "haruja-tiendanube.firebaseapp.com",
+        projectId: "haruja-tiendanube",
+        storageBucket: "haruja-tiendanube.firebasestorage.app",
+        messagingSenderId: "396461447684",
+        appId: "1:396461447684:web:770dc3bc9bbb40a2873351"
+      };
+      console.log("[Firebase] projectId:", firebaseConfig.projectId);
 
-if (!firebaseConfig?.apiKey || firebaseConfig.apiKey.includes("PEGA_AQUI") || firebaseConfig.apiKey.includes("REEMPLAZAR")) {
-  console.error("[Firebase] Falta configurar firebaseConfig.apiKey (y/o appId/messagingSenderId).");
-}
-console.log("[Firebase] projectId:", firebaseConfig?.projectId);
-
-      if(!firebaseConfig.apiKey || String(firebaseConfig.apiKey).includes("PEGA") || String(firebaseConfig.apiKey).includes("AQUI")){
-  console.warn("[Firebase] Falta configurar firebaseConfig.apiKey (y/o appId/messagingSenderId).");
-}
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
       let firebaseReadyPromise = null;
       const ensureFirebaseSession = async () => {
         if (auth.currentUser) {
@@ -2968,6 +2967,9 @@ const auth = getAuth(app);
           return null;
         });
       const signInWithGoogleForContext = async () => {
+        // IMPORTANTE:
+        // Para login Google en Vercel, agregar el dominio del deploy
+        // en Firebase Console > Authentication > Settings > Authorized domains
         if (isEmbeddedApp) {
           await signInWithRedirect(auth, googleProvider);
           return null;
@@ -4245,6 +4247,8 @@ const auth = getAuth(app);
         });
       };
 
+      // TODO v2: migrar diccionarios a Google Sheets API
+      // Actualmente siguen cargando desde Firestore por compatibilidad del módulo Registro.
       const COLLECTIONS = {
         tipos: "diccionario_tipos",
         proveedores: "diccionario_proveedores",
@@ -8479,7 +8483,7 @@ const createPrendaRow = (item) => {
             return;
           }
           const idToken = await user.getIdToken(true);
-          setAdminLoginStatus("Migrando colección base a public/admin por lotes...", "warning");
+          setAdminLoginStatus("Migrando datos por lotes...", "warning");
 
           let totalProcessed = 0;
           let totalPublic = 0;
@@ -8528,7 +8532,7 @@ const createPrendaRow = (item) => {
           await loadPrendasPage({ reset: true, reason: "migrate-collections" });
         } catch (error) {
           console.error(error);
-          setAdminLoginStatus(`Error al migrar colecciones: ${error.message || error}`, "error");
+          setAdminLoginStatus(`Error en migración de datos: ${error.message || error}`, "error");
         } finally {
           if (adminSplitButton) {
             adminSplitButton.disabled = false;
