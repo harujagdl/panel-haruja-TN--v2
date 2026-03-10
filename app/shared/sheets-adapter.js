@@ -1,51 +1,37 @@
-export async function loadPrendasFromSheets() {
+export async function loadBaseRowsFromSheets() {
+
   const res = await fetch("/api/prendas-list");
 
   if (!res.ok) {
-    throw new Error("No se pudo cargar la base de prendas desde Sheets");
+    throw new Error("Error cargando datos desde Sheets");
   }
 
-  const data = await res.json();
+  const rows = await res.json();
 
-  return data.map((item, index) => ({
-    id: item["Código"] || `row-${index}`,
-    orden: item["Orden"] ?? "",
-    codigo: item["Código"] ?? "",
-    descripcion: item["Descripción"] ?? "",
-    tipo: item["Tipo"] ?? "",
-    color: item["Color"] ?? "",
-    talla: item["Talla"] ?? "",
-    proveedor: item["Proveedor"] ?? "",
-    tn: item["TN"] ?? "",
-    status: item["Status"] ?? "",
-    disponibilidad: item["Disponibilidad"] ?? "",
-    existencia: Number(item["Existencia"] ?? 0),
-    fecha: item["Fecha"] ?? "",
-    precio: Number(item["Precio"] ?? 0),
-    costo: Number(item["Costo"] ?? 0),
-    margen: Number(item["Margen"] ?? 0),
-    utilidad: Number(item["Utilidad"] ?? 0),
-    inventorySource: item["InventorySource"] ?? "",
-    lastInventorySyncAt: item["LastInventorySyncAt"] ?? "",
+  return rows.map((row, index) => ({
+    docId: row["Código"] || `row-${index}`,
+    id: row["Código"] || `row-${index}`,
 
-    // alias por si el panel usa nombres originales
-    Orden: item["Orden"] ?? "",
-    Código: item["Código"] ?? "",
-    Descripción: item["Descripción"] ?? "",
-    Tipo: item["Tipo"] ?? "",
-    Color: item["Color"] ?? "",
-    Talla: item["Talla"] ?? "",
-    Proveedor: item["Proveedor"] ?? "",
-    TN: item["TN"] ?? "",
-    Status: item["Status"] ?? "",
-    Disponibilidad: item["Disponibilidad"] ?? "",
-    Existencia: Number(item["Existencia"] ?? 0),
-    Fecha: item["Fecha"] ?? "",
-    Precio: Number(item["Precio"] ?? 0),
-    Costo: Number(item["Costo"] ?? 0),
-    Margen: Number(item["Margen"] ?? 0),
-    Utilidad: Number(item["Utilidad"] ?? 0),
-    InventorySource: item["InventorySource"] ?? "",
-    LastInventorySyncAt: item["LastInventorySyncAt"] ?? ""
+    orden: row["Orden"],
+    codigo: row["Código"],
+    descripcion: row["Descripción"],
+    tipo: row["Tipo"],
+    color: row["Color"],
+    talla: row["Talla"],
+    proveedor: row["Proveedor"],
+
+    tn: row["TN"],
+    status: row["Status"],
+    disponibilidad: row["Disponibilidad"],
+    existencia: Number(row["Existencia"] || 0),
+
+    fecha: row["Fecha"],
+    precio: Number(row["Precio"] || 0),
+    costo: Number(row["Costo"] || 0),
+    margen: Number(row["Margen"] || 0),
+    utilidad: Number(row["Utilidad"] || 0),
+
+    inventorySource: row["InventorySource"]
   }));
+
 }
