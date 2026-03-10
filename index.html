@@ -2807,6 +2807,7 @@ Errores: 0</pre>
       import { loadDictionariesFromSheets } from "/app/shared/dictionaries-adapter.js";
       import { createPrendaInSheets } from "/app/shared/prendas-create-adapter.js";
       import { deletePrendaInSheets } from "/app/shared/prendas-delete-adapter.js";
+      import { archivePrendaInSheets } from "/app/shared/prendas-archive-adapter.js";
       import { processCorrectionsFileRows } from "/app/shared/corrections-adapter.js";
 
       const firebaseConfig = {
@@ -4445,7 +4446,8 @@ Errores: 0</pre>
         adminMap: new Map(),
         selected: new Set(),
         labelsScope: "page",
-        labelsPanelOpen: false
+        labelsPanelOpen: false,
+        archivingCodes: new Set()
       };
       prendasState.editing = null;
       let isBooting = true;
@@ -6918,6 +6920,13 @@ const createPrendaRow = (item) => {
           editButton.setAttribute("aria-label", "Editar prenda");
           editButton.title = "Editar";
           editButton.textContent = "✏️";
+          const archiveButton = document.createElement("button");
+          archiveButton.type = "button";
+          archiveButton.className = "rowArchiveBtn";
+          archiveButton.dataset.archiveDoc = docId;
+          archiveButton.setAttribute("aria-label", "Archivar prenda");
+          archiveButton.title = "Archivar";
+          archiveButton.textContent = "🗂️";
           const deleteButton = document.createElement("button");
           deleteButton.type = "button";
           deleteButton.className = "rowDeleteBtn";
@@ -6925,7 +6934,7 @@ const createPrendaRow = (item) => {
           deleteButton.setAttribute("aria-label", "Borrar prenda");
           deleteButton.title = "Borrar";
           deleteButton.textContent = "🗑";
-          actionWrap.append(editButton, deleteButton);
+          actionWrap.append(editButton, archiveButton, deleteButton);
           actionCell.appendChild(actionWrap);
           row.appendChild(actionCell);
         }
@@ -7283,6 +7292,41 @@ const createPrendaRow = (item) => {
           }
           setPrendasAlert("No se pudo eliminar el registro.", "error");
           throw error;
+        }
+      };
+
+      const handleArchiveRow = async (rowData) => {
+        if (!rowData) return;
+        if (!ensureAdminMode()) return;
+        const docId = safeString(rowData.docId || rowData.id).trim();
+        const codigo = safeString(rowData.codigo).trim() || docId;
+        if (!codigo) {
+          setPrendasAlert("No se pudo archivar el registro.", "error");
+          return;
+        }
+        if (prendasState.archivingCodes.has(codigo)) {
+          return;
+        }
+        const confirmed = window.confirm(`¿Archivar ${codigo}? Se moverá al histórico.`);
+        if (!confirmed) return;
+
+        prendasState.archivingCodes.add(codigo);
+        try {
+          await archivePrendaInSheets(codigo);
+          prendasState.baseRows = [];
+          prendasState.baseRowsCacheKey = null;
+          await loadPrendasPage({ reset: true, reason: "archive" });
+          setPrendasAlert("Registro archivado correctamente.", "success");
+        } catch (error) {
+          const message = safeString(error?.message).toLowerCase();
+          if (message.includes("código no encontrado")) {
+            setPrendasAlert("Código no encontrado en la base activa.", "warning");
+            return;
+          }
+          setPrendasAlert("No se pudo archivar el registro.", "error");
+          throw error;
+        } finally {
+          prendasState.archivingCodes.delete(codigo);
         }
       };
 
@@ -8795,6 +8839,20 @@ const createPrendaRow = (item) => {
               || prendasState.baseRows.find((row) => safeString(row.docId || row.id).trim() === docId);
             const adminData = prendasState.adminMap.get(docId) || {};
             openEditModal(rowData ? { ...rowData, ...adminData } : rowData);
+            return;
+          }
+
+          const archiveButton = event.target.closest(".rowArchiveBtn");
+          if (archiveButton) {
+            if (!isAdminViewEnabled()) return;
+            const docId = safeString(archiveButton.dataset.archiveDoc).trim();
+            if (!docId) return;
+            const rowData = prendasState.filtered.find((row) => safeString(row.docId || row.id).trim() === docId)
+              || prendasState.baseRows.find((row) => safeString(row.docId || row.id).trim() === docId);
+            handleArchiveRow(rowData).catch((error) => {
+              console.error(error);
+              setPrendasAlert(error?.message || "No se pudo archivar la prenda.", "error");
+            });
             return;
           }
 

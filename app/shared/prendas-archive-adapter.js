@@ -1,0 +1,18 @@
+export async function archivePrendaInSheets(codigo) {
+  const response = await fetch("/api/prendas-archive", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify({ codigo })
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.message || "No se pudo archivar el registro.");
+  }
+
+  return data;
+}
