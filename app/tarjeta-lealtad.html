@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tarjeta de Lealtad Haruja</title>
+  <style>
+    body{font-family:Arial,sans-serif;background:#faf6f1;color:#383234;min-height:100vh;margin:0}
+    .page{max-width:420px;width:92%;margin:24px auto}
+    .page-header-wrapper { position: relative; }
+    .panel-back-btn {
+      position: absolute;
+      top: 20px;
+      right: 24px;
+      padding: 8px 16px;
+      background: #f3f4f6;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #2563eb;
+      text-decoration: none;
+      border: 1px solid #e5e7eb;
+      transition: all .2s ease;
+    }
+    .panel-back-btn:hover { background: #e5e7eb; }
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin: 16px 0 12px;
+    }
+    .brandlink{ display:flex; align-items:center; text-decoration:none; }
+    .brandlink img{ height:36px; width:auto; display:block; }
+    .card{background:#fff;border:1px solid #e7ddd3;border-radius:14px;padding:20px;max-width:420px;width:100%}
+    h1{margin:0 0 10px;font-size:22px}
+    .pill{background:#d6c4b3;padding:4px 10px;border-radius:999px;display:inline-block}
+    ul{padding-left:18px}
+    @media (max-width: 640px) {
+      .panel-back-btn {
+        top: 14px;
+        right: 16px;
+        font-size: 13px;
+        padding: 6px 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page page-header-wrapper">
+    <a href="https://paneltb.harujagdl.com/#/panel" class="panel-back-btn">← Volver al panel</a>
+    <div class="topbar">
+      <a class="brandlink" href="https://paneltb.harujagdl.com/#/panel">
+        <img src="assets/haruja-logo.png" alt="HarujaGdl">
+      </a>
+    </div>
+  <div class="card">
+    <h1>Tarjeta de Lealtad</h1>
+    <div id="content">Cargando...</div>
+  </div>
+  </div>
+  <script>
+    const API_BASE = 'https://api-oabqydrhoq-uc.a.run.app';
+    const token = new URLSearchParams(location.search).get('token');
+    const content = document.getElementById('content');
+    const rewardLine = (r) => `<li>${r.label} ${r.available ? '✅' : `(faltan ${r.missingPoints} pts)`}</li>`;
+
+    const run = async () => {
+      if (!token) { content.textContent = 'Falta token.'; return; }
+      try {
+        const res = await fetch(`${API_BASE}/api/loyalty/getByToken?token=${encodeURIComponent(token)}`, { credentials: 'omit' });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar');
+        fetch(`${API_BASE}/api/loyalty/addVisit`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({token})}).catch(() => null);
+        const c = data.clientPublic;
+        content.innerHTML = `
+          <p><b>${c.name}</b></p>
+          <p>Nivel: <span class="pill">${c.level}</span></p>
+          <p>Puntos: <b>${c.points}</b></p>
+          <p>Compras acumuladas: <b>$${Number(c.totalPurchases||0).toFixed(2)}</b></p>
+          <p>Recompensas:</p>
+          <ul>${(c.rewardOptions||[]).map(rewardLine).join('')}</ul>
+        `;
+      } catch (e) {
+        content.textContent = e.message;
+      }
+    };
+    run();
+  </script>
+</body>
+</html>
