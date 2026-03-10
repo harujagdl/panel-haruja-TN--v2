@@ -2823,6 +2823,8 @@ Errores: 0</pre>
       } from "/shared/goalsSales.js";
       import { loadBaseRowsFromSheets } from "/shared/sheets-adapter.js";
       import { loadDictionariesFromSheets } from "/app/shared/dictionaries-adapter.js";
+      import { generateHarujaCode, normalizeCodeBase } from "/app/shared/code-generator.js";
+      import { generarDescripcionSimple } from "/app/shared/dictionary-utils.js";
       import { createPrendaInSheets } from "/app/shared/prendas-create-adapter.js";
       import { deletePrendaInSheets } from "/app/shared/prendas-delete-adapter.js";
       import { archivePrendaInSheets } from "/app/shared/prendas-archive-adapter.js";
@@ -7590,81 +7592,11 @@ const createPrendaRow = (item) => {
       };
 
       const parseBaseCode = (codigoValue) => {
-        const raw = safeString(codigoValue).trim().toUpperCase();
-        if (!raw) return "";
-        if (raw.includes("/")) {
-          return raw.split("/")[0].trim();
-        }
-        return raw;
+        return normalizeCodeBase(codigoValue);
       };
 
       function extraerCodigoBase(codigoCompleto) {
-        return String(codigoCompleto || "").split("/")[0] || "";
-      }
-
-      function construirPrefijoCodigo(proveedorCode, typeCode) {
-        return `HA${String(proveedorCode || "").trim()}${String(typeCode || "").trim()}`;
-      }
-
-      function obtenerConsecutivoSiguiente(baseRows, prefijo) {
-        const bases = (Array.isArray(baseRows) ? baseRows : [])
-          .map((row) => {
-            if (typeof row === "string") return row.split("/")[0];
-            if (row && typeof row.codigo === "string") return row.codigo.split("/")[0];
-            if (row && typeof row.code === "string") return row.code.split("/")[0];
-            return "";
-          })
-          .filter((base) => base.startsWith(prefijo));
-
-        const usados = bases.map((base) => {
-          const m = base.match(new RegExp(`^${prefijo}(\\d{3})$`));
-          return m && m[1] ? parseInt(m[1], 10) : 0;
-        });
-
-        const max = usados.length ? Math.max(...usados) : 0;
-        return String(max + 1).padStart(3, "0");
-      }
-
-      function construirCodigoNuevo({ proveedorCode, typeCode, colorCode, tallaCode, baseRows }) {
-        const prefijo = construirPrefijoCodigo(proveedorCode, typeCode);
-        const consecutivo = obtenerConsecutivoSiguiente(baseRows, prefijo);
-        const codigoBase = `${prefijo}${consecutivo}`;
-        const codigo = `${codigoBase}/${colorCode}-${tallaCode}`;
-        return { codigoBase, codigo };
-      }
-
-      function construirCodigoReutilizado({ codigoBase, colorCode, tallaCode }) {
-        const base = String(codigoBase || "").trim();
-        return {
-          codigoBase: base,
-          codigo: `${base}/${colorCode}-${tallaCode}`
-        };
-      }
-
-      function buildDocIdFromCodigo(codigo) {
-        return String(codigo || "")
-          .trim()
-          .toUpperCase()
-          .replaceAll("/", "_")
-          .replace(/\s+/g, "");
-      }
-
-      function removeUndefinedDeep(obj) {
-        if (Array.isArray(obj)) {
-          return obj
-            .map(removeUndefinedDeep)
-            .filter((v) => v !== undefined);
-        }
-        if (obj && typeof obj === "object") {
-          const out = {};
-          Object.entries(obj).forEach(([k, v]) => {
-            const cleaned = removeUndefinedDeep(v);
-            if (cleaned !== undefined) out[k] = cleaned;
-          });
-          return out;
-        }
-        if (obj === undefined) return undefined;
-        return obj;
+        return String(codigoCompleto || "").split("/")[0].trim();
       }
 
       function isAllowedAdminEmail(email) {
@@ -7679,85 +7611,6 @@ const createPrendaRow = (item) => {
       function extraerCodigo(valor) {
         return String(valor || "").split(" - ")[0].trim().toUpperCase();
       }
-
-      const parseOrdenFromBaseCode = (baseCode) => {
-        const match = /^HA[A-Z0-9]{2}(\d{3,})$/i.exec(safeString(baseCode).trim());
-        if (!match) return null;
-        const orden = Number(match[1]);
-        return Number.isFinite(orden) ? orden : null;
-      };
-
-      function extraerConsecutivo(codigoBase, prefijo) {
-        const match = String(codigoBase || "").toUpperCase().match(new RegExp(`^${prefijo}(\\d+)$`));
-        return match ? Number(match[1]) : 0;
-      }
-
-      const buildModelCode = ({ providerCode, typeCode, seqNumber, colorClave, tallaClave, baseCodeOverride = "" }) => {
-        const baseCode = safeString(baseCodeOverride).trim().toUpperCase() || `HA${providerCode}${typeCode}${String(seqNumber).padStart(3, "0")}`;
-        const codigo = `${baseCode}/${colorClave}-${tallaClave}`;
-        return { baseCode, variantKey: `${colorClave}_${tallaClave}`, codigo };
-      };
-
-      function buildFamiliaCounterKey(proveedorCodigo, tipoCodigo, diccionarioProveedores) {
-        const provCode = String(proveedorCodigo || "").trim();
-        const typeCode = String(tipoCodigo || "").trim();
-
-        const providerOrderMap = {
-          "C": 6
-        };
-
-        const proveedor = Array.isArray(diccionarioProveedores)
-          ? diccionarioProveedores.find(
-              p => String(p.codigo || "").trim() === provCode
-            )
-          : null;
-
-        const proveedorId = Number(
-          proveedor?.orden ??
-          proveedor?.id ??
-          providerOrderMap[provCode] ??
-          0
-        );
-
-        if (!proveedorId) {
-          throw new Error("Proveedor sin ID para contador");
-        }
-
-        return `prov${proveedorId}_tipo${typeCode}`;
-      }
-
-      async function obtenerSiguienteCodigoBasePorFamilia(_collectionName, proveedorCodigo, tipoCodigo) {
-        const providerCode = proveedorCodigo;
-        const typeCode = tipoCodigo;
-        const prefijo = `HA${String(proveedorCodigo || "").trim()}${String(tipoCodigo || "").trim()}`;
-        const diccionarioProveedores = prendasState.dictEntries.proveedores || [];
-        const counterKey = buildFamiliaCounterKey(proveedorCodigo, tipoCodigo, diccionarioProveedores);
-        console.log("[counterKey real]", counterKey);
-        console.log("[providerCode]", providerCode);
-        console.log("[typeCode]", typeCode);
-        console.log("[firebase projectId]", firebaseConfig.projectId);
-        const counterRef = doc(db, "counters", counterKey);
-
-        const snap = await safeGetDoc(counterRef, `registro:counterPreview:${counterKey}`);
-        const data = snap.exists() ? (snap.data() || {}) : {};
-        const actual = Number(data.value ?? data.lastNumber ?? 0) || 0;
-        const siguiente = actual + 1;
-
-        return `${prefijo}${String(siguiente).padStart(3, "0")}`;
-      }
-
-      const getCodigosBaseRowsByFamilia = async (prefijo) => {
-        const snap = await safeGetDocs(
-          query(
-            collection(db, activePrendasPublicCollection),
-            where("codigo", ">=", prefijo),
-            where("codigo", "<=", `${prefijo}\uf8ff`),
-            limit(500)
-          ),
-          `registro:familiaRows:${prefijo}`
-        );
-        return snap.docs.map((d) => d.data() || {});
-      };
 
       async function generarCodigo() {
         console.log("[generarCodigo] START");
@@ -7774,28 +7627,27 @@ const createPrendaRow = (item) => {
         console.log("[generarCodigo] codigoBaseInterno antes:", registroState.codigoBaseInterno);
         console.log("[generarCodigo] codigoBase visual:", registroBaseCodeInput?.value || "");
 
-        let resultado;
-        if (registroState.codigoBaseInterno && registroState.isReuseMode === true) {
-          resultado = construirCodigoReutilizado({
-            codigoBase: registroState.codigoBaseInterno,
-            colorCode: colorCodigo,
-            tallaCode: tallaCodigo
-          });
-          if (registroBaseCodeInput) registroBaseCodeInput.value = registroState.codigoBaseReutilizado || resultado.codigoBase;
-        } else {
-          const prefijo = construirPrefijoCodigo(proveedorCodigo, tipoCodigo);
-          const baseRows = await getCodigosBaseRowsByFamilia(prefijo);
-          resultado = construirCodigoNuevo({
-            proveedorCode: proveedorCodigo,
-            typeCode: tipoCodigo,
-            colorCode: colorCodigo,
-            tallaCode: tallaCodigo,
-            baseRows
-          });
-          registroState.codigoBaseInterno = resultado.codigoBase;
-          registroState.codigoBaseReutilizado = "";
-          registroState.isReuseMode = false;
-          if (registroBaseCodeInput) registroBaseCodeInput.value = "";
+        const baseRows = prendasState.baseRows?.length ? prendasState.baseRows : await loadBaseRows();
+        const baseCodigos = (Array.isArray(baseRows) ? baseRows : [])
+          .map((row) => safeString(row?.codigo || row?.["Código"] || "").trim().toUpperCase())
+          .filter(Boolean);
+        const reuseCodeBase = registroState.codigoBaseInterno && registroState.isReuseMode === true
+          ? registroState.codigoBaseInterno
+          : null;
+        const resultado = generateHarujaCode({
+          proveedor: proveedorCodigo,
+          tipo: tipoCodigo,
+          color: colorCodigo,
+          talla: tallaCodigo,
+          baseCodigos,
+          codigoBase: reuseCodeBase
+        });
+
+        registroState.codigoBaseInterno = resultado.codigoBase;
+        registroState.codigoBaseReutilizado = reuseCodeBase ? resultado.codigoBase : "";
+        registroState.isReuseMode = Boolean(reuseCodeBase);
+        if (registroBaseCodeInput) {
+          registroBaseCodeInput.value = registroState.codigoBaseReutilizado || "";
         }
 
         registroState.codigoGenerado = resultado.codigo;
@@ -7803,7 +7655,17 @@ const createPrendaRow = (item) => {
         registroCodigo.textContent = resultado.codigo;
         registroSave.disabled = false;
 
-        console.log("[generarCodigo] resultado final:", { codigo: resultado.codigo, codigoBase: resultado.codigoBase });
+        console.log("[CodeGen]", {
+          proveedor: proveedorCodigo,
+          tipo: tipoCodigo,
+          color: colorCodigo,
+          talla: tallaCodigo,
+          codigoBase: reuseCodeBase,
+          prefix: resultado.prefix,
+          matches: Array.isArray(resultado.codigosCoincidentes) ? resultado.codigosCoincidentes.length : 0,
+          maxConsecutivo: resultado.maxConsecutivo,
+          codigoFinal: resultado.codigo
+        });
         return {
           providerCode: proveedorCodigo,
           typeCode: tipoCodigo,
@@ -7948,7 +7810,15 @@ const createPrendaRow = (item) => {
           codeMode,
           supplierRaw
         } = formPayload;
-        const descripcion = detallesValue.trim();
+        const descripcionBase = generarDescripcionSimple(
+          typeCode,
+          colorClave,
+          tallaClave,
+          prendasState.dictEntries
+        );
+        const descripcion = detallesValue
+          ? `${descripcionBase} - ${detallesValue}`
+          : descripcionBase;
 
         if (codeMode === "supplier") {
           const codigo = buildSupplierFinalCode({ supplierRaw, colorClave, tallaClave });
@@ -8023,6 +7893,10 @@ const createPrendaRow = (item) => {
           registroState.codigoBaseInterno = parseBaseCode(found.baseCode);
           registroState.codigoBaseReutilizado = parseBaseCode(found.baseCode);
           registroState.isReuseMode = true;
+          const descripcionEncontrada = safeString(found?.data?.descripcion || "").trim();
+          if (descripcionEncontrada && registroDetalles && !safeString(registroDetalles.value).trim()) {
+            registroDetalles.value = descripcionEncontrada;
+          }
           if (registroBaseCodeInput) registroBaseCodeInput.value = registroState.codigoBaseReutilizado;
           console.log("[buscarCodigoExistente] codigoBaseInterno:", registroState.codigoBaseInterno);
           console.log("[buscarCodigoExistente] isReuseMode:", registroState.isReuseMode);
@@ -8087,7 +7961,7 @@ const createPrendaRow = (item) => {
             return safeString(option?.dataset?.nombre || parseNameFromOptionText(option?.textContent || "") || option?.textContent || "").trim();
           };
 
-          const codigoFinal = String(registroState.codigoGenerado || "").trim().toUpperCase();
+          const codigoFinal = String(preview?.codigo || registroState.codigoGenerado || "").trim().toUpperCase();
           const codigoBaseFinal = String(
             registroState.codigoBaseInterno ||
             extraerCodigoBase(codigoFinal) ||
@@ -8104,7 +7978,7 @@ const createPrendaRow = (item) => {
           const colorName = String(getSelectedLabel(registroColor) || "").trim();
           const tallaName = String(getSelectedLabel(registroTalla) || "").trim();
 
-          const descripcion = String(registroDetalles?.value || "").trim();
+          const descripcion = String(preview?.descripcion || registroDetalles?.value || "").trim();
           const detalles = String(registroDetalles?.value || "").trim();
           const creadoPor = String(registroCreatedBy?.value || "").trim();
           const proveedorCodigo = providerCode;
@@ -8133,6 +8007,16 @@ const createPrendaRow = (item) => {
             prendasState?.rowsAfterAll ||
             []
           );
+          const baseRows = prendasState.baseRows?.length ? prendasState.baseRows : await loadBaseRows();
+          const baseCodigos = (Array.isArray(baseRows) ? baseRows : [])
+            .map((row) => safeString(row?.codigo || row?.["Código"] || "").trim().toUpperCase())
+            .filter(Boolean);
+          const codigoYaExiste = baseCodigos.includes(codigoFinal);
+          const reuseFlowValido = Boolean(preview?.usingExistingBase && codigoBaseFinal && baseCodigos.some((code) => extraerCodigoBase(code) === codigoBaseFinal));
+          if (codigoYaExiste && !reuseFlowValido) {
+            setRegistroStatus("El código generado ya existe. Reintenta.", "error");
+            return;
+          }
           console.log('[save] nextOrden:', nextOrden);
           console.log('[guardarPrenda] proveedorNombre:', proveedorNombre);
           console.log('[guardarPrenda] tipoNombre:', tipoNombre);
