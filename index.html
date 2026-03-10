@@ -2804,6 +2804,7 @@ Errores: 0</pre>
       import { loadBaseRowsFromSheets } from "/shared/sheets-adapter.js";
       import { loadDictionariesFromSheets } from "/app/shared/dictionaries-adapter.js";
       import { createPrendaInSheets } from "/app/shared/prendas-create-adapter.js";
+      import { processCorrectionsFileRows } from "/app/shared/corrections-adapter.js";
 
       const firebaseConfig = {
         apiKey: "AIzaSyAK5_MuMseQm58AeRZlrPtGyEZ216-Xkno",
@@ -8394,8 +8395,115 @@ const createPrendaRow = (item) => {
         }
       };
 
-      // (XLSX import removed)
+      const CORRECTIONS_HEADER_MAP = {
+        codigo: "Código",
+        código: "Código",
+        sku: "Código",
+        descripcion: "Descripción",
+        descripción: "Descripción",
+        tipo: "Tipo",
+        color: "Color",
+        talla: "Talla",
+        proveedor: "Proveedor",
+        tn: "TN",
+        status: "Status",
+        disponibilidad: "Disponibilidad",
+        existencia: "Existencia",
+        fecha: "Fecha",
+        precio: "Precio",
+        costo: "Costo",
+        margen: "Margen",
+        utilidad: "Utilidad",
+        inventorysource: "InventorySource",
+        lastinventorysyncat: "LastInventorySyncAt"
+      };
 
+      const normalizeLooseHeader = (value) => safeString(value)
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, "");
+
+      const normalizeImportHeaders = (row = {}) => {
+        const normalized = {};
+        Object.entries(row || {}).forEach(([rawHeader, rawValue]) => {
+          const canonical = CORRECTIONS_HEADER_MAP[normalizeLooseHeader(rawHeader)];
+          if (!canonical) return;
+          normalized[canonical] = rawValue;
+        });
+        return normalized;
+      };
+
+      const parseCorrectionsFile = async (file) => {
+        const extension = safeString(file?.name).trim().toLowerCase().split(".").pop();
+        if (!["csv", "xlsx"].includes(extension)) {
+          throw new Error("Selecciona un archivo CSV o XLSX.");
+        }
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const sheetName = workbook?.SheetNames?.[0];
+        if (!sheetName) return [];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+        return rows.map((row) => normalizeImportHeaders(row)).filter((row) => Object.keys(row).length > 0);
+      };
+
+      const buildCorrectionsSummary = (result) => {
+        const details = Array.isArray(result?.detalles) ? result.detalles.slice(0, 20) : [];
+        const lines = [
+          `Total filas: ${Number(result?.totalFilas || 0)}`,
+          `Encontrados: ${Number(result?.encontrados || 0)}`,
+          `No encontrados: ${Number(result?.noEncontrados || 0)}`,
+          `Actualizados: ${Number(result?.actualizados || 0)}`,
+          `Errores: ${Number(result?.errores || 0)}`
+        ];
+        if (details.length) {
+          lines.push("", "Detalles:");
+          details.forEach((detail) => lines.push(`- ${detail}`));
+        }
+        if (Array.isArray(result?.detalles) && result.detalles.length > details.length) {
+          lines.push(`... y ${result.detalles.length - details.length} detalle(s) más`);
+        }
+        return lines.join("\n");
+      };
+
+      const processCorrectionsFile = async () => {
+        if (!correctionsFileInput?.files?.length) {
+          if (correctionsResults) correctionsResults.textContent = "Selecciona un archivo CSV o XLSX.";
+          return;
+        }
+
+        const file = correctionsFileInput.files[0];
+        const rawRows = await parseCorrectionsFile(file);
+        if (!rawRows.length) {
+          if (correctionsResults) correctionsResults.textContent = "No se encontraron filas válidas.";
+          return;
+        }
+
+        const rows = rawRows.filter((row) => safeString(row["Código"]).trim());
+        if (!rows.length) {
+          if (correctionsResults) correctionsResults.textContent = "El archivo debe incluir la columna Código.";
+          return;
+        }
+
+        if (rawRows.length > 500 && correctionsResults) {
+          correctionsResults.textContent = "Aviso: archivo grande (>500 filas). Procesando...";
+        }
+
+        const dryRun = Boolean(correctionsDryRunInput?.checked);
+        const result = await processCorrectionsFileRows({ rows: rawRows, dryRun });
+
+        if (correctionsResults) {
+          correctionsResults.textContent = buildCorrectionsSummary(result);
+        }
+
+        if (!dryRun && Number(result?.actualizados || 0) > 0) {
+          prendasState.baseRows = [];
+          prendasState.baseRowsCacheKey = null;
+          await loadPrendasPage({ reset: true, reason: "corrections" });
+        }
+      };
 
       const handleAdminSplitCollections = async () => {
         if (!ensureAdminMode()) return;
