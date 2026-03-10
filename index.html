@@ -2804,6 +2804,7 @@ Errores: 0</pre>
       import { loadBaseRowsFromSheets } from "/shared/sheets-adapter.js";
       import { loadDictionariesFromSheets } from "/app/shared/dictionaries-adapter.js";
       import { createPrendaInSheets } from "/app/shared/prendas-create-adapter.js";
+      import { deletePrendaInSheets } from "/app/shared/prendas-delete-adapter.js";
       import { processCorrectionsFileRows } from "/app/shared/corrections-adapter.js";
 
       const firebaseConfig = {
@@ -6785,6 +6786,14 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
 
 const createPrendaRow = (item) => {
         const adminEnabled = isAdminViewEnabled();
+        const resolvedPrice = (() => {
+          const candidates = [item.pVentaDisplay, item.pVenta, item.precio];
+          for (const candidate of candidates) {
+            const n = toNumberOrNull(candidate);
+            if (Number.isFinite(n)) return n;
+          }
+          return 0;
+        })();
         const docId = safeString(item.docId || item.id).trim();
         const ordenValue = Number(item.orden);
         const rowStatus = item.manualOverride
@@ -6821,7 +6830,7 @@ const createPrendaRow = (item) => {
             return cell;
           })(),
           fecha: formatDateCell(item),
-          pventa: moneyFmt(adminEnabled ? (toNumber(item.pVentaDisplay) ?? toNumber(item.precioConIva)) : toNumber(item.precioConIva)),
+          pventa: moneyFmt(resolvedPrice),
           costo: moneyFmt(item.costo),
           margen: pctFmt(item.margen),
           utilidad: moneyFmt(item.utilidad)
@@ -7233,23 +7242,21 @@ const createPrendaRow = (item) => {
         const codigo = safeString(rowData.codigo).trim() || docId;
         const confirmed = window.confirm(`¿Eliminar ${codigo}? Esta acción no se puede deshacer.`);
         if (!confirmed) return;
-        const user = await ensureAdminSession();
-        const userEmail = safeString(user?.email).trim().toLowerCase() || "public";
-        console.log("[delete] intentando borrar", docId);
-        await updateDoc(doc(db, activePrendasPublicCollection, docId), {
-          isActive: false,
-          status: "ELIMINADO",
-          eliminado: true,
-          eliminadoAt: serverTimestamp(),
-          eliminadoBy: userEmail,
-          deleted: true,
-          deletedAt: serverTimestamp(),
-          deletedBy: userEmail,
-          updatedAt: serverTimestamp(),
-          updatedBy: userEmail
-        });
-        await loadPrendasPage({ reset: false, reason: "delete-row" });
-        setPrendasAlert(`Prenda ${codigo} eliminada.`, "success");
+        try {
+          await deletePrendaInSheets(codigo);
+          prendasState.baseRows = [];
+          prendasState.baseRowsCacheKey = null;
+          await loadPrendasPage({ reset: true, reason: "delete" });
+          setPrendasAlert("Registro eliminado correctamente.", "success");
+        } catch (error) {
+          const message = safeString(error?.message).toLowerCase();
+          if (message.includes("código no encontrado")) {
+            setPrendasAlert("Código no encontrado en la base.", "warning");
+            return;
+          }
+          setPrendasAlert("No se pudo eliminar el registro.", "error");
+          throw error;
+        }
       };
 
       const renderDocs = async (rows) => {
