@@ -1,8 +1,8 @@
 {
-  "cleanUrls": true,
   "rewrites": [
-    { "source": "/", "destination": "/index.html" },
-    { "source": "/apartado/:folio", "destination": "/apartados/index.html" },
-    { "source": "/ticket/:folio", "destination": "/ticket/index.html" }
+    {
+      "source": "/ticket/:folio",
+      "destination": "/ticket/index.html"
+    }
   ]
 }
