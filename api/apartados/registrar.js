@@ -242,10 +242,34 @@ export default async function handler(req, res) {
       await appendSheetRow(sheets, spreadsheetId, "apartados_abonos", abonoRow);
     }
 
+    const appUrl = process.env.APP_URL || `http://${req.headers.host}`;
+
+    await fetch(`${appUrl}/api/apartados/pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        folio,
+        fecha,
+        cliente,
+        contacto,
+        items: items.map((item) => ({
+          codigo: item.Codigo,
+          descripcion: item.Descripcion,
+          precio: item.Precio,
+        })),
+        subtotal,
+        anticipo,
+        descuento: descuentoMXN,
+        total,
+      }),
+    }).catch(() => null);
+
+    const pdfUrl = `${appUrl}/api/apartados/pdf?folio=${encodeURIComponent(folio)}`;
+
     return res.status(200).json({
       ok: true,
       folio,
-      pdfUrl: "",
+      pdfUrl,
       message: "Apartado registrado correctamente.",
       resumen: buildResumen({ subtotal, anticipo, descuentoMXN, total }),
     });
