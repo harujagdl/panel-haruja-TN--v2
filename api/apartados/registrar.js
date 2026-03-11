@@ -77,6 +77,15 @@ function parseBoolean(value) {
   return value === true || String(value || "").toLowerCase() === "true";
 }
 
+function buildPublicUrls(req, folio, paymentUrl = "") {
+  const appUrl = process.env.APP_URL || `http://${req.headers.host}`;
+  const safeFolio = encodeURIComponent(String(folio || "").trim().toUpperCase());
+  const publicUrl = safeFolio ? `${appUrl}/apartado/${safeFolio}` : "";
+  const safePaymentUrl = String(paymentUrl || "").trim();
+  const qrUrl = safePaymentUrl || publicUrl;
+  return { appUrl, publicUrl, paymentUrl: safePaymentUrl, qrUrl };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, message: "Method not allowed" });
@@ -122,12 +131,17 @@ export default async function handler(req, res) {
       const nuevoAnticipo = roundMoney(anticipoAnterior + anticipoInput);
       const nuevoSaldo = roundMoney(Math.max(0, totalAnterior - nuevoAnticipo));
       const nuevoEstado = nuevoSaldo <= 0 ? "LIQUIDADO" : "ACTIVO";
+      const urls = buildPublicUrls(req, folio, apartado.PaymentUrl || "");
 
       const updatedRow = buildRowByTargetHeaders(apartado, apartadosHeaders, {
         Anticipo: nuevoAnticipo,
         Saldo: nuevoSaldo,
         Estado: nuevoEstado,
         UltimoMovimiento: now,
+        PublicUrl: urls.publicUrl,
+        QrUrl: urls.qrUrl,
+        SaldoPendiente: nuevoSaldo,
+        Status: nuevoEstado,
       });
 
       await updateSheetRow(sheets, spreadsheetId, "apartados", apartado.__rowNumber, updatedRow);
@@ -145,7 +159,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ok: true,
         folio,
-        pdfUrl: String(apartado.PdfUrl || ""),
+        pdfUrl: String(apartado.PdfUrl || `${urls.appUrl}/api/apartados/pdf?folio=${encodeURIComponent(folio)}`),
         message: "Abono registrado correctamente.",
         resumen: buildResumen({
           subtotal: subtotalAnterior,
@@ -204,6 +218,9 @@ export default async function handler(req, res) {
     const anticipo = anticipoInput;
     const saldo = roundMoney(Math.max(0, total - anticipo));
     const estado = saldo <= 0 ? "LIQUIDADO" : "ACTIVO";
+    const paymentUrl = String(payload.paymentUrl || "").trim();
+    const fechaLimite = String(payload.fechaLimite || "").trim();
+    const urls = buildPublicUrls(req, folio, paymentUrl);
 
     const apartadoRow = buildRowByTargetHeaders({}, SHEET_HEADERS.apartados, {
       Folio: folio,
@@ -222,6 +239,12 @@ export default async function handler(req, res) {
       UltimoMovimiento: now,
       GenerarTicket: parseBoolean(payload.generarTicket),
       PdfUrl: "",
+      PublicUrl: urls.publicUrl,
+      PaymentUrl: urls.paymentUrl,
+      QrUrl: urls.qrUrl,
+      SaldoPendiente: saldo,
+      FechaLimite: fechaLimite,
+      Status: estado,
     });
     await appendSheetRow(sheets, spreadsheetId, "apartados", apartadoRow);
 
@@ -242,9 +265,7 @@ export default async function handler(req, res) {
       await appendSheetRow(sheets, spreadsheetId, "apartados_abonos", abonoRow);
     }
 
-    const appUrl = process.env.APP_URL || `http://${req.headers.host}`;
-
-    await fetch(`${appUrl}/api/apartados/pdf`, {
+    await fetch(`${urls.appUrl}/api/apartados/pdf`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -264,7 +285,7 @@ export default async function handler(req, res) {
       }),
     }).catch(() => null);
 
-    const pdfUrl = `${appUrl}/api/apartados/pdf?folio=${encodeURIComponent(folio)}`;
+    const pdfUrl = `${urls.appUrl}/api/apartados/pdf?folio=${encodeURIComponent(folio)}`;
 
     return res.status(200).json({
       ok: true,
