@@ -2602,18 +2602,18 @@ body.haruja-col-resizing{
     <div id="prendas-alert" class="prendas-alert" style="display:none; margin:10px 0;"></div>
     <div id="archivedPanel" class="hidden" style="margin:10px 0; border:1px solid #e5e7eb; border-radius:10px; padding:10px; background:#fff;">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
-        <strong>Histórico archivado</strong>
+        <strong>Prendas archivadas</strong>
         <button id="btn-archived-close" class="btn btn-muted" type="button">Cerrar</button>
       </div>
       <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
-              <th>Código</th><th>Descripción</th><th>Tipo</th><th>Color</th><th>Talla</th><th>Precio</th><th>Fecha</th><th>Acción</th>
+              <th>Código</th><th>Descripción</th><th>Tipo</th><th>Color</th><th>Talla</th><th>Precio</th><th>Fecha</th><th>ArchivedAt</th><th>Acción</th>
             </tr>
           </thead>
           <tbody id="archivedTbody">
-            <tr><td colspan="8" class="muted">Sin registros archivados.</td></tr>
+            <tr><td colspan="9" class="muted">No hay prendas archivadas.</td></tr>
           </tbody>
         </table>
       </div>
@@ -2829,7 +2829,7 @@ Errores: 0</pre>
       import { deletePrendaInSheets } from "/app/shared/prendas-delete-adapter.js";
       import { archivePrendaInSheets } from "/app/shared/prendas-archive-adapter.js";
       import { restorePrendaInSheets } from "/app/shared/prendas-restore-adapter.js";
-      import { loadArchivedPrendasFromSheets } from "/app/shared/prendas-archived-adapter.js";
+      import { loadArchivedPrendas } from "/app/shared/prendas-archived-adapter.js";
       import { processCorrectionsFileRows } from "/app/shared/corrections-adapter.js";
 
       const firebaseConfig = {
@@ -7374,9 +7374,9 @@ const createPrendaRow = (item) => {
         if (!safeRows.length) {
           const emptyRow = document.createElement("tr");
           const cell = document.createElement("td");
-          cell.colSpan = 8;
+          cell.colSpan = 9;
           cell.className = "muted";
-          cell.textContent = "Sin registros archivados.";
+          cell.textContent = "No hay prendas archivadas.";
           emptyRow.appendChild(cell);
           archivedTbody.appendChild(emptyRow);
           return;
@@ -7384,15 +7384,16 @@ const createPrendaRow = (item) => {
 
         safeRows.forEach((row) => {
           const tr = document.createElement("tr");
-          const codigo = safeString(row?.["Código"]).trim();
+          const codigo = safeString(row?.codigo || row?.["Código"]).trim();
           const fields = [
             codigo,
-            row?.["Descripción"] || "--",
-            row?.["Tipo"] || "--",
-            row?.["Color"] || "--",
-            row?.["Talla"] || "--",
-            row?.["Precio"] || "--",
-            row?.["Fecha"] || "--"
+            row?.descripcion || row?.["Descripción"] || "--",
+            row?.tipo || row?.["Tipo"] || "--",
+            row?.color || row?.["Color"] || "--",
+            row?.talla || row?.["Talla"] || "--",
+            row?.precio || row?.["Precio"] || "--",
+            row?.fecha || row?.["Fecha"] || "--",
+            row?.archivedAt || row?.["ArchivedAt"] || "--"
           ];
           fields.forEach((value) => {
             const td = document.createElement("td");
@@ -7401,19 +7402,24 @@ const createPrendaRow = (item) => {
           });
 
           const actionTd = document.createElement("td");
-          const restoreButton = document.createElement("button");
-          restoreButton.type = "button";
-          restoreButton.className = "btn btn-primary archivedRestoreBtn";
-          restoreButton.dataset.codigo = codigo;
-          restoreButton.textContent = "Restaurar";
-          actionTd.appendChild(restoreButton);
+          if (isAdminViewEnabled()) {
+            const restoreButton = document.createElement("button");
+            restoreButton.type = "button";
+            restoreButton.className = "btn btn-primary archivedRestoreBtn";
+            restoreButton.dataset.codigo = codigo;
+            restoreButton.textContent = "Restaurar";
+            restoreButton.title = "Restaurar a activas";
+            actionTd.appendChild(restoreButton);
+          } else {
+            actionTd.textContent = "--";
+          }
           tr.appendChild(actionTd);
           archivedTbody.appendChild(tr);
         });
       };
 
       const loadArchivedPanel = async () => {
-        const rows = await loadArchivedPrendasFromSheets();
+        const rows = await loadArchivedPrendas();
         prendasState.archivedRows = rows;
         renderArchivedRows(rows);
       };
@@ -7433,7 +7439,7 @@ const createPrendaRow = (item) => {
       const handleRestoreRow = async (rowData) => {
         if (!rowData) return;
         if (!ensureAdminMode()) return;
-        const codigo = safeString(rowData?.["Código"] || rowData?.codigo).trim();
+        const codigo = safeString(rowData?.codigo || rowData?.["Código"]).trim();
         if (!codigo) {
           setPrendasAlert("No se pudo restaurar el registro.");
           return;
@@ -8910,7 +8916,7 @@ const createPrendaRow = (item) => {
           if (!archivedRestoreButton) return;
           if (!isAdminViewEnabled()) return;
           const codigo = safeString(archivedRestoreButton.dataset.codigo).trim();
-          const rowData = (prendasState.archivedRows || []).find((row) => safeString(row?.["Código"]).trim() === codigo);
+          const rowData = (prendasState.archivedRows || []).find((row) => safeString(row?.codigo || row?.["Código"]).trim() === codigo);
           handleRestoreRow(rowData).catch((error) => {
             console.error(error);
             setPrendasAlert(error?.message || "No se pudo restaurar el registro.");

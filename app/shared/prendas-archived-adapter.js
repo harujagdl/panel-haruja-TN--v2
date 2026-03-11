@@ -1,4 +1,4 @@
-export async function loadArchivedPrendasFromSheets() {
+export async function loadArchivedPrendas() {
   const response = await fetch("/api/prendas-archived-list", {
     method: "GET",
     headers: {
@@ -6,11 +6,12 @@ export async function loadArchivedPrendasFromSheets() {
     }
   });
 
-  const data = await response.json().catch(() => ({}));
+  const data = await response.json().catch(() => []);
 
-  if (!response.ok || !data?.ok) {
-    throw new Error(data?.message || "No se pudo cargar el histórico archivado.");
+  if (!response.ok) {
+    const message = data?.message || "No se pudo cargar el histórico archivado.";
+    throw new Error(message);
   }
 
-  return Array.isArray(data?.rows) ? data.rows : [];
+  return Array.isArray(data) ? data : [];
 }
