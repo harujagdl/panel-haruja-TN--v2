@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "googleapis": "^126.0.0"
+    "googleapis": "^126.0.0",
+    "pdf-lib": "^1.17.1"
   }
 }
