@@ -4,7 +4,6 @@ const ACTIVE_SHEET = "prendas_admin_activas";
 const ARCHIVE_SHEET = "prendas_admin_archivo";
 const CODE_HEADER = "Código";
 const ARCHIVED_AT_HEADER = "ArchivedAt";
-const REQUIRED_HEADERS = ["Código", "Descripción", "Tipo", "Color", "Talla", "Proveedor", "Precio"];
 
 const createSheetsClient = () => {
   const auth = new google.auth.GoogleAuth({
@@ -157,17 +156,13 @@ export default async function handler(req, res) {
     console.log("[archive] headers activas:", activeData.headers);
     console.log("[archive] headers archivo:", archiveHeaders);
 
-    REQUIRED_HEADERS.forEach((header) => {
-      if (!activeData.headers.includes(header)) {
-        throw new Error(`La hoja activa no contiene la columna "${header}".`);
-      }
-      if (!archiveHeaders.includes(header)) {
-        if (header === CODE_HEADER) {
-          throw new Error('La hoja de archivo no contiene la columna "Código".');
-        }
-        throw new Error(`La hoja de archivo no contiene la columna "${header}".`);
-      }
-    });
+    if (!activeData.headers.includes(CODE_HEADER)) {
+      throw new Error('La hoja activa no contiene la columna "Código".');
+    }
+
+    if (!archiveHeaders.includes(CODE_HEADER)) {
+      throw new Error('La hoja de archivo no contiene la columna "Código".');
+    }
 
     const rowEncontrada = activeData.rows.find(
       (row) => String(row?.sourceRowObject?.[CODE_HEADER] || "").trim() === codigo
