@@ -397,12 +397,12 @@
     }
 
     async function fetchNextFolio(){
-      const r = await apiFetch('/api/apartados/next-folio', { method: 'GET' });
+      const r = await apiFetch('/api/apartados/_next', { method: 'GET' });
       return r.folio;
     }
 
     async function postRegistrar(payload){
-      return await apiFetch('/api/apartados/registrar', {
+      return await apiFetch(`/api/apartados/${encodeURIComponent(payload.folio || '')}`, {
         method: 'POST',
         body: JSON.stringify(payload)
       });
@@ -467,7 +467,7 @@
           anticipo: r.anticipo,
           descVal: r.descVal,
           total: r.total,
-          pdfUrl: res.pdfUrl || ''
+          pdfUrl: res.ticketUrl || res.pdfUrl || ''
         });
 
         if (!usarFolioExistente) {
