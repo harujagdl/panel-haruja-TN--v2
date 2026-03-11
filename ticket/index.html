@@ -1,201 +1,405 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>Ticket Haruja</title>
+  <meta charset="UTF-8" />
+  <title>Ticket Haruja</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f3f3f3;
+      margin: 0;
+      padding: 24px;
+      color: #111;
+    }
 
-<meta name="viewport" content="width=device-width, initial-scale=1">
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
 
-<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+    .btn {
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-weight: 700;
+      cursor: pointer;
+    }
 
-<style>
+    .btn-back {
+      background: #eee;
+      color: #111;
+    }
 
-body{
-font-family: Arial, Helvetica, sans-serif;
-background:#f5f5f5;
-margin:0;
-padding:30px;
-}
+    .btn-print {
+      background: #000;
+      color: #fff;
+    }
 
-.ticket{
-max-width:500px;
-margin:auto;
-background:white;
-padding:30px;
-border-radius:10px;
-box-shadow:0 0 10px rgba(0,0,0,0.1);
-}
+    .card {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 14px;
+      padding: 28px 32px;
+      box-shadow: 0 1px 8px rgba(0,0,0,.08);
+    }
 
-.header{
-text-align:center;
-margin-bottom:20px;
-}
+    .logo-wrap {
+      text-align: center;
+      margin-bottom: 10px;
+    }
 
-.logo{
-max-width:120px;
-}
+    .logo {
+      max-width: 260px;
+      width: 100%;
+      height: auto;
+    }
 
-.folio{
-font-size:18px;
-font-weight:bold;
-margin-top:10px;
-}
+    .top-line {
+      border: 0;
+      border-top: 6px solid #000;
+      margin: 8px 0 20px;
+    }
 
-.section{
-margin-top:15px;
-}
+    .top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
 
-.qr{
-text-align:center;
-margin-top:20px;
-}
+    .title {
+      font-size: 18px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
 
-.buttons{
-position:fixed;
-top:20px;
-right:20px;
-display:flex;
-gap:10px;
-}
+    .folio {
+      font-size: 18px;
+      font-weight: 800;
+    }
 
-button{
-padding:10px 16px;
-border:none;
-border-radius:6px;
-cursor:pointer;
-font-weight:bold;
-}
+    .meta {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 6px 10px;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
 
-.print{
-background:black;
-color:white;
-}
+    .meta b,
+    .final-info b {
+      font-weight: 800;
+    }
 
-.back{
-background:#eee;
-}
+    .section-title {
+      font-size: 15px;
+      font-weight: 800;
+      text-transform: uppercase;
+      margin: 12px 0 8px;
+    }
 
-.error{
-text-align:center;
-padding:40px;
-font-size:18px;
-}
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
 
-@media print{
+    thead th {
+      text-align: left;
+      font-size: 12px;
+      text-transform: uppercase;
+      border-top: 1px solid #ddd;
+      border-bottom: 1px solid #ddd;
+      padding: 8px 6px;
+    }
 
-.buttons{
-display:none;
-}
+    tbody td {
+      font-size: 13px;
+      padding: 8px 6px;
+      border-bottom: 1px solid #eee;
+      vertical-align: top;
+    }
 
-body{
-background:white;
-padding:0;
-}
+    .ta-center { text-align: center; }
+    .ta-right { text-align: right; }
 
-.ticket{
-box-shadow:none;
-}
+    .totals {
+      width: 280px;
+      margin-left: auto;
+      margin-top: 10px;
+    }
 
-}
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 4px 0;
+      font-size: 14px;
+    }
 
-</style>
+    .totals-row strong {
+      font-weight: 800;
+    }
+
+    .totals-grand {
+      border-top: 1px solid #ddd;
+      padding-top: 10px;
+      margin-top: 8px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .legal {
+      margin-top: 18px;
+      font-size: 12px;
+      line-height: 1.38;
+    }
+
+    .legal h4 {
+      margin: 10px 0 6px;
+      font-size: 13px;
+    }
+
+    .bottom {
+      display: grid;
+      grid-template-columns: 1fr 160px;
+      gap: 16px;
+      margin-top: 18px;
+      align-items: end;
+    }
+
+    .final-info {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 6px 10px;
+      font-size: 14px;
+    }
+
+    .qr-box {
+      text-align: center;
+    }
+
+    #qr {
+      display: block;
+      margin: 0 auto 6px;
+    }
+
+    .qr-caption {
+      font-size: 11px;
+    }
+
+    .empty,
+    .error {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 14px;
+      padding: 28px 32px;
+      text-align: center;
+      box-shadow: 0 1px 8px rgba(0,0,0,.08);
+    }
+
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
+      }
+
+      .actions {
+        display: none;
+      }
+
+      .card,
+      .empty,
+      .error {
+        box-shadow: none;
+        border-radius: 0;
+        max-width: none;
+        padding: 18px 20px;
+      }
+    }
+  </style>
 </head>
-
 <body>
+  <div class="actions">
+    <button class="btn btn-back" onclick="history.back()">Volver</button>
+    <button class="btn btn-print" onclick="window.print()">Imprimir / Guardar PDF</button>
+  </div>
 
-<div class="buttons">
-<button class="back" onclick="history.back()">Volver</button>
-<button class="print" onclick="window.print()">Imprimir / Guardar PDF</button>
-</div>
+  <div id="app"></div>
 
-<div id="app"></div>
+  <script>
+    function getFolioFromPath() {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      if (parts[0] === 'ticket' && parts[1]) {
+        return decodeURIComponent(parts[1]).trim();
+      }
+      return '';
+    }
 
-<script>
+    function money(value) {
+      const n = Number(value || 0);
+      return '$' + n.toLocaleString('es-MX', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
 
-function getFolio(){
-const parts = location.pathname.split('/').filter(Boolean)
+    function esc(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
 
-if(parts[0]==="ticket" && parts[1]){
-return decodeURIComponent(parts[1])
-}
+    function renderError(message) {
+      document.getElementById('app').innerHTML =
+        `<div class="error">${esc(message)}</div>`;
+    }
 
-return null
-}
+    async function loadTicket() {
+      const folio = getFolioFromPath();
 
-async function loadTicket(){
+      if (!folio) {
+        renderError('Falta el folio en la URL.');
+        return;
+      }
 
-const folio = getFolio()
+      try {
+        const res = await fetch(`/api/apartados/${encodeURIComponent(folio)}`);
+        const data = await res.json();
 
-if(!folio){
-document.getElementById("app").innerHTML =
-'<div class="error">Falta el folio en la URL.</div>'
-return
-}
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.message || `No se encontró el folio "${folio}".`);
+        }
 
-try{
+        renderTicket(data);
+      } catch (err) {
+        renderError(err?.message || 'No se pudo cargar el ticket.');
+      }
+    }
 
-const res = await fetch(`/api/${folio}`)
-const data = await res.json()
+    async function renderTicket(data) {
+      const folio = data.folio || '-';
+      const fecha = data.fecha || '-';
+      const cliente = data.cliente || '-';
+      const contacto = data.contacto || '-';
+      const items = Array.isArray(data.items) ? data.items : [];
+      const subtotal = Number(data.subtotal || 0);
+      const anticipo = Number(data.anticipo || 0);
+      const descuento = Number(data.descuento || 0);
+      const total = Number(data.total || 0);
 
-if(!data.ok){
-throw new Error(data.message || "No encontrado")
-}
+      const rows = items.length
+        ? items.map(item => `
+          <tr>
+            <td>${esc(item.codigo || '-')}</td>
+            <td>${esc(item.descripcion || '-')}</td>
+            <td class="ta-center">${esc(item.cantidad ?? 1)}</td>
+            <td class="ta-right">${money(item.precio || 0)}</td>
+            <td class="ta-right">${money(item.subtotal || 0)}</td>
+          </tr>
+        `).join('')
+        : `
+          <tr>
+            <td colspan="5" class="ta-center">No hay productos en este apartado.</td>
+          </tr>
+        `;
 
-renderTicket(data.ticket)
+      document.getElementById('app').innerHTML = `
+        <div class="card">
+          <div class="logo-wrap">
+            <img class="logo" src="/assets/haruja-logo.png" alt="HarujaGdl">
+          </div>
 
-}catch(err){
+          <hr class="top-line">
 
-document.getElementById("app").innerHTML =
-`<div class="error">No se pudo cargar el ticket</div>`
+          <div class="top-row">
+            <div class="title">Ticket de apartado</div>
+            <div class="folio">#${esc(folio)}</div>
+          </div>
 
-}
+          <div class="meta">
+            <b>Fecha:</b><div>${esc(fecha)}</div>
+            <b>Cliente:</b><div>${esc(cliente)}</div>
+            <b>Contacto:</b><div>${esc(contacto)}</div>
+          </div>
 
-}
+          <div class="section-title">Detalle</div>
 
-function renderTicket(ticket){
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th class="ta-center">Cant</th>
+                <th class="ta-right">P.U.</th>
+                <th class="ta-right">Importe</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
 
-const html = `
+          <div class="totals">
+            <div class="totals-row"><strong>Subtotal:</strong><span>${money(subtotal)}</span></div>
+            <div class="totals-row"><strong>Anticipo:</strong><span>${money(anticipo)}</span></div>
+            <div class="totals-row"><strong>Descuento:</strong><span>${money(descuento)}</span></div>
+            <div class="totals-row totals-grand"><strong>TOTAL</strong><span>${money(total)}</span></div>
+          </div>
 
-<div class="ticket">
+          <div class="legal">
+            <div><strong>Gracias por tu compra en HarujaGdl</strong></div>
 
-<div class="header">
-<img class="logo" src="/public/assets/haruja-logo.png">
-<div class="folio">Folio: ${ticket.folio}</div>
-</div>
+            <h4>CAMBIOS</h4>
+            <div>Solicítalo dentro de 7 días naturales de recibir tu compra.</div>
+            <div>La prenda debe estar nueva, sin uso, sin lavar y con etiquetas originales.</div>
+            <div>No aplican cambios en: prendas tejidas, bordadas, con aplicaciones, accesorios, prendas de ropa íntima, trajes de baño, rebajas o compras con cupón.</div>
+            <div>Los gastos de envío corren por cuenta del cliente.</div>
+            <div>Solicita tu cambio por WhatsApp al 33 3033 6506 indicando motivo, prenda y talla deseada.</div>
 
-<div class="section">
-<strong>Cliente:</strong> ${ticket.cliente || "-"}
-</div>
+            <h4>APARTADOS</h4>
+            <div>Puedes apartar con 25% de anticipo.</div>
+            <div>Plazo máximo para recoger: 30 días.</div>
+            <div>Pasado ese tiempo, la prenda vuelve a venta y el anticipo queda como saldo a favor por 3 meses a partir de la fecha inicial del apartado.</div>
+            <div>No aplican cambios ni devoluciones en apartados.</div>
+            <div>No realizamos devoluciones de dinero. Todos los cambios son por producto de igual o mayor valor.</div>
+          </div>
 
-<div class="section">
-<strong>Fecha:</strong> ${ticket.fecha || "-"}
-</div>
+          <div class="bottom">
+            <div class="final-info">
+              <b>Pedido:</b><div>${esc(folio)}</div>
+              <b>Fecha:</b><div>${esc(fecha)}</div>
+              <b>Cliente:</b><div>${esc(cliente)}</div>
+              <b>Contacto:</b><div>${esc(contacto)}</div>
+            </div>
 
-<div class="section">
-<strong>Total:</strong> $${ticket.total || "0"}
-</div>
+            <div class="qr-box">
+              <canvas id="qr"></canvas>
+              <div class="qr-caption">Escanea para ver tu apartado</div>
+            </div>
+          </div>
+        </div>
+      `;
 
-<div class="qr">
-<canvas id="qr"></canvas>
-</div>
+      const qrTarget = `${window.location.origin}/apartado/${encodeURIComponent(folio)}`;
+      const canvas = document.getElementById('qr');
 
-</div>
+      if (canvas && window.QRCode) {
+        await QRCode.toCanvas(canvas, qrTarget, {
+          width: 120,
+          margin: 1
+        });
+      }
+    }
 
-`
-
-document.getElementById("app").innerHTML = html
-
-QRCode.toCanvas(
-document.getElementById("qr"),
-location.href,
-{ width:140 }
-)
-
-}
-
-loadTicket()
-
-</script>
-
+    loadTicket();
+  </script>
 </body>
 </html>
