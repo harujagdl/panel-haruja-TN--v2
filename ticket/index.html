@@ -66,7 +66,7 @@
     .card,
     .empty,
     .error {
-      max-width: 960px;
+      width: min(100%, 820px);
       margin: 0 auto;
       background: var(--paper);
       border-radius: 20px;
@@ -81,10 +81,11 @@
     }
 
     .logo {
-      max-width: 300px;
-      width: 100%;
+      display: block;
+      width: 250px;
       height: auto;
-      display: inline-block;
+      margin: 0 auto;
+      object-fit: contain;
     }
 
     .top-line {
@@ -258,6 +259,11 @@
       font-size: 16px;
     }
 
+    @page {
+      size: Letter;
+      margin: 12mm;
+    }
+
     @media print {
       body {
         background: #fff;
@@ -273,8 +279,67 @@
       .error {
         box-shadow: none;
         border-radius: 0;
-        max-width: none;
-        padding: 18px 20px;
+        border: 0;
+        width: 100%;
+        max-width: 100%;
+        padding: 12px 14px;
+      }
+
+      .top-line {
+        margin: 8px 0 16px;
+      }
+
+      .meta {
+        margin-bottom: 14px;
+      }
+
+      .section-title {
+        margin: 12px 0 8px;
+      }
+
+      tbody td {
+        padding: 8px 6px;
+      }
+
+      .totals {
+        width: min(100%, 290px);
+        margin-top: 10px;
+        padding: 10px 12px;
+      }
+
+      .legal {
+        margin-top: 14px;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      .legal h4 {
+        margin: 10px 0 6px;
+      }
+
+      .bottom {
+        grid-template-columns: 1fr 156px;
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .qr-box {
+        padding: 8px;
+      }
+
+      #qr {
+        width: 108px !important;
+        height: 108px !important;
+      }
+
+      table,
+      .meta,
+      .final-info,
+      .legal,
+      .totals,
+      .bottom {
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
 
       .totals,
