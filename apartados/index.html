@@ -151,6 +151,24 @@
       appearance:none; border:1px solid var(--line); background:#fff; color:#111827;
       border-radius:12px; padding:10px 12px; font-weight:800; cursor:pointer;
     }
+
+
+    .public-view{ max-width:900px; margin:28px auto; padding:0 16px 28px; }
+    .public-head{ background:#fffdf9; border:1px solid #e8e2d7; border-radius:16px; padding:20px; box-shadow:0 10px 24px rgba(56,50,52,.08); }
+    .public-title{ font-size:28px; font-weight:800; color:#383234; margin:0 0 8px; }
+    .public-sub{ color:#6b6668; margin:0 0 14px; }
+    .public-chip{ display:inline-block; padding:6px 12px; border-radius:999px; background:#eef1ec; border:1px solid rgba(167,181,158,.45); color:#383234; font-weight:700; font-size:13px; }
+    .public-grid{ display:grid; gap:14px; grid-template-columns:1fr; margin-top:14px; }
+    @media (min-width:800px){ .public-grid{ grid-template-columns:1fr 1fr; } }
+    .public-card{ background:#fff; border:1px solid #ece6db; border-radius:14px; padding:16px; }
+    .public-card h3{ margin:0 0 10px; color:#a7b59e; font-size:13px; letter-spacing:.05em; text-transform:uppercase; }
+    .public-kv{ display:grid; grid-template-columns:120px 1fr; gap:8px 10px; font-size:14px; }
+    .public-kv b{ color:#383234; }
+    .public-actions{ display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+    .public-btn{ text-decoration:none; border-radius:10px; padding:10px 14px; font-weight:700; border:1px solid rgba(56,50,52,.18); color:#383234; background:#f3ece2; }
+    .public-btn.primary{ background:#383234; color:#faf7f2; border-color:#383234; }
+    .public-list{ margin:0; padding-left:18px; color:#383234; }
+    .public-list li{ margin:6px 0; }
     @media (max-width: 640px) {
       .panel-back-btn {
         top: 14px;
@@ -163,7 +181,9 @@
 </head>
 
 <body>
-  <div class="container page-header-wrapper">
+  <div id="public-apartado-app" style="display:none"></div>
+
+  <div id="admin-apartados-app" class="container page-header-wrapper">
     <a href="/#/panel" class="panel-back-btn">← Volver al panel</a>
 
     <div class="header">
@@ -288,6 +308,16 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+    const isPublicApartadoView = (() => {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      return parts[0] === 'apartado' && Boolean(parts[1]);
+    })();
+
+    function getPublicFolioFromPath(){
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      return (parts[0] === 'apartado' && parts[1]) ? decodeURIComponent(parts[1]).trim() : '';
+    }
+
 
     function fmtMX(n){
       const v = Number(String(n ?? 0).replace(/[^\d.-]/g,'')) || 0;
@@ -500,7 +530,79 @@
       }
     }
 
+
+    function renderPublicApartado(apartado){
+      const app = $('public-apartado-app');
+      const totalAbonos = (apartado.historialAbonos || []).reduce((sum, item) => sum + toNum(item.monto), 0);
+      const waText = encodeURIComponent(`Hola Haruja, tengo dudas sobre mi apartado ${apartado.folio}.`);
+      const waHref = `https://wa.me/523330336506?text=${waText}`;
+      const items = (apartado.productos || []).map((item) => `<li>${item.codigo || '-'} — ${item.descripcion || 'Producto'} (${fmtMX(item.precio || 0)})</li>`).join('') || '<li>Sin productos registrados.</li>';
+      const abonos = (apartado.historialAbonos || []).map((ab) => `<li>${ab.fecha || '-'} · ${fmtMX(ab.monto || 0)} ${ab.metodo ? `· ${ab.metodo}` : ''}</li>`).join('') || '<li>Sin abonos registrados.</li>';
+      const pdfPersistido = apartado.pdfDriveUrl || apartado.pdfUrlPersistido || '';
+
+      app.innerHTML = `
+        <section class="public-view">
+          <div class="public-head">
+            <h1 class="public-title">Status de apartado</h1>
+            <p class="public-sub">Consulta rápida de tu apartado Haruja.</p>
+            <span class="public-chip">${apartado.status || 'ACTIVO'} · Folio ${apartado.folio || '-'}</span>
+            <div class="public-actions">
+              <a class="public-btn" href="/ticket/${encodeURIComponent(apartado.folio || '')}" target="_blank" rel="noopener">Ver ticket</a>
+              <a class="public-btn primary" href="/ticket/${encodeURIComponent(apartado.folio || '')}" target="_blank" rel="noopener">Descargar / imprimir ticket</a>
+              <a class="public-btn" href="${waHref}" target="_blank" rel="noopener">WhatsApp</a>
+              ${pdfPersistido ? `<a class="public-btn" href="${pdfPersistido}" target="_blank" rel="noopener">Ver PDF guardado</a>` : ''}
+            </div>
+          </div>
+          <div class="public-grid">
+            <article class="public-card">
+              <h3>Resumen</h3>
+              <div class="public-kv">
+                <b>Folio</b><div>${apartado.folio || '-'}</div>
+                <b>Fecha</b><div>${apartado.fecha || '-'}</div>
+                <b>Cliente</b><div>${apartado.cliente || '-'}</div>
+                <b>Contacto</b><div>${apartado.telefono || '-'}</div>
+                <b>Subtotal</b><div>${fmtMX(apartado.subtotal || 0)}</div>
+                <b>Anticipo</b><div>${fmtMX(apartado.anticipo || 0)}</div>
+                <b>Descuento</b><div>${fmtMX(apartado.descuento || 0)}</div>
+                <b>Total</b><div>${fmtMX(apartado.total || 0)}</div>
+                <b>Saldo pendiente</b><div>${fmtMX(apartado.saldoPendiente || 0)}</div>
+                <b>Total abonado</b><div>${fmtMX(totalAbonos || 0)}</div>
+              </div>
+            </article>
+            <article class="public-card">
+              <h3>Productos</h3>
+              <ul class="public-list">${items}</ul>
+            </article>
+            <article class="public-card" style="grid-column:1 / -1">
+              <h3>Historial de abonos</h3>
+              <ul class="public-list">${abonos}</ul>
+            </article>
+          </div>
+        </section>
+      `;
+    }
+
+    async function initPublicApartadoView(){
+      const folio = getPublicFolioFromPath();
+      $('admin-apartados-app').style.display = 'none';
+      $('modal').style.display = 'none';
+      const app = $('public-apartado-app');
+      app.style.display = 'block';
+      app.innerHTML = '<section class="public-view"><div class="public-card">Cargando apartado…</div></section>';
+      try {
+        const data = await apiFetch(`/api/apartados/${encodeURIComponent(folio)}`);
+        renderPublicApartado(data.apartado || {});
+      } catch (error) {
+        app.innerHTML = `<section class="public-view"><div class="public-card">No se pudo cargar el apartado: ${error.message || 'Error'}</div></section>`;
+      }
+    }
+
     (async function init(){
+      if (isPublicApartadoView) {
+        await initPublicApartadoView();
+        return;
+      }
+
       const today = new Date();
       const y = today.getFullYear();
       const m = String(today.getMonth() + 1).padStart(2,'0');
