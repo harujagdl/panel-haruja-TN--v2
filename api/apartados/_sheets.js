@@ -17,6 +17,12 @@ const APARTADOS_HEADERS = [
   "UltimoMovimiento",
   "GenerarTicket",
   "PdfUrl",
+  "PublicUrl",
+  "PaymentUrl",
+  "QrUrl",
+  "SaldoPendiente",
+  "FechaLimite",
+  "Status",
 ];
 
 const APARTADOS_ITEMS_HEADERS = [
