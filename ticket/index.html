@@ -1,519 +1,394 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <title>Ticket Haruja</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-  <style>
-    :root {
-      --olive: #a7b59e;
-      --coffee: #383234;
-      --ivory: #faf7f2;
-      --paper: #fffdf9;
-      --line-soft: rgba(56, 50, 52, 0.15);
-    }
+<meta charset="UTF-8">
+<title>Ticket Haruja</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-    * {
-      box-sizing: border-box;
-    }
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 
-    body {
-      font-family: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
-      background: var(--ivory);
-      margin: 0;
-      padding: 24px;
-      color: var(--coffee);
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
+<style>
 
-    .actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
-      margin-bottom: 18px;
-      max-width: 960px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    .btn {
-      border: 0;
-      border-radius: 12px;
-      padding: 11px 18px;
-      font-weight: 700;
-      cursor: pointer;
-      font-size: 14px;
-      transition: opacity .2s ease;
-    }
-
-    .btn:hover {
-      opacity: .9;
-    }
-
-    .btn-back {
-      background: #efe8dd;
-      color: var(--coffee);
-      border: 1px solid rgba(56, 50, 52, 0.15);
-    }
-
-    .btn-print {
-      background: var(--coffee);
-      color: var(--ivory);
-    }
-
-    .card,
-    .empty,
-    .error {
-      width: min(100%, 820px);
-      margin: 0 auto;
-      background: var(--paper);
-      border-radius: 20px;
-      padding: 28px 32px;
-      box-shadow: 0 8px 25px rgba(56, 50, 52, 0.08);
-      border: 1px solid rgba(167, 181, 158, 0.2);
-    }
-
-    .logo-wrap {
-  text-align: center;
-  margin-bottom: 10px;
+:root{
+--olive:#a7b59e;
+--coffee:#383234;
+--ivory:#faf7f2;
+--paper:#fffdf9;
+--line-soft:rgba(56,50,52,.15);
 }
 
-.logo {
-  display: block;
-  width: 260px;
-  max-width: 100%;
-  height: auto;
-  margin: 0 auto;
-  object-fit: contain;
+*{box-sizing:border-box}
+
+body{
+font-family:"Segoe UI",Arial,sans-serif;
+background:var(--ivory);
+margin:0;
+padding:24px;
+color:var(--coffee);
+-webkit-print-color-adjust:exact;
+print-color-adjust:exact;
 }
-    .top-line {
-      border: 0;
-      border-top: 4px solid var(--coffee);
-      margin: 10px 0 22px;
-    }
 
-    .top-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 14px;
-    }
+.actions{
+display:flex;
+justify-content:flex-end;
+gap:12px;
+margin-bottom:18px;
+max-width:900px;
+margin-left:auto;
+margin-right:auto;
+}
 
-    .title {
-      font-size: 20px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .5px;
-      color: var(--coffee);
-    }
+.btn{
+border:0;
+border-radius:12px;
+padding:11px 18px;
+font-weight:700;
+cursor:pointer;
+font-size:14px;
+}
 
-    .folio {
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--coffee);
-      background: #f1ece4;
-      padding: 6px 12px;
-      border-radius: 999px;
-    }
+.btn-back{
+background:#efe8dd;
+color:var(--coffee);
+border:1px solid rgba(56,50,52,.15);
+}
 
-    .meta,
-    .final-info {
-      display: grid;
-      grid-template-columns: 96px 1fr;
-      gap: 7px 12px;
-      font-size: 14px;
-    }
+.btn-print{
+background:var(--coffee);
+color:var(--ivory);
+}
 
-    .meta {
-      margin-bottom: 18px;
-    }
+.card{
+width:min(100%,820px);
+margin:auto;
+background:var(--paper);
+border-radius:18px;
+padding:28px 32px;
+box-shadow:0 8px 25px rgba(0,0,0,.08);
+border:1px solid rgba(167,181,158,.2);
+}
 
-    .meta b,
-    .final-info b {
-      font-weight: 700;
-      color: var(--coffee);
-    }
+.logo-wrap{
+text-align:center;
+margin-bottom:12px;
+}
 
-    .section-title {
-      font-size: 14px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .6px;
-      margin: 14px 0 10px;
-      color: var(--olive);
-    }
+.logo{
+width:240px;
+max-width:100%;
+height:auto;
+display:block;
+margin:auto;
+}
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      border-radius: 10px;
-      overflow: hidden;
-    }
+.top-line{
+border:0;
+border-top:4px solid var(--coffee);
+margin:10px 0 22px;
+}
 
-    thead th {
-      text-align: left;
-      font-size: 12px;
-      text-transform: uppercase;
-      color: var(--coffee);
-      background: var(--ivory);
-      border-top: 1px solid var(--line-soft);
-      border-bottom: 1px solid var(--line-soft);
-      padding: 10px 8px;
-      letter-spacing: .3px;
-    }
+.top-row{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-bottom:14px;
+}
 
-    tbody td {
-      font-size: 13px;
-      padding: 10px 8px;
-      border-bottom: 1px solid rgba(56, 50, 52, 0.09);
-      vertical-align: top;
-      line-height: 1.35;
-    }
+.title{
+font-size:20px;
+font-weight:700;
+text-transform:uppercase;
+}
 
-    .ta-center { text-align: center; }
-    .ta-right { text-align: right; }
+.folio{
+font-weight:700;
+background:#f1ece4;
+padding:6px 12px;
+border-radius:999px;
+}
 
-    .totals {
-      width: 310px;
-      margin-left: auto;
-      margin-top: 14px;
-      background: var(--ivory);
-      border: 1px solid rgba(167, 181, 158, 0.4);
-      border-radius: 12px;
-      padding: 12px 14px;
-    }
+.meta{
+display:grid;
+grid-template-columns:96px 1fr;
+gap:6px 12px;
+font-size:14px;
+margin-bottom:18px;
+}
 
-    .totals-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      margin: 6px 0;
-      font-size: 14px;
-      color: var(--coffee);
-    }
+.section-title{
+font-size:14px;
+font-weight:700;
+text-transform:uppercase;
+letter-spacing:.6px;
+margin:14px 0 10px;
+color:var(--olive);
+}
 
-    .totals-row strong {
-      font-weight: 700;
-    }
+table{
+width:100%;
+border-collapse:collapse;
+}
 
-    .totals-grand {
-      border-top: 2px solid var(--olive);
-      padding-top: 10px;
-      margin-top: 9px;
-      font-size: 19px;
-      font-weight: 800;
-    }
+thead th{
+text-align:left;
+font-size:12px;
+text-transform:uppercase;
+background:var(--ivory);
+border-top:1px solid var(--line-soft);
+border-bottom:1px solid var(--line-soft);
+padding:10px 8px;
+}
 
-    .legal {
-      margin-top: 20px;
-      font-size: 12.5px;
-      line-height: 1.5;
-      color: var(--coffee);
-    }
+tbody td{
+font-size:13px;
+padding:10px 8px;
+border-bottom:1px solid rgba(56,50,52,.09);
+}
 
-    .legal h4 {
-      margin: 14px 0 7px;
-      font-size: 13px;
-      letter-spacing: .4px;
-      color: var(--olive);
-      border-left: 4px solid var(--olive);
-      padding-left: 8px;
-    }
+.ta-center{text-align:center}
+.ta-right{text-align:right}
 
-    .legal p {
-      margin: 4px 0;
-    }
+.totals{
+width:310px;
+margin-left:auto;
+margin-top:14px;
+background:var(--ivory);
+border:1px solid rgba(167,181,158,.4);
+border-radius:12px;
+padding:12px 14px;
+}
 
-    .bottom {
-      display: grid;
-      grid-template-columns: 1fr 176px;
-      gap: 16px;
-      margin-top: 20px;
-      align-items: end;
-    }
+.totals-row{
+display:flex;
+justify-content:space-between;
+margin:6px 0;
+}
 
-    .qr-box {
-      text-align: center;
-      background: var(--ivory);
-      border: 1px solid rgba(167, 181, 158, 0.45);
-      border-radius: 12px;
-      padding: 10px;
-    }
+.totals-grand{
+border-top:2px solid var(--olive);
+padding-top:10px;
+margin-top:8px;
+font-size:19px;
+font-weight:800;
+}
 
-    #qr {
-      display: block;
-      margin: 0 auto 7px;
-    }
+.legal{
+margin-top:20px;
+font-size:12.5px;
+line-height:1.5;
+}
 
-    .qr-caption {
-      font-size: 11px;
-      color: var(--coffee);
-    }
+.legal h4{
+margin:14px 0 7px;
+font-size:13px;
+color:var(--olive);
+border-left:4px solid var(--olive);
+padding-left:8px;
+}
 
-    .empty,
-    .error {
-      text-align: center;
-      font-size: 16px;
-    }
+.bottom{
+display:grid;
+grid-template-columns:1fr 170px;
+gap:16px;
+margin-top:20px;
+align-items:end;
+}
 
-    @page {
-      size: Letter;
-      margin: 12mm;
-    }
+.qr-box{
+text-align:center;
+background:var(--ivory);
+border:1px solid rgba(167,181,158,.45);
+border-radius:12px;
+padding:10px;
+}
 
-    @media print {
-      body {
-        background: #fff;
-        padding: 0;
-      }
+#qr{
+display:block;
+margin:auto;
+}
 
-      .actions {
-        display: none;
-      }
+.qr-caption{
+font-size:11px;
+}
 
-      .card,
-      .empty,
-      .error {
-        box-shadow: none;
-        border-radius: 0;
-        border: 0;
-        width: 100%;
-        max-width: 100%;
-        padding: 12px 14px;
-      }
+@page{
+size:Letter;
+margin:12mm;
+}
 
-      .top-line {
-        margin: 8px 0 16px;
-      }
+@media print{
 
-      .meta {
-        margin-bottom: 14px;
-      }
+body{
+background:#fff;
+padding:0;
+}
 
-      .section-title {
-        margin: 12px 0 8px;
-      }
+.actions{
+display:none;
+}
 
-      tbody td {
-        padding: 8px 6px;
-      }
+.card{
+box-shadow:none;
+border-radius:0;
+border:0;
+width:100%;
+max-width:100%;
+padding:14px;
+}
 
-      .totals {
-        width: min(100%, 290px);
-        margin-top: 10px;
-        padding: 10px 12px;
-      }
+}
 
-      .legal {
-        margin-top: 14px;
-        font-size: 12px;
-        line-height: 1.4;
-      }
-
-      .legal h4 {
-        margin: 10px 0 6px;
-      }
-
-      .bottom {
-        grid-template-columns: 1fr 156px;
-        gap: 12px;
-        margin-top: 14px;
-      }
-
-      .qr-box {
-        padding: 8px;
-      }
-
-      #qr {
-        width: 108px !important;
-        height: 108px !important;
-      }
-
-      table,
-      .meta,
-      .final-info,
-      .legal,
-      .totals,
-      .bottom {
-        break-inside: avoid;
-        page-break-inside: avoid;
-      }
-
-      .totals,
-      .qr-box {
-        background: var(--ivory);
-      }
-    }
-  </style>
+</style>
 </head>
+
 <body>
-  <div class="actions">
-    <button class="btn btn-back" onclick="history.back()">Volver</button>
-    <button class="btn btn-print" onclick="window.print()">Imprimir / Guardar PDF</button>
-  </div>
 
-  <div id="app"></div>
+<div class="actions">
+<button class="btn btn-back" onclick="history.back()">Volver</button>
+<button class="btn btn-print" onclick="window.print()">Imprimir / Guardar PDF</button>
+</div>
 
-  <script>
-    function getFolioFromPath() {
-      const parts = window.location.pathname.split('/').filter(Boolean);
-      if (parts[0] === 'ticket' && parts[1]) return decodeURIComponent(parts[1]).trim();
-      return '';
-    }
+<div id="app"></div>
 
-    function money(value) {
-      const n = Number(value || 0);
-      return '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
+<script>
 
-    function esc(value) {
-      return String(value ?? '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-    }
+function getFolioFromPath(){
+const parts=window.location.pathname.split('/').filter(Boolean)
+if(parts[0]==='ticket' && parts[1]) return decodeURIComponent(parts[1])
+return''
+}
 
-    function renderError(message) {
-      document.getElementById('app').innerHTML = `<div class="error">${esc(message)}</div>`;
-    }
+function money(v){
+const n=Number(v||0)
+return '$'+n.toLocaleString('es-MX',{minimumFractionDigits:2})
+}
 
-    function renderTicket(payload) {
-      const source = payload?.apartado || payload || {};
-      const folio = source.folio || payload?.folio || '-';
-      const fecha = source.fecha || payload?.fecha || '-';
-      const cliente = source.cliente || payload?.cliente || '-';
-      const contacto = source.telefono || source.contacto || payload?.contacto || '-';
-      const rawItems = source.productos || payload?.items || [];
-      const items = Array.isArray(rawItems) ? rawItems : [];
-      const subtotal = Number(source.subtotal ?? payload?.subtotal ?? 0);
-      const anticipo = Number(source.anticipo ?? payload?.anticipo ?? 0);
-      const descuento = Number(source.descuento ?? payload?.descuento ?? 0);
-      const total = Number(source.total ?? payload?.total ?? 0);
+function esc(v){
+return String(v??'')
+.replaceAll('&','&amp;')
+.replaceAll('<','&lt;')
+.replaceAll('>','&gt;')
+}
 
-      const rows = items.length
-        ? items.map((item) => {
-            const qty = Number(item.cantidad || 1);
-            const unitPrice = Number(item.precio || 0);
-            const amount = Number(item.subtotal || unitPrice * qty);
-            return `
-              <tr>
-                <td>${esc(item.codigo || '-')}</td>
-                <td>${esc(item.descripcion || '-')}</td>
-                <td class="ta-center">${esc(qty)}</td>
-                <td class="ta-right">${money(unitPrice)}</td>
-                <td class="ta-right">${money(amount)}</td>
-              </tr>
-            `;
-          }).join('')
-        : `
-            <tr>
-              <td colspan="5" class="ta-center">No hay productos en este apartado.</td>
-            </tr>
-          `;
+async function loadTicket(){
 
-      document.getElementById('app').innerHTML = `
-        <div class="card">
-          <div class="logo-wrap">
-            <img class="logo" src="/public/assets/haruja-logo.png" alt="HarujaGdl">
-          </div>
+const folio=getFolioFromPath()
 
-          <hr class="top-line">
+if(!folio){
+document.getElementById('app').innerHTML="Folio inválido"
+return
+}
 
-          <div class="top-row">
-            <div class="title">Ticket de apartado</div>
-            <div class="folio">#${esc(folio)}</div>
-          </div>
+const res=await fetch(`/api/apartados/${folio}`)
+const data=await res.json()
 
-          <div class="meta">
-            <b>Fecha:</b><div>${esc(fecha)}</div>
-            <b>Cliente:</b><div>${esc(cliente)}</div>
-            <b>Contacto:</b><div>${esc(contacto)}</div>
-          </div>
+renderTicket(data)
 
-          <div class="section-title">Detalle</div>
+}
 
-          <table>
-            <thead>
-              <tr>
-                <th>Código</th>
-                <th>Descripción</th>
-                <th class="ta-center">Cant</th>
-                <th class="ta-right">P.U.</th>
-                <th class="ta-right">Importe</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
+function renderTicket(payload){
 
-          <div class="totals">
-            <div class="totals-row"><strong>Subtotal:</strong><span>${money(subtotal)}</span></div>
-            <div class="totals-row"><strong>Anticipo:</strong><span>${money(anticipo)}</span></div>
-            <div class="totals-row"><strong>Descuento:</strong><span>${money(descuento)}</span></div>
-            <div class="totals-row totals-grand"><strong>TOTAL</strong><span>${money(total)}</span></div>
-          </div>
+const a=payload.apartado||payload
 
-          <div class="legal">
-            <p><strong>Gracias por tu compra en HarujaGdl</strong></p>
+const items=a.productos||[]
 
-            <h4>CAMBIOS</h4>
-            <p>Solicítalo dentro de 7 días naturales de recibir tu compra.</p>
-            <p>La prenda debe estar nueva, sin uso, sin lavar y con etiquetas originales.</p>
-            <p>No aplican cambios en: prendas tejidas, bordadas, con aplicaciones, accesorios, prendas de ropa íntima, trajes de baño, rebajas o compras con cupón.</p>
-            <p>Los gastos de envío corren por cuenta del cliente.</p>
-            <p>Solicita tu cambio por WhatsApp al 33 3033 6506 indicando motivo, prenda y talla deseada.</p>
+const rows=items.length?items.map(i=>`
 
-            <h4>APARTADOS</h4>
-            <p>Puedes apartar con 25% de anticipo.</p>
-            <p>Plazo máximo para recoger: 30 días.</p>
-            <p>Pasado ese tiempo, la prenda vuelve a venta y el anticipo queda como saldo a favor por 3 meses a partir de la fecha inicial del apartado.</p>
-            <p>No aplican cambios ni devoluciones en apartados.</p>
-            <p>No realizamos devoluciones de dinero. Todos los cambios son por producto de igual o mayor valor.</p>
-          </div>
+<tr>
+<td>${esc(i.codigo)}</td>
+<td>${esc(i.descripcion)}</td>
+<td class="ta-center">${esc(i.cantidad||1)}</td>
+<td class="ta-right">${money(i.precio)}</td>
+<td class="ta-right">${money(i.subtotal)}</td>
+</tr>
 
-          <div class="bottom">
-            <div class="final-info">
-              <b>Pedido:</b><div>${esc(folio)}</div>
-              <b>Fecha:</b><div>${esc(fecha)}</div>
-              <b>Cliente:</b><div>${esc(cliente)}</div>
-              <b>Contacto:</b><div>${esc(contacto)}</div>
-            </div>
+`).join(''):`<tr><td colspan="5" class="ta-center">No hay productos</td></tr>`
 
-            <div class="qr-box">
-              <canvas id="qr"></canvas>
-              <div class="qr-caption">Escanea para ver tu apartado</div>
-            </div>
-          </div>
-        </div>
-      `;
+document.getElementById('app').innerHTML=`
 
-      const qrTarget = `${window.location.origin}/apartado/${encodeURIComponent(folio)}`;
-      const canvas = document.getElementById('qr');
+<div class="card">
 
-      if (canvas && window.QRCode) {
-        QRCode.toCanvas(canvas, qrTarget, { width: 120, margin: 1 });
-      }
-    }
+<div class="logo-wrap">
+<img class="logo" src="/public/assets/haruja-logo.png" alt="HarujaGdl">
+</div>
 
-    async function loadTicket() {
-      const folio = getFolioFromPath();
-      if (!folio) return renderError('Falta el folio en la URL.');
+<hr class="top-line">
 
-      try {
-        const res = await fetch(`/api/apartados/${encodeURIComponent(folio)}`);
-        const data = await res.json();
-        if (!res.ok || !data?.ok) throw new Error(data?.message || `No se encontró el folio "${folio}".`);
-        renderTicket(data);
-      } catch (err) {
-        renderError(err?.message || 'No se pudo cargar el ticket.');
-      }
-    }
+<div class="top-row">
+<div class="title">Ticket de apartado</div>
+<div class="folio">#${esc(a.folio)}</div>
+</div>
 
-    loadTicket();
-  </script>
+<div class="meta">
+<b>Fecha:</b><div>${esc(a.fecha)}</div>
+<b>Cliente:</b><div>${esc(a.cliente)}</div>
+<b>Contacto:</b><div>${esc(a.telefono||a.contacto)}</div>
+</div>
+
+<div class="section-title">Detalle</div>
+
+<table>
+<thead>
+<tr>
+<th>Código</th>
+<th>Descripción</th>
+<th class="ta-center">Cant</th>
+<th class="ta-right">P.U.</th>
+<th class="ta-right">Importe</th>
+</tr>
+</thead>
+<tbody>${rows}</tbody>
+</table>
+
+<div class="totals">
+<div class="totals-row"><b>Subtotal:</b><span>${money(a.subtotal)}</span></div>
+<div class="totals-row"><b>Anticipo:</b><span>${money(a.anticipo)}</span></div>
+<div class="totals-row"><b>Descuento:</b><span>${money(a.descuento)}</span></div>
+<div class="totals-row totals-grand"><b>TOTAL</b><span>${money(a.total)}</span></div>
+</div>
+
+<div class="legal">
+
+<p><strong>Gracias por tu compra en HarujaGdl</strong></p>
+
+<h4>CAMBIOS</h4>
+<p>Solicítalo dentro de 7 días naturales de recibir tu compra.</p>
+
+<h4>APARTADOS</h4>
+<p>Puedes apartar con 25% de anticipo.</p>
+<p>Plazo máximo para recoger: 30 días.</p>
+
+</div>
+
+<div class="bottom">
+
+<div class="meta">
+<b>Pedido:</b><div>${esc(a.folio)}</div>
+<b>Fecha:</b><div>${esc(a.fecha)}</div>
+<b>Cliente:</b><div>${esc(a.cliente)}</div>
+<b>Contacto:</b><div>${esc(a.telefono||a.contacto)}</div>
+</div>
+
+<div class="qr-box">
+<canvas id="qr"></canvas>
+<div class="qr-caption">Escanea para ver tu apartado</div>
+</div>
+
+</div>
+
+</div>
+`
+
+const urlStatus=`${window.location.origin}/apartado/${a.folio}`
+
+QRCode.toCanvas(document.getElementById('qr'),urlStatus,{width:120})
+
+}
+
+loadTicket()
+
+</script>
+
 </body>
 </html>
