@@ -1,4 +1,4 @@
-import { createSheetsClient, ensureSheetsSetup, getSpreadsheetId, readSheetRows } from "./_sheets.js";
+import { createSheetsClient, ensureSheetsSetup, getSpreadsheetId, readSheetRows } from "../../lib/apartados/sheets.js";
 
 function toNumber(value) {
   if (typeof value === "number") {

@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { createSheetsClient, getSpreadsheetId, readSheetRows, roundMoney } from "./_sheets.js";
+import { createSheetsClient, getSpreadsheetId, readSheetRows, roundMoney } from "../../lib/apartados/sheets.js";
 
 function drawLabelValue(page, { x, y, label, value, font, bold, size = 10 }) {
   page.drawText(`${label}:`, { x, y, size, font: bold, color: rgb(0.2, 0.2, 0.2) });
