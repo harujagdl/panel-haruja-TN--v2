@@ -99,7 +99,7 @@ function mapDetail(apartado, itemsRows, abonosRows) {
     historialAbonos,
     status: String(apartado.Estado || "ACTIVO").trim().toUpperCase(),
     fechaLimite: String(apartado.FechaLimite || "").trim(),
-    pdfUrl: `/api/ticket/${encodeURIComponent(folio)}`,
+    pdfUrl: `/ticket/${encodeURIComponent(folio)}`,
   };
 }
 
@@ -192,7 +192,7 @@ async function handlePost(req, res) {
     });
     await appendSheetRow(sheets, spreadsheetId, "apartados_abonos", abonoRow);
 
-    return res.status(200).json({ ok: true, folio, ticketUrl: `/api/ticket/${encodeURIComponent(folio)}` });
+    return res.status(200).json({ ok: true, folio, ticketUrl: `/ticket/${encodeURIComponent(folio)}` });
   }
 
   if (!fecha || !cliente || !contacto || !folio) throw new Error("Completa los campos obligatorios para registrar el apartado.");
@@ -249,7 +249,7 @@ async function handlePost(req, res) {
     Estado: estado,
     FechaCreacion: now,
     UltimoMovimiento: now,
-    PdfUrl: `/api/ticket/${encodeURIComponent(folio)}`,
+    PdfUrl: `/ticket/${encodeURIComponent(folio)}`,
   });
 
   await appendSheetRow(sheets, spreadsheetId, "apartados", apartadoRow);
@@ -273,7 +273,7 @@ async function handlePost(req, res) {
     );
   }
 
-  return res.status(200).json({ ok: true, folio, ticketUrl: `/api/ticket/${encodeURIComponent(folio)}` });
+  return res.status(200).json({ ok: true, folio, ticketUrl: `/ticket/${encodeURIComponent(folio)}` });
 }
 
 export default async function handler(req, res) {
