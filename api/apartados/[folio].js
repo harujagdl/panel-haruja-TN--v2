@@ -143,7 +143,21 @@ async function handleGet(req, res) {
   const apartado = apartadosRows.find((row) => normalize(row.Folio) === folioParam);
   if (!apartado) return res.status(404).json({ ok: false, message: "No se encontró el folio." });
 
-  return res.status(200).json({ ok: true, apartado: mapDetail(apartado, itemsRows, abonosRows) });
+  const detail = mapDetail(apartado, itemsRows, abonosRows);
+
+  return res.status(200).json({
+    ok: true,
+    apartado: detail,
+    folio: detail.folio,
+    fecha: detail.fecha,
+    cliente: detail.cliente,
+    contacto: detail.telefono,
+    items: detail.productos,
+    subtotal: detail.subtotal,
+    anticipo: detail.anticipo,
+    descuento: detail.descuento,
+    total: detail.total,
+  });
 }
 
 async function handlePost(req, res) {
