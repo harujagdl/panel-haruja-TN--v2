@@ -1,174 +1,175 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Registrar Apartado - HarujaGdl</title>
 
-<title>Registrar Apartado - HarujaGDL</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧷</text></svg>">
 
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-
-<style>
-  :root{
-    --bg:#f7f7f8;
-    --card:#ffffff;
-    --text:#111827;
-    --muted:#6b7280;
-    --line:#e5e7eb;
-    --brand:#5FA18E;
-    --brand-d:#4a8d7a;
-    --chip:#A7B59E;
-  }
-  *{ box-sizing:border-box }
-  html,body{ margin:0; padding:0; height:100%; background:var(--bg); color:var(--text); font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif }
-
-  .container{ max-width:980px; margin:28px auto; padding:0 16px }
-  .page-header-wrapper { position: relative; }
-  .panel-back-btn {
-    position: absolute;
-    top: 20px;
-    right: 24px;
-    padding: 8px 16px;
-    background: #f3f4f6;
-    border-radius: 999px;
-    font-size: 14px;
-    font-weight: 600;
-    color: #2563eb;
-    text-decoration: none;
-    border: 1px solid #e5e7eb;
-    transition: all .2s ease;
-  }
-  .panel-back-btn:hover { background: #e5e7eb; }
-  .header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px }
-  .brand{ display:flex; align-items:center; text-decoration:none; }
-  .brand img{ height:36px; width:auto; opacity:.95; cursor:pointer; }
-  .title{ font-size:28px; font-weight:800; letter-spacing:-.01em }
-
-  .card{
-    background:var(--card);
-    border:1px solid var(--line);
-    border-radius:14px;
-    box-shadow:0 10px 20px rgba(17,24,39,.05);
-    overflow:hidden;
-  }
-  .card-hd{
-    background:#fafafa;
-    border-bottom:1px solid var(--line);
-    padding:14px 18px;
-    font-weight:800;
-  }
-  .card-bd{ padding:18px }
-  .grid{ display:grid; grid-template-columns:1fr; gap:14px }
-  @media (min-width: 860px){
-    .grid.cols-2{ grid-template-columns:1fr 1fr }
-    .grid.cols-3{ grid-template-columns:1fr 1fr 1fr }
-  }
-
-  .row{ display:flex; flex-direction:column; gap:8px }
-  .lab{ font-weight:700; font-size:14px }
-  .hint{ color:var(--muted); font-size:12px }
-
-  .inpt, textarea, select{
-    width:100%; border:1px solid var(--line); background:#fff; color:var(--text);
-    border-radius:10px; padding:12px 12px; font-size:15px; outline:none;
-  }
-  .inpt:focus, textarea:focus, select:focus{ border-color:#cfd6dc; box-shadow:0 0 0 3px rgba(95,161,142,.12) }
-  textarea{ min-height:92px; resize:vertical }
-
-  .switch-row{
-    display:flex; align-items:center; gap:10px; margin:2px 0 6px;
-  }
-  .sw{ width:18px; height:18px }
-  .sw-lab{ font-size:14px; color:#374151 }
-
-  .btn{
-    appearance:none; border:0; border-radius:12px; padding:14px 18px; font-weight:800;
-    color:#fff; background:var(--brand); width:100%; cursor:pointer; font-size:16px;
-    box-shadow:0 8px 18px rgba(95,161,142,.25);
-  }
-  .btn:hover{ background:var(--brand-d) }
-  .btn:disabled{ background:#a2b7b0; cursor:not-allowed; box-shadow:none }
-
-  .status{ margin-top:10px; min-height:22px; font-size:14px }
-  .ok{ color:#0d7a4f; font-weight:700 }
-  .err{ color:#b91c1c; font-weight:700 }
-
-  .badge{
-    display:inline-flex; align-items:center; gap:6px;
-    background:var(--chip); color:#fff; font-weight:800; border-radius:999px;
-    padding:4px 10px; font-size:13px;
-  }
-
-  .modal{
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,.35);
-    display: none; align-items: center; justify-content: center;
-    z-index: 9999; padding: 20px;
-  }
-  .modal.open{ display:flex; }
-  .modal .box{
-    width: 100%; max-width: 540px; background:#fff;
-    border:1px solid var(--line); border-radius:14px; padding:18px;
-    box-shadow:0 12px 28px rgba(17,24,39,.20);
-  }
-  .modal .box .hd{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px }
-  .modal .ttl{ font-weight:800; font-size:18px }
-  .modal .close{ border:0; background:transparent; font-size:22px; cursor:pointer; line-height:1; padding:6px }
-  .modal .grid{ display:grid; grid-template-columns:1fr auto; row-gap:6px; column-gap:18px; margin-top:10px }
-  .modal .k{ color:#374151 }
-  .modal .v{ font-weight:700; text-align:right }
-  .modal .btns{ display:flex; gap:10px; margin-top:14px; justify-content:flex-end }
-  .modal .btn-mini{
-    border:0; border-radius:10px; padding:10px 14px; cursor:pointer;
-    background:var(--brand); color:#fff; font-weight:700;
-  }
-  .modal .btn-mini.secondary{ background:#eef2f7; color:#111827 }
-  .link{ color:#2563eb; text-decoration:none }
-  .link:hover{ text-decoration:underline }
-
-  .desc-tipo{
-    display:flex; gap:14px; align-items:center;
-    padding:10px 12px; border:1px solid var(--line); border-radius:10px;
-    background:#fff;
-  }
-  .desc-tipo label{
-    display:flex; gap:8px; align-items:center;
-    font-size:14px; color:#374151; font-weight:700;
-    cursor:pointer;
-  }
-  .desc-tipo input{ transform: translateY(1px); }
-  .disabled{
-    opacity:.55;
-    pointer-events:none;
-    filter:grayscale(.2);
-  }
-
-  .top-actions{
-    display:flex; gap:10px; align-items:center; justify-content:flex-end;
-    margin-top:6px;
-  }
-  .btn-ghost{
-    appearance:none; border:1px solid var(--line); background:#fff; color:#111827;
-    border-radius:12px; padding:10px 12px; font-weight:800; cursor:pointer;
-  }
-  @media (max-width: 640px) {
-    .panel-back-btn {
-      top: 14px;
-      right: 16px;
-      font-size: 13px;
-      padding: 6px 12px;
+  <style>
+    :root{
+      --bg:#f7f7f8;
+      --card:#ffffff;
+      --text:#111827;
+      --muted:#6b7280;
+      --line:#e5e7eb;
+      --brand:#5FA18E;
+      --brand-d:#4a8d7a;
+      --chip:#A7B59E;
     }
-  }
-</style>
+    *{ box-sizing:border-box }
+    html,body{ margin:0; padding:0; height:100%; background:var(--bg); color:var(--text); font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif }
+
+    .container{ max-width:980px; margin:28px auto; padding:0 16px }
+    .page-header-wrapper { position: relative; }
+    .panel-back-btn {
+      position: absolute;
+      top: 20px;
+      right: 24px;
+      padding: 8px 16px;
+      background: #f3f4f6;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #2563eb;
+      text-decoration: none;
+      border: 1px solid #e5e7eb;
+      transition: all .2s ease;
+    }
+    .panel-back-btn:hover { background: #e5e7eb; }
+    .header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px }
+    .brand{ display:flex; align-items:center; text-decoration:none; }
+    .brand img{ height:36px; width:auto; opacity:.95; cursor:pointer; }
+    .title{ font-size:28px; font-weight:800; letter-spacing:-.01em }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:14px;
+      box-shadow:0 10px 20px rgba(17,24,39,.05);
+      overflow:hidden;
+    }
+    .card-hd{
+      background:#fafafa;
+      border-bottom:1px solid var(--line);
+      padding:14px 18px;
+      font-weight:800;
+    }
+    .card-bd{ padding:18px }
+    .grid{ display:grid; grid-template-columns:1fr; gap:14px }
+    @media (min-width: 860px){
+      .grid.cols-2{ grid-template-columns:1fr 1fr }
+      .grid.cols-3{ grid-template-columns:1fr 1fr 1fr }
+    }
+
+    .row{ display:flex; flex-direction:column; gap:8px }
+    .lab{ font-weight:700; font-size:14px }
+    .hint{ color:var(--muted); font-size:12px }
+
+    .inpt, textarea, select{
+      width:100%; border:1px solid var(--line); background:#fff; color:var(--text);
+      border-radius:10px; padding:12px 12px; font-size:15px; outline:none;
+    }
+    .inpt:focus, textarea:focus, select:focus{ border-color:#cfd6dc; box-shadow:0 0 0 3px rgba(95,161,142,.12) }
+    textarea{ min-height:92px; resize:vertical }
+
+    .switch-row{
+      display:flex; align-items:center; gap:10px; margin:2px 0 6px;
+    }
+    .sw{ width:18px; height:18px }
+    .sw-lab{ font-size:14px; color:#374151 }
+
+    .btn{
+      appearance:none; border:0; border-radius:12px; padding:14px 18px; font-weight:800;
+      color:#fff; background:var(--brand); width:100%; cursor:pointer; font-size:16px;
+      box-shadow:0 8px 18px rgba(95,161,142,.25);
+    }
+    .btn:hover{ background:var(--brand-d) }
+    .btn:disabled{ background:#a2b7b0; cursor:not-allowed; box-shadow:none }
+
+    .status{ margin-top:10px; min-height:22px; font-size:14px }
+    .ok{ color:#0d7a4f; font-weight:700 }
+    .err{ color:#b91c1c; font-weight:700 }
+
+    .badge{
+      display:inline-flex; align-items:center; gap:6px;
+      background:var(--chip); color:#fff; font-weight:800; border-radius:999px;
+      padding:4px 10px; font-size:13px;
+    }
+
+    .modal{
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.35);
+      display: none; align-items: center; justify-content: center;
+      z-index: 9999; padding: 20px;
+    }
+    .modal.open{ display:flex; }
+    .modal .box{
+      width: 100%; max-width: 540px; background:#fff;
+      border:1px solid var(--line); border-radius:14px; padding:18px;
+      box-shadow:0 12px 28px rgba(17,24,39,.20);
+    }
+    .modal .box .hd{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px }
+    .modal .ttl{ font-weight:800; font-size:18px }
+    .modal .close{ border:0; background:transparent; font-size:22px; cursor:pointer; line-height:1; padding:6px }
+    .modal .grid{ display:grid; grid-template-columns:1fr auto; row-gap:6px; column-gap:18px; margin-top:10px }
+    .modal .k{ color:#374151 }
+    .modal .v{ font-weight:700; text-align:right }
+    .modal .btns{ display:flex; gap:10px; margin-top:14px; justify-content:flex-end }
+    .modal .btn-mini{
+      border:0; border-radius:10px; padding:10px 14px; cursor:pointer;
+      background:var(--brand); color:#fff; font-weight:700;
+    }
+    .modal .btn-mini.secondary{ background:#eef2f7; color:#111827 }
+    .link{ color:#2563eb; text-decoration:none }
+    .link:hover{ text-decoration:underline }
+
+    .desc-tipo{
+      display:flex; gap:14px; align-items:center;
+      padding:10px 12px; border:1px solid var(--line); border-radius:10px;
+      background:#fff;
+    }
+    .desc-tipo label{
+      display:flex; gap:8px; align-items:center;
+      font-size:14px; color:#374151; font-weight:700;
+      cursor:pointer;
+    }
+    .desc-tipo input{ transform: translateY(1px); }
+    .disabled{
+      opacity:.55;
+      pointer-events:none;
+      filter:grayscale(.2);
+    }
+
+    .top-actions{
+      display:flex; gap:10px; align-items:center; justify-content:flex-end;
+      margin-top:6px;
+    }
+    .btn-ghost{
+      appearance:none; border:1px solid var(--line); background:#fff; color:#111827;
+      border-radius:12px; padding:10px 12px; font-weight:800; cursor:pointer;
+    }
+    @media (max-width: 640px) {
+      .panel-back-btn {
+        top: 14px;
+        right: 16px;
+        font-size: 13px;
+        padding: 6px 12px;
+      }
+    }
+  </style>
 </head>
 
 <body>
   <div class="container page-header-wrapper">
-    <a href="https://paneltb.harujagdl.com/#/panel" class="panel-back-btn">← Volver al panel</a>
+    <a href="/#/panel" class="panel-back-btn">← Volver al panel</a>
+
     <div class="header">
       <div class="title">Registrar Apartado</div>
-      <a class="brand" href="https://paneltb.harujagdl.com/#/panel" aria-label="Volver al panel">
-        <img src="../assets/haruja-logo.png" alt="HarujaGdl">
+      <a class="brand" href="/#/panel" aria-label="Volver al panel">
+        <img src="/assets/haruja-logo.png" alt="HarujaGdl" onerror="this.style.display='none'">
       </a>
     </div>
 
@@ -248,7 +249,7 @@
 
         <div class="switch-row">
           <input id="genTicket" class="sw" type="checkbox" checked>
-          <label class="sw-lab" for="genTicket">Generar ticket en PDF (Storage)</label>
+          <label class="sw-lab" for="genTicket">Generar ticket en PDF</label>
         </div>
 
         <div style="margin-top:6px">
@@ -267,10 +268,10 @@
       </div>
 
       <div class="grid">
-        <div class="k">Subtotal</div>       <div class="v" id="m-subtotal">$0.00</div>
-        <div class="k">Anticipo</div>       <div class="v" id="m-anticipo">$0.00</div>
-        <div class="k">Descuento</div>      <div class="v" id="m-desc">$0.00</div>
-        <div class="k">Total de cuenta</div><div class="v" id="m-total"><b>$0.00</b></div>
+        <div class="k">Subtotal</div>        <div class="v" id="m-subtotal">$0.00</div>
+        <div class="k">Anticipo</div>        <div class="v" id="m-anticipo">$0.00</div>
+        <div class="k">Descuento</div>       <div class="v" id="m-desc">$0.00</div>
+        <div class="k">Total de cuenta</div> <div class="v" id="m-total"><b>$0.00</b></div>
       </div>
 
       <div id="m-link" style="margin-top:10px; font-size:13px; color:#374151; display:none">
@@ -285,250 +286,260 @@
     </div>
   </div>
 
-<script>
-  // -------- helpers --------
-  const $ = (id)=>document.getElementById(id);
+  <script>
+    const $ = (id) => document.getElementById(id);
 
-  function fmtMX(n){
-    const v = Number(String(n ?? 0).replace(/[^\d.-]/g,'')) || 0;
-    return v.toLocaleString('es-MX', { style:'currency', currency:'MXN' });
-  }
-
-  function toNum(n){
-    const v = Number(String(n ?? 0).replace(/[^\d.-]/g,'')); 
-    return isNaN(v) ? 0 : v;
-  }
-
-  function setBtnLoading(flag){
-    const b = $('btn');
-    if (flag){
-      b.disabled = true;
-      b.innerText = 'Guardando...';
-    }else{
-      b.disabled = false;
-      b.innerText = 'Registrar';
+    function fmtMX(n){
+      const v = Number(String(n ?? 0).replace(/[^\d.-]/g,'')) || 0;
+      return v.toLocaleString('es-MX', { style:'currency', currency:'MXN' });
     }
-  }
 
-  function showMsg(html, cls){
-    $('estado').className = 'status ' + (cls||'');
-    $('estado').innerHTML = html || '';
-  }
-
-  // ✅ Descuento: tipo + UI
-  function getDescuentoTipo(){
-    const el = document.querySelector('input[name="descuentoTipo"]:checked');
-    return (el && el.value) ? el.value : 'PCT';
-  }
-  function updateDescuentoUI(){
-    const tipo = getDescuentoTipo();
-    $('descHelp').textContent = (tipo === 'AMT') ? '$' : '%';
-    if (tipo === 'PCT'){
-      $('descValor').max = '100';
-      $('descValor').step = '1';
-      $('descValor').placeholder = '0-100';
-    } else {
-      $('descValor').removeAttribute('max');
-      $('descValor').step = '0.01';
-      $('descValor').placeholder = '0';
+    function toNum(n){
+      const v = Number(String(n ?? 0).replace(/[^\d.-]/g,''));
+      return isNaN(v) ? 0 : v;
     }
-  }
-  function setDescuentoDisabled(disabled){
-    const box = $('wrapDesc');
-    if (disabled) box.classList.add('disabled');
-    else box.classList.remove('disabled');
-  }
 
-  // ---------- MODAL ----------
-  function openModal(payload){
-    $('m-folio').textContent    = payload.folio || '';
-    $('m-subtotal').textContent = fmtMX(payload.subtotal||0);
-    $('m-anticipo').textContent = fmtMX(payload.anticipo||0);
-    $('m-desc').textContent     = fmtMX(payload.descVal||0);
-    $('m-total').innerHTML      = '<b>'+fmtMX(payload.total||0)+'</b>';
-
-    if (payload.pdfUrl){
-      $('m-url').href = payload.pdfUrl;
-      $('m-open-url').href = payload.pdfUrl;
-      $('m-link').style.display = 'block';
-      $('m-open-url').style.display = 'inline-block';
-      $('m-copy-url').style.display = 'inline-block';
-    } else {
-      $('m-link').style.display = 'none';
-      $('m-open-url').style.display = 'none';
-      $('m-copy-url').style.display = 'none';
-    }
-    $('modal').classList.add('open');
-  }
-  function closeModal(){ $('modal').classList.remove('open'); }
-
-  async function copyPdfUrl(){
-    const url = $('m-url')?.href || '';
-    if (!url) return;
-    try{
-      await navigator.clipboard.writeText(url);
-      showMsg('Link del ticket copiado para WhatsApp.', 'ok');
-    }catch(_){
-      showMsg('No se pudo copiar automáticamente. Copia manualmente el link del ticket.', 'err');
-    }
-  }
-
-
-  // ---------- API (Firebase Functions) ----------
-  async function apiFetch(path, opts={}){
-    const res = await fetch(path, {
-      method: opts.method || "GET",
-      headers: {
-        ...(opts.headers || {}),
-        "Content-Type": "application/json"
-      },
-      body: opts.body || undefined
-    });
-    const data = await res.json().catch(()=> ({}));
-    if (!res.ok || data?.ok === false) {
-      throw new Error(data?.error || `HTTP ${res.status}`);
-    }
-    return data;
-  }
-
-  async function fetchNextFolio(){
-    const r = await apiFetch("/api/apartados/next-folio", { method:"GET" });
-    return r.folio;
-  }
-
-  async function postRegistrar(payload){
-    return await apiFetch("/api/apartados/registrar", {
-      method:"POST",
-      body: JSON.stringify(payload)
-    });
-  }
-
-  // ---------- enviar ----------
-  async function enviar(){
-    try{
-      showMsg('', '');
-      setBtnLoading(true);
-
-      const usarFolioExistente = $('usarFolioExistente').checked;
-
-      const descuentoTipo  = getDescuentoTipo();          
-      const descuentoValor = toNum($('descValor').value); 
-
-      const payload = {
-        fecha:        $('fecha').value,
-        cliente:      $('cliente').value.trim(),
-        contacto:     $('contacto').value.trim(),
-        codigos:      $('codigos').value.trim(),
-        anticipo:     toNum($('anticipo').value),
-
-        descuentoTipo:  descuentoTipo,
-        descuentoValor: descuentoValor,
-        descuentoPct: (descuentoTipo === 'PCT') ? descuentoValor : 0,
-
-        generarTicket:$('genTicket').checked,
-        usarFolioExistente,
-        folio:        $('folio').value.trim()
-      };
-
-      if (!usarFolioExistente && !payload.codigos){
-        setBtnLoading(false);
-        showMsg('Debes ingresar al menos un código de prenda para un apartado nuevo.', 'err');
-        return;
+    function setBtnLoading(flag){
+      const b = $('btn');
+      if (flag){
+        b.disabled = true;
+        b.innerText = 'Guardando...';
+      } else {
+        b.disabled = false;
+        b.innerText = 'Registrar';
       }
-      if (usarFolioExistente && (!payload.folio || payload.anticipo <= 0)){
-        setBtnLoading(false);
-        showMsg('Para abono ingresa el Folio y un anticipo mayor a 0.', 'err');
-        return;
+    }
+
+    function showMsg(html, cls){
+      $('estado').className = 'status ' + (cls || '');
+      $('estado').innerHTML = html || '';
+    }
+
+    function getDescuentoTipo(){
+      const el = document.querySelector('input[name="descuentoTipo"]:checked');
+      return (el && el.value) ? el.value : 'PCT';
+    }
+
+    function updateDescuentoUI(){
+      const tipo = getDescuentoTipo();
+      $('descHelp').textContent = (tipo === 'AMT') ? '$' : '%';
+      if (tipo === 'PCT'){
+        $('descValor').max = '100';
+        $('descValor').step = '1';
+        $('descValor').placeholder = '0-100';
+      } else {
+        $('descValor').removeAttribute('max');
+        $('descValor').step = '0.01';
+        $('descValor').placeholder = '0';
       }
-      if (!usarFolioExistente && payload.descuentoValor < 0){
-        setBtnLoading(false);
-        showMsg('El descuento no puede ser negativo.', 'err');
-        return;
-      }
-      if (!usarFolioExistente && payload.descuentoTipo === 'PCT' && payload.descuentoValor > 100){
-        setBtnLoading(false);
-        showMsg('El descuento en % no puede ser mayor a 100.', 'err');
-        return;
+    }
+
+    function setDescuentoDisabled(disabled){
+      const box = $('wrapDesc');
+      if (disabled) box.classList.add('disabled');
+      else box.classList.remove('disabled');
+    }
+
+    function openModal(payload){
+      $('m-folio').textContent    = payload.folio || '';
+      $('m-subtotal').textContent = fmtMX(payload.subtotal || 0);
+      $('m-anticipo').textContent = fmtMX(payload.anticipo || 0);
+      $('m-desc').textContent     = fmtMX(payload.descVal || 0);
+      $('m-total').innerHTML      = '<b>' + fmtMX(payload.total || 0) + '</b>';
+
+      if (payload.pdfUrl){
+        $('m-url').href = payload.pdfUrl;
+        $('m-open-url').href = payload.pdfUrl;
+        $('m-link').style.display = 'block';
+        $('m-open-url').style.display = 'inline-block';
+        $('m-copy-url').style.display = 'inline-block';
+      } else {
+        $('m-link').style.display = 'none';
+        $('m-open-url').style.display = 'none';
+        $('m-copy-url').style.display = 'none';
       }
 
-      const res = await postRegistrar(payload);
+      $('modal').classList.add('open');
+    }
 
-      setBtnLoading(false);
+    function closeModal(){
+      $('modal').classList.remove('open');
+    }
 
-      showMsg('Guardado. Folio: <b>'+res.folio+'</b>', 'ok');
+    async function copyPdfUrl(){
+      const url = $('m-url')?.href || '';
+      if (!url) return;
+      try {
+        await navigator.clipboard.writeText(url);
+        showMsg('Link del ticket copiado para WhatsApp.', 'ok');
+      } catch (_) {
+        showMsg('No se pudo copiar automáticamente. Copia manualmente el link del ticket.', 'err');
+      }
+    }
 
-      const r = res.resumen || {};
-      openModal({
-        folio:   res.folio,
-        subtotal:r.subtotal,
-        anticipo:r.anticipo,
-        descVal: r.descVal,
-        total:   r.total,
-        pdfUrl:  res.pdfUrl || ''
+    async function apiFetch(path, opts = {}){
+      const res = await fetch(path, {
+        method: opts.method || 'GET',
+        headers: {
+          ...(opts.headers || {}),
+          'Content-Type': 'application/json'
+        },
+        body: opts.body || undefined
       });
 
-      if (!usarFolioExistente) {
-        $('folio').value = await fetchNextFolio();
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data?.ok === false) {
+        throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
       }
 
-    }catch(err){
-      setBtnLoading(false);
-      const msg = (err && err.message) ? err.message : String(err || 'Error sin respuesta');
-      showMsg('Error: '+msg, 'err');
-    }
-  }
-
-
-  function applyAbonoQueryParams(){
-    const params = new URLSearchParams(window.location.search);
-    const folioParam = String(params.get('folio') || '').trim().toUpperCase();
-    const abonoParam = params.get('abono') === '1';
-    if (!folioParam && !abonoParam) return;
-
-    if (abonoParam) {
-      $('usarFolioExistente').checked = true;
-      $('folio').readOnly = false;
-      setDescuentoDisabled(true);
-      $('codigos').disabled = true;
-      $('cliente').disabled = true;
-      $('contacto').disabled = true;
+      return data;
     }
 
-    if (folioParam) {
-      $('folio').value = folioParam;
+    async function fetchNextFolio(){
+      const r = await apiFetch('/api/apartados/next-folio', { method: 'GET' });
+      return r.folio;
     }
-  }
 
-  // init
-  (async function init(){
-    const today = new Date();
-    const y = today.getFullYear();
-    const m = String(today.getMonth()+1).padStart(2,'0');
-    const d = String(today.getDate()).padStart(2,'0');
-    $('fecha').value = `${y}-${m}-${d}`;
+    async function postRegistrar(payload){
+      return await apiFetch('/api/apartados/registrar', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
 
-    $('descTipoPct').addEventListener('change', updateDescuentoUI);
-    $('descTipoAmt').addEventListener('change', updateDescuentoUI);
-    updateDescuentoUI();
+    async function enviar(){
+      try {
+        showMsg('', '');
+        setBtnLoading(true);
 
-    $('usarFolioExistente').addEventListener('change', async (e)=>{
-      const on = e.target.checked;
-      $('folio').readOnly = !on;
-      setDescuentoDisabled(on);
+        const usarFolioExistente = $('usarFolioExistente').checked;
+        const descuentoTipo = getDescuentoTipo();
+        const descuentoValor = toNum($('descValor').value);
 
-      if (!on) {
-        try { $('folio').value = await fetchNextFolio(); } catch(_){}
-      } else {
-        $('folio').focus(); $('folio').select();
+        const payload = {
+          fecha: $('fecha').value,
+          cliente: $('cliente').value.trim(),
+          contacto: $('contacto').value.trim(),
+          codigos: $('codigos').value.trim(),
+          anticipo: toNum($('anticipo').value),
+          descuentoTipo,
+          descuentoValor,
+          descuentoPct: (descuentoTipo === 'PCT') ? descuentoValor : 0,
+          generarTicket: $('genTicket').checked,
+          usarFolioExistente,
+          folio: $('folio').value.trim()
+        };
+
+        if (!usarFolioExistente && !payload.codigos){
+          setBtnLoading(false);
+          showMsg('Debes ingresar al menos un código de prenda para un apartado nuevo.', 'err');
+          return;
+        }
+
+        if (usarFolioExistente && (!payload.folio || payload.anticipo <= 0)){
+          setBtnLoading(false);
+          showMsg('Para abono ingresa el folio y un anticipo mayor a 0.', 'err');
+          return;
+        }
+
+        if (!usarFolioExistente && payload.descuentoValor < 0){
+          setBtnLoading(false);
+          showMsg('El descuento no puede ser negativo.', 'err');
+          return;
+        }
+
+        if (!usarFolioExistente && payload.descuentoTipo === 'PCT' && payload.descuentoValor > 100){
+          setBtnLoading(false);
+          showMsg('El descuento en % no puede ser mayor a 100.', 'err');
+          return;
+        }
+
+        const res = await postRegistrar(payload);
+
+        setBtnLoading(false);
+        showMsg('Guardado. Folio: <b>' + res.folio + '</b>', 'ok');
+
+        const r = res.resumen || {};
+        openModal({
+          folio: res.folio,
+          subtotal: r.subtotal,
+          anticipo: r.anticipo,
+          descVal: r.descVal,
+          total: r.total,
+          pdfUrl: res.pdfUrl || ''
+        });
+
+        if (!usarFolioExistente) {
+          $('folio').value = await fetchNextFolio();
+        }
+      } catch (err) {
+        setBtnLoading(false);
+        const msg = (err && err.message) ? err.message : String(err || 'Error sin respuesta');
+        showMsg('Error: ' + msg, 'err');
       }
-    });
-
-    applyAbonoQueryParams();
-    if (!$('usarFolioExistente').checked) {
-      try { $('folio').value = await fetchNextFolio(); } catch(e){ showMsg('Aviso: '+e.message, 'err'); }
     }
-  })();
-</script>
 
+    function applyAbonoQueryParams(){
+      const params = new URLSearchParams(window.location.search);
+      const folioParam = String(params.get('folio') || '').trim().toUpperCase();
+      const abonoParam = params.get('abono') === '1';
+      if (!folioParam && !abonoParam) return;
+
+      if (abonoParam) {
+        $('usarFolioExistente').checked = true;
+        $('folio').readOnly = false;
+        setDescuentoDisabled(true);
+        $('codigos').disabled = true;
+        $('cliente').disabled = true;
+        $('contacto').disabled = true;
+      }
+
+      if (folioParam) {
+        $('folio').value = folioParam;
+      }
+    }
+
+    (async function init(){
+      const today = new Date();
+      const y = today.getFullYear();
+      const m = String(today.getMonth() + 1).padStart(2,'0');
+      const d = String(today.getDate()).padStart(2,'0');
+      $('fecha').value = `${y}-${m}-${d}`;
+
+      $('descTipoPct').addEventListener('change', updateDescuentoUI);
+      $('descTipoAmt').addEventListener('change', updateDescuentoUI);
+      updateDescuentoUI();
+
+      $('usarFolioExistente').addEventListener('change', async (e) => {
+        const on = e.target.checked;
+        $('folio').readOnly = !on;
+        setDescuentoDisabled(on);
+        $('codigos').disabled = on;
+        $('cliente').disabled = on;
+        $('contacto').disabled = on;
+
+        if (!on) {
+          $('codigos').disabled = false;
+          $('cliente').disabled = false;
+          $('contacto').disabled = false;
+          try { $('folio').value = await fetchNextFolio(); } catch (_) {}
+        } else {
+          $('folio').focus();
+          $('folio').select();
+        }
+      });
+
+      applyAbonoQueryParams();
+
+      if (!$('usarFolioExistente').checked) {
+        try {
+          $('folio').value = await fetchNextFolio();
+        } catch (e) {
+          showMsg('Aviso: ' + e.message, 'err');
+        }
+      }
+    })();
+  </script>
 </body>
 </html>
