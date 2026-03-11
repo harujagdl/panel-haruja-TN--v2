@@ -445,7 +445,7 @@
         anticipo:r.anticipo,
         descVal: r.descVal,
         total:   r.total,
-        pdfUrl:  res.pdfUrl || ''
+        pdfUrl:  res.ticketUrl || res.pdfUrl || ''
       });
 
       if (!usarFolioExistente) {

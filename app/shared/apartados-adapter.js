@@ -7,7 +7,7 @@ async function parseApiResponse(response, fallbackMessage) {
 }
 
 export async function fetchNextFolioFromSheets() {
-  const response = await fetch("/api/apartados/next-folio", {
+  const response = await fetch("/api/apartados/_next", {
     method: "GET",
     headers: {
       Accept: "application/json",
@@ -18,7 +18,7 @@ export async function fetchNextFolioFromSheets() {
 }
 
 export async function registrarApartadoInSheets(payload) {
-  const response = await fetch("/api/apartados/registrar", {
+  const response = await fetch(`/api/apartados/${encodeURIComponent(payload?.folio || "")}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
