@@ -19,6 +19,9 @@
       justify-content: flex-end;
       gap: 12px;
       margin-bottom: 18px;
+      max-width: 960px;
+      margin-left: auto;
+      margin-right: auto;
     }
 
     .btn {
@@ -27,6 +30,7 @@
       padding: 12px 18px;
       font-weight: 700;
       cursor: pointer;
+      font-size: 14px;
     }
 
     .btn-back {
@@ -40,10 +44,10 @@
     }
 
     .card {
-      max-width: 900px;
+      max-width: 960px;
       margin: 0 auto;
       background: #fff;
-      border-radius: 14px;
+      border-radius: 18px;
       padding: 28px 32px;
       box-shadow: 0 1px 8px rgba(0,0,0,.08);
     }
@@ -54,9 +58,10 @@
     }
 
     .logo {
-      max-width: 260px;
+      max-width: 280px;
       width: 100%;
       height: auto;
+      display: inline-block;
     }
 
     .top-line {
@@ -77,6 +82,7 @@
       font-size: 18px;
       font-weight: 800;
       text-transform: uppercase;
+      letter-spacing: .2px;
     }
 
     .folio {
@@ -101,7 +107,7 @@
       font-size: 15px;
       font-weight: 800;
       text-transform: uppercase;
-      margin: 12px 0 8px;
+      margin: 14px 0 8px;
     }
 
     table {
@@ -129,7 +135,7 @@
     .ta-right { text-align: right; }
 
     .totals {
-      width: 280px;
+      width: 290px;
       margin-left: auto;
       margin-top: 10px;
     }
@@ -138,7 +144,7 @@
       display: flex;
       justify-content: space-between;
       gap: 12px;
-      margin: 4px 0;
+      margin: 5px 0;
       font-size: 14px;
     }
 
@@ -157,12 +163,16 @@
     .legal {
       margin-top: 18px;
       font-size: 12px;
-      line-height: 1.38;
+      line-height: 1.4;
     }
 
     .legal h4 {
-      margin: 10px 0 6px;
+      margin: 12px 0 6px;
       font-size: 13px;
+    }
+
+    .legal p {
+      margin: 4px 0;
     }
 
     .bottom {
@@ -195,13 +205,14 @@
 
     .empty,
     .error {
-      max-width: 900px;
+      max-width: 960px;
       margin: 0 auto;
       background: #fff;
-      border-radius: 14px;
+      border-radius: 18px;
       padding: 28px 32px;
       text-align: center;
       box-shadow: 0 1px 8px rgba(0,0,0,.08);
+      font-size: 16px;
     }
 
     @media print {
@@ -262,6 +273,11 @@
     function renderError(message) {
       document.getElementById('app').innerHTML =
         `<div class="error">${esc(message)}</div>`;
+    }
+
+    function renderEmpty(message) {
+      document.getElementById('app').innerHTML =
+        `<div class="empty">${esc(message)}</div>`;
     }
 
     async function loadTicket() {
@@ -355,21 +371,21 @@
           </div>
 
           <div class="legal">
-            <div><strong>Gracias por tu compra en HarujaGdl</strong></div>
+            <p><strong>Gracias por tu compra en HarujaGdl</strong></p>
 
             <h4>CAMBIOS</h4>
-            <div>Solicítalo dentro de 7 días naturales de recibir tu compra.</div>
-            <div>La prenda debe estar nueva, sin uso, sin lavar y con etiquetas originales.</div>
-            <div>No aplican cambios en: prendas tejidas, bordadas, con aplicaciones, accesorios, prendas de ropa íntima, trajes de baño, rebajas o compras con cupón.</div>
-            <div>Los gastos de envío corren por cuenta del cliente.</div>
-            <div>Solicita tu cambio por WhatsApp al 33 3033 6506 indicando motivo, prenda y talla deseada.</div>
+            <p>Solicítalo dentro de 7 días naturales de recibir tu compra.</p>
+            <p>La prenda debe estar nueva, sin uso, sin lavar y con etiquetas originales.</p>
+            <p>No aplican cambios en: prendas tejidas, bordadas, con aplicaciones, accesorios, prendas de ropa íntima, trajes de baño, rebajas o compras con cupón.</p>
+            <p>Los gastos de envío corren por cuenta del cliente.</p>
+            <p>Solicita tu cambio por WhatsApp al 33 3033 6506 indicando motivo, prenda y talla deseada.</p>
 
             <h4>APARTADOS</h4>
-            <div>Puedes apartar con 25% de anticipo.</div>
-            <div>Plazo máximo para recoger: 30 días.</div>
-            <div>Pasado ese tiempo, la prenda vuelve a venta y el anticipo queda como saldo a favor por 3 meses a partir de la fecha inicial del apartado.</div>
-            <div>No aplican cambios ni devoluciones en apartados.</div>
-            <div>No realizamos devoluciones de dinero. Todos los cambios son por producto de igual o mayor valor.</div>
+            <p>Puedes apartar con 25% de anticipo.</p>
+            <p>Plazo máximo para recoger: 30 días.</p>
+            <p>Pasado ese tiempo, la prenda vuelve a venta y el anticipo queda como saldo a favor por 3 meses a partir de la fecha inicial del apartado.</p>
+            <p>No aplican cambios ni devoluciones en apartados.</p>
+            <p>No realizamos devoluciones de dinero. Todos los cambios son por producto de igual o mayor valor.</p>
           </div>
 
           <div class="bottom">
