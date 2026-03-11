@@ -11,7 +11,7 @@ import {
   roundMoney,
   SHEET_HEADERS,
   updateSheetRow,
-} from "./_sheets.js";
+} from "../../lib/apartados/sheets.js";
 
 function getValueByCandidates(source, candidates) {
   const entries = Object.entries(source || {});
