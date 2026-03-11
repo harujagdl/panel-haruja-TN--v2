@@ -2,14 +2,30 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { createSheetsClient, getSpreadsheetId, readSheetRows, roundMoney } from "../../lib/apartados/sheets.js";
 
 const PAGE_WIDTH = 420;
-const PAGE_HEIGHT = 760;
+const PAGE_HEIGHT = 842;
 const MARGIN_X = 28;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_X * 2;
-const CURRENCY_FORMATTER = new Intl.NumberFormat("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const EXCEL_EPOCH_UTC_MS = Date.UTC(1899, 11, 30);
+const CURRENCY_FORMATTER = new Intl.NumberFormat("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const TICKET_FOOTER_TEXT = [
+  "Gracias por tu compra en HarujaGdl",
+  "",
+  "CAMBIOS",
+  "• Tienes 5 dias naturales para cambios a partir de tu fecha de compra.",
+  "• Es indispensable presentar ticket y que la prenda conserve etiqueta.",
+  "• No hay cambios en prendas blancas, bodys, accesorios, rebajas o promociones.",
+  "• Los cambios se realizan por talla, color o por otra prenda con diferencia a favor.",
+  "",
+  "APARTADOS",
+  "• Vigencia maxima de 30 dias naturales desde la fecha del ticket.",
+  "• Después de 30 dias sin liquidar, el apartado se cancela automaticamente.",
+  "• El anticipo no es reembolsable ni transferible.",
+  "• Si liquidas dentro de vigencia, respetamos precio y existencia apartada.",
+];
 
 function toMoney(value) {
-  return `$${CURRENCY_FORMATTER.format(roundMoney(value))}`;
+  return `$${CURRENCY_FORMATTER.format(roundMoney(value || 0))}`;
 }
 
 function normalizeDateValue(value) {
@@ -33,153 +49,174 @@ function normalizeDateValue(value) {
   return raw;
 }
 
-function drawHeader(page, bold, folio) {
-  page.drawText("HARUJA", { x: MARGIN_X, y: PAGE_HEIGHT - 36, size: 19, font: bold });
-  page.drawText(`Ticket ${folio}`, { x: PAGE_WIDTH - 178, y: PAGE_HEIGHT - 34, size: 14, font: bold });
-  page.drawLine({
-    start: { x: MARGIN_X, y: PAGE_HEIGHT - 46 },
-    end: { x: PAGE_WIDTH - MARGIN_X, y: PAGE_HEIGHT - 46 },
-    thickness: 1,
-    color: rgb(0.85, 0.85, 0.85),
-  });
+function mapItem(item) {
+  return {
+    codigo: String(item.Codigo ?? item.codigo ?? "").trim(),
+    descripcion: String(item.Descripcion ?? item.descripcion ?? "Prenda").trim(),
+    precio: Number(item.Precio ?? item.precio ?? 0) || 0,
+    cantidad: Number(item.Cantidad ?? item.cantidad ?? 1) || 1,
+  };
 }
 
-function drawLabelValue(page, { y, label, value, font, bold, labelWidth = 68 }) {
-  page.drawText(`${label}:`, { x: MARGIN_X, y, size: 9.5, font: bold, color: rgb(0.2, 0.2, 0.2) });
-  page.drawText(String(value || "-"), {
-    x: MARGIN_X + labelWidth,
-    y,
-    size: 9.5,
-    font,
-    color: rgb(0.1, 0.1, 0.1),
-  });
-}
-
-function drawItemsTable(page, { yStart, items, font, bold }) {
-  const tableX = MARGIN_X;
-  const tableYTop = yStart;
-  const rowHeight = 14;
-  const colCodeX = tableX + 8;
-  const colDescX = tableX + 78;
-  const colPriceX = tableX + 278;
-  const colImpX = tableX + 340;
-
-  page.drawText("DETALLE", { x: tableX, y: tableYTop + 6, size: 10.5, font: bold });
-
-  const headerY = tableYTop - 14;
+function drawSeparator(page, y) {
   page.drawLine({
-    start: { x: tableX, y: headerY + 16 },
-    end: { x: tableX + CONTENT_WIDTH, y: headerY + 16 },
+    start: { x: MARGIN_X, y },
+    end: { x: PAGE_WIDTH - MARGIN_X, y },
     thickness: 0.8,
-    color: rgb(0.85, 0.85, 0.85),
+    color: rgb(0.86, 0.86, 0.86),
   });
-  page.drawText("CODIGO", { x: colCodeX, y: headerY, size: 8.5, font: bold });
-  page.drawText("DESCRIPCION", { x: colDescX, y: headerY, size: 8.5, font: bold });
-  page.drawText("P.U.", { x: colPriceX, y: headerY, size: 8.5, font: bold });
-  page.drawText("IMP", { x: colImpX, y: headerY, size: 8.5, font: bold });
+}
 
-  let y = headerY - 12;
-  const normalizedItems = Array.isArray(items) ? items : [];
-  for (const item of normalizedItems) {
-    page.drawText(String(item.Codigo || ""), { x: colCodeX, y, size: 8.5, font: bold });
-    page.drawText(String(item.Descripcion || "Prenda").slice(0, 40), { x: colDescX, y, size: 8.5, font });
-    const precio = toMoney(item.Precio);
-    page.drawText(precio, { x: colPriceX, y, size: 8.5, font });
-    page.drawText(precio, { x: colImpX, y, size: 8.5, font });
-    y -= rowHeight;
+function drawHeader(page, bold, folio) {
+  page.drawText("HARUJA", { x: MARGIN_X, y: PAGE_HEIGHT - 42, size: 20, font: bold });
+  page.drawText("TICKET DE APARTADO", { x: MARGIN_X, y: PAGE_HEIGHT - 58, size: 10.5, font: bold });
+  page.drawText(`#${folio}`, { x: PAGE_WIDTH - 130, y: PAGE_HEIGHT - 44, size: 15, font: bold });
+  drawSeparator(page, PAGE_HEIGHT - 68);
+}
+
+function drawMetaBlock(page, { font, bold, yStart, fecha, cliente, contacto }) {
+  let y = yStart;
+  const pairs = [
+    ["Fecha", fecha],
+    ["Cliente", cliente || "-"],
+    ["Contacto", contacto || "-"],
+  ];
+
+  for (const [label, value] of pairs) {
+    page.drawText(`${label}:`, { x: MARGIN_X, y, size: 9.6, font: bold });
+    page.drawText(String(value || "-"), { x: MARGIN_X + 72, y, size: 9.6, font });
+    y -= 13;
   }
 
-  page.drawLine({
-    start: { x: tableX, y: y + 4 },
-    end: { x: tableX + CONTENT_WIDTH, y: y + 4 },
-    thickness: 0.8,
-    color: rgb(0.85, 0.85, 0.85),
-  });
-
-  return y - 10;
+  return y - 4;
 }
 
-function drawTotals(page, { yStart, font, bold, subtotal, anticipo, descuento, total }) {
+function drawItemsTable(page, { font, bold, yStart, items }) {
   let y = yStart;
-  drawLabelValue(page, { y, label: "Subtotal", value: toMoney(subtotal), font, bold, labelWidth: 80 });
-  y -= 13;
-  drawLabelValue(page, { y, label: "Anticipo", value: toMoney(anticipo), font, bold, labelWidth: 80 });
-  y -= 13;
-  drawLabelValue(page, { y, label: "Descuento", value: toMoney(descuento), font, bold, labelWidth: 80 });
-  y -= 15;
-  page.drawText(`Total: ${toMoney(total)}`, { x: MARGIN_X, y, size: 11.5, font: bold });
+  const col = {
+    code: MARGIN_X + 6,
+    desc: MARGIN_X + 70,
+    qty: MARGIN_X + 244,
+    pu: MARGIN_X + 272,
+    imp: MARGIN_X + 332,
+  };
+
+  page.drawText("DETALLE", { x: MARGIN_X, y, size: 10.5, font: bold });
+  y -= 12;
+  drawSeparator(page, y);
+  y -= 10;
+
+  page.drawText("CODIGO", { x: col.code, y, size: 8.5, font: bold });
+  page.drawText("DESCRIPCION", { x: col.desc, y, size: 8.5, font: bold });
+  page.drawText("CANT", { x: col.qty, y, size: 8.5, font: bold });
+  page.drawText("P.U.", { x: col.pu, y, size: 8.5, font: bold });
+  page.drawText("IMPORTE", { x: col.imp, y, size: 8.5, font: bold });
+  y -= 9;
+  drawSeparator(page, y);
+  y -= 10;
+
+  for (const item of items) {
+    const importe = item.precio * item.cantidad;
+    page.drawText(item.codigo.slice(0, 12), { x: col.code, y, size: 8.4, font: bold });
+    page.drawText(item.descripcion.slice(0, 38), { x: col.desc, y, size: 8.4, font });
+    page.drawText(String(item.cantidad), { x: col.qty + 4, y, size: 8.4, font });
+    page.drawText(toMoney(item.precio), { x: col.pu, y, size: 8.4, font });
+    page.drawText(toMoney(importe), { x: col.imp, y, size: 8.4, font });
+    y -= 12;
+  }
+
+  drawSeparator(page, y + 3);
+  return y - 8;
+}
+
+function drawTotals(page, { font, bold, yStart, subtotal, anticipo, descuento, total }) {
+  const labelX = MARGIN_X + 200;
+  const valueX = PAGE_WIDTH - MARGIN_X - 88;
+  let y = yStart;
+
+  const rows = [
+    ["Subtotal", subtotal],
+    ["Anticipo", anticipo],
+    ["Descuento", descuento],
+  ];
+
+  for (const [label, value] of rows) {
+    page.drawText(`${label}:`, { x: labelX, y, size: 9.4, font: bold });
+    page.drawText(toMoney(value), { x: valueX, y, size: 9.4, font, color: rgb(0.07, 0.07, 0.07) });
+    y -= 12;
+  }
+
+  drawSeparator(page, y + 4);
+  y -= 10;
+  page.drawText("TOTAL", { x: labelX, y, size: 11.2, font: bold });
+  page.drawText(toMoney(total), { x: valueX, y, size: 11.2, font: bold });
+
   return y - 14;
 }
 
-function drawPolicies(page, { yStart, font, bold }) {
-  const lines = [
-    "POLITICAS DE APARTADO:",
-    "1) Vigencia maxima de 30 dias naturales desde la fecha del ticket.",
-    "2) Despues de 30 dias sin liquidar, el apartado se cancela automaticamente.",
-    "3) El anticipo no es reembolsable; aplica solo para cambios segun politicas vigentes.",
-    "4) Cambios por talla o defecto dentro de los primeros 5 dias con ticket.",
-  ];
-
+function drawFooterPolicies(page, { font, bold, yStart }) {
   let y = yStart;
-  page.drawLine({
-    start: { x: MARGIN_X, y: y + 8 },
-    end: { x: PAGE_WIDTH - MARGIN_X, y: y + 8 },
-    thickness: 0.8,
-    color: rgb(0.85, 0.85, 0.85),
-  });
+  drawSeparator(page, y + 8);
 
-  for (let index = 0; index < lines.length; index += 1) {
-    page.drawText(lines[index], {
+  for (const line of TICKET_FOOTER_TEXT) {
+    if (!line) {
+      y -= 6;
+      continue;
+    }
+
+    const isTitle = line === "CAMBIOS" || line === "APARTADOS" || line.startsWith("Gracias");
+    page.drawText(line, {
       x: MARGIN_X,
       y,
-      size: index === 0 ? 8.8 : 8.2,
-      font: index === 0 ? bold : font,
-      color: rgb(0.1, 0.1, 0.1),
+      size: isTitle ? 8.6 : 7.8,
+      font: isTitle ? bold : font,
     });
-    y -= index === 0 ? 11 : 10;
+    y -= isTitle ? 10 : 9;
   }
 
   return y - 2;
 }
 
-function drawFinalBlock(page, { yStart, font, bold, folio, fecha, cliente, contacto }) {
+function drawFinalBlock(page, { font, bold, yStart, folio, fecha, cliente, contacto }) {
   let y = yStart;
-  page.drawLine({
-    start: { x: MARGIN_X, y: y + 8 },
-    end: { x: PAGE_WIDTH - MARGIN_X, y: y + 8 },
-    thickness: 0.8,
-    color: rgb(0.85, 0.85, 0.85),
-  });
+  drawSeparator(page, y + 10);
+  y -= 2;
 
-  drawLabelValue(page, { y, label: "Pedido", value: folio, font, bold, labelWidth: 72 });
-  y -= 12;
-  drawLabelValue(page, { y, label: "Fecha", value: fecha, font, bold, labelWidth: 72 });
-  y -= 12;
-  drawLabelValue(page, { y, label: "Cliente", value: cliente, font, bold, labelWidth: 72 });
-  y -= 12;
-  drawLabelValue(page, { y, label: "Contacto", value: contacto, font, bold, labelWidth: 72 });
+  const rows = [
+    ["Pedido", folio],
+    ["Fecha", fecha],
+    ["Cliente", cliente || "-"],
+    ["Contacto", contacto || "-"],
+  ];
 
-  return y - 2;
+  for (const [label, value] of rows) {
+    page.drawText(`${label}:`, { x: MARGIN_X, y, size: 9.4, font: bold });
+    page.drawText(String(value), { x: MARGIN_X + 74, y, size: 9.4, font });
+    y -= 12;
+  }
+
+  return y;
 }
 
-async function drawQr(page, pdfDoc, { folio, yStart }) {
-  const appUrl = (process.env.APP_URL || "").replace(/\/$/, "");
-  const fallbackHost = "https://paneltb.harujagdl.com";
-  const baseUrl = appUrl || fallbackHost;
+async function drawQr(page, pdfDoc, { folio, yTop }) {
+  const appUrl = String(process.env.APP_URL || "").trim().replace(/\/$/, "");
+  const baseUrl = appUrl || "https://paneltb.harujagdl.com";
   const qrTarget = `${baseUrl}/apartado/${encodeURIComponent(String(folio || "").trim())}`;
-  const qrService = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(qrTarget)}`;
+  const qrService = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(qrTarget)}`;
 
   const response = await fetch(qrService);
   if (!response.ok) throw new Error("No se pudo generar el QR del apartado.");
-  const bytes = await response.arrayBuffer();
-  const image = await pdfDoc.embedPng(bytes);
-  const qrSize = 82;
-  const qrX = PAGE_WIDTH - MARGIN_X - qrSize;
 
-  page.drawImage(image, { x: qrX, y: yStart - qrSize + 4, width: qrSize, height: qrSize });
+  const bytes = await response.arrayBuffer();
+  const qrImage = await pdfDoc.embedPng(bytes);
+  const size = 84;
+  const x = PAGE_WIDTH - MARGIN_X - size;
+  const y = yTop - size + 8;
+
+  page.drawImage(qrImage, { x, y, width: size, height: size });
   page.drawText("Escanea para ver tu apartado", {
-    x: qrX - 14,
-    y: yStart - qrSize - 7,
+    x: x - 10,
+    y: y - 9,
     size: 6.7,
     font: await pdfDoc.embedFont(StandardFonts.Helvetica),
   });
@@ -191,29 +228,18 @@ async function buildPdfBuffer({ folio, fecha, cliente, contacto, items, subtotal
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+  const safeFecha = normalizeDateValue(fecha);
+  const mappedItems = (Array.isArray(items) ? items : []).map(mapItem);
+
   drawHeader(page, bold, folio);
+  let y = PAGE_HEIGHT - 86;
+  y = drawMetaBlock(page, { font, bold, yStart: y, fecha: safeFecha, cliente, contacto });
+  y = drawItemsTable(page, { font, bold, yStart: y, items: mappedItems });
+  y = drawTotals(page, { font, bold, yStart: y, subtotal, anticipo, descuento, total });
+  y = drawFooterPolicies(page, { font, bold, yStart: y });
+  y = drawFinalBlock(page, { font, bold, yStart: y, folio, fecha: safeFecha, cliente, contacto });
 
-  let y = PAGE_HEIGHT - 70;
-  drawLabelValue(page, { y, label: "Fecha", value: normalizeDateValue(fecha), font, bold });
-  y -= 12;
-  drawLabelValue(page, { y, label: "Cliente", value: cliente, font, bold });
-  y -= 12;
-  drawLabelValue(page, { y, label: "Contacto", value: contacto, font, bold });
-
-  y = drawItemsTable(page, { yStart: y - 16, items, font, bold });
-  y = drawTotals(page, { yStart: y, font, bold, subtotal, anticipo, descuento, total });
-  y = drawPolicies(page, { yStart: y, font, bold });
-  const finalBlockTop = drawFinalBlock(page, {
-    yStart: y,
-    font,
-    bold,
-    folio,
-    fecha: normalizeDateValue(fecha),
-    cliente,
-    contacto,
-  });
-
-  await drawQr(page, pdfDoc, { folio, yStart: finalBlockTop + 38 });
+  await drawQr(page, pdfDoc, { folio, yTop: y + 58 });
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);
@@ -228,19 +254,19 @@ async function readTicketDataByFolio(folio) {
   ]);
 
   const key = String(folio || "").trim().toUpperCase();
-  const apartado = apartadosRows.find((row) => String(row.Folio || "").trim().toUpperCase() === key);
+  const apartado = apartadosRows.find((row) => String(row.Folio || row.folio || "").trim().toUpperCase() === key);
   if (!apartado) throw new Error("No se encontró el folio solicitado.");
 
   return {
-    folio: apartado.Folio,
-    fecha: apartado.Fecha,
-    cliente: apartado.Cliente,
-    contacto: apartado.Contacto,
-    items: itemsRows.filter((item) => String(item.Folio || "").trim().toUpperCase() === key),
-    subtotal: apartado.Subtotal,
-    anticipo: apartado.Anticipo,
-    descuento: apartado.DescuentoMXN,
-    total: apartado.Total,
+    folio: apartado.Folio ?? apartado.folio,
+    fecha: apartado.Fecha ?? apartado.fecha,
+    cliente: apartado.Cliente ?? apartado.cliente,
+    contacto: apartado.Contacto ?? apartado.contacto,
+    items: itemsRows.filter((item) => String(item.Folio || item.folio || "").trim().toUpperCase() === key),
+    subtotal: apartado.Subtotal ?? apartado.subtotal,
+    anticipo: apartado.Anticipo ?? apartado.anticipo,
+    descuento: apartado.DescuentoMXN ?? apartado.descuento ?? 0,
+    total: apartado.Total ?? apartado.total,
   };
 }
 
