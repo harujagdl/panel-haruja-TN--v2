@@ -4,6 +4,9 @@
   "private": true,
   "dependencies": {
     "googleapis": "^126.0.0",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "puppeteer-core": "^22.0.0",
+    "@sparticuz/chromium": "^123.0.0",
+    "qrcode": "^1.5.4"
   }
 }
