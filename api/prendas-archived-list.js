@@ -14,6 +14,14 @@ const createSheetsClient = () => {
   return google.sheets({ version: "v4", auth });
 };
 
+const pickValue = (row, headerNames = []) => {
+  for (const headerName of headerNames) {
+    const value = String(row?.[headerName] || "").trim();
+    if (value) return value;
+  }
+  return "";
+};
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ ok: false, message: "Method not allowed" });
@@ -28,24 +36,36 @@ export default async function handler(req, res) {
 
     const values = response?.data?.values || [];
     if (!values.length) {
-      return res.status(200).json({ ok: true, rows: [] });
+      return res.status(200).json([]);
     }
 
     const headers = (values[0] || []).map((header) => String(header || "").trim());
     const rows = values.slice(1).map((row) => {
-      const obj = {};
+      const source = {};
       headers.forEach((header, index) => {
         if (!header) return;
-        obj[header] = String(row?.[index] || "").trim();
+        source[header] = String(row?.[index] || "").trim();
       });
-      return obj;
+
+      return {
+        codigo: pickValue(source, ["Código", "Codigo"]),
+        descripcion: pickValue(source, ["Descripción", "Descripcion"]),
+        tipo: pickValue(source, ["Tipo"]),
+        color: pickValue(source, ["Color"]),
+        talla: pickValue(source, ["Talla"]),
+        proveedor: pickValue(source, ["Proveedor"]),
+        precio: pickValue(source, ["Precio"]),
+        fecha: pickValue(source, ["Fecha"]),
+        archivedAt: pickValue(source, ["ArchivedAt"])
+      };
     });
 
-    return res.status(200).json({ ok: true, rows });
+    return res.status(200).json(rows);
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      message: "No se pudo cargar el histórico archivado."
+      message: "No se pudo cargar el histórico archivado.",
+      error: error.message
     });
   }
 }

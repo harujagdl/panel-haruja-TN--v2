@@ -26,6 +26,17 @@ const getSheetHeaders = async (sheets, sheetName) => {
   return (response?.data?.values?.[0] || []).map((header) => String(header || "").trim());
 };
 
+const getSpreadsheetSheetNames = async (sheets) => {
+  const metadata = await sheets.spreadsheets.get({
+    spreadsheetId: getSpreadsheetId(),
+    includeGridData: false
+  });
+
+  return (metadata?.data?.sheets || [])
+    .map((sheet) => String(sheet?.properties?.title || "").trim())
+    .filter(Boolean);
+};
+
 const readSheetRows = async (sheets, sheetName) => {
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: getSpreadsheetId(),
@@ -44,6 +55,7 @@ const readSheetRows = async (sheets, sheetName) => {
       sourceRowObject
     };
   });
+
   return { headers, rows };
 };
 
@@ -121,27 +133,37 @@ export default async function handler(req, res) {
 
   try {
     const codigo = String(req.body?.codigo || "").trim();
-    console.log("[prendas-restore] codigo recibido:", codigo);
+    console.log("[restore] payload codigo:", codigo);
     if (!codigo) {
       return res.status(400).json({ ok: false, message: "El campo 'codigo' es obligatorio." });
     }
 
     const sheets = createSheetsClient();
-    const archivedData = await readSheetRows(sheets, ARCHIVE_SHEET);
+    const sheetNames = await getSpreadsheetSheetNames(sheets);
 
-    if (!archivedData.headers.includes(CODE_HEADER)) {
-      return res.status(500).json({ ok: false, message: "La hoja de archivo no contiene columna 'Código'." });
+    if (!sheetNames.includes(ARCHIVE_SHEET)) {
+      throw new Error("No existe la hoja prendas_admin_archivo");
+    }
+    if (!sheetNames.includes(ACTIVE_SHEET)) {
+      throw new Error("No existe la hoja prendas_admin_activas");
     }
 
+    const archivedData = await readSheetRows(sheets, ARCHIVE_SHEET);
     const activeHeaders = await getSheetHeaders(sheets, ACTIVE_SHEET);
-    if (!activeHeaders.length) {
-      return res.status(500).json({ ok: false, message: "La hoja activa no contiene encabezados válidos." });
+    console.log("[restore] headers activas:", activeHeaders);
+    console.log("[restore] headers archivo:", archivedData.headers);
+
+    if (!activeHeaders.includes(CODE_HEADER)) {
+      throw new Error('La hoja activa no contiene la columna "Código".');
+    }
+    if (!archivedData.headers.includes(CODE_HEADER)) {
+      throw new Error('La hoja de archivo no contiene la columna "Código".');
     }
 
     const archivedRow = archivedData.rows.find(
       (row) => String(row?.sourceRowObject?.[CODE_HEADER] || "").trim() === codigo
     );
-    console.log("[prendas-restore] fila encontrada en archivo:", Boolean(archivedRow));
+    console.log("[restore] row encontrada:", archivedRow);
 
     if (!archivedRow) {
       return res.status(404).json({ ok: false, message: "Código no encontrado en archivo." });
@@ -149,27 +171,25 @@ export default async function handler(req, res) {
 
     const restoreRowValues = buildRowByTargetHeaders(archivedRow.sourceRowObject, activeHeaders);
     await appendSheetRow(sheets, ACTIVE_SHEET, restoreRowValues);
-    console.log("[prendas-restore] append realizado en activas");
+    console.log("[restore] append realizado");
 
     const restoredExists = await verifyRowExistsByCodigo(sheets, ACTIVE_SHEET, codigo);
-    console.log("[prendas-restore] verificación append exitosa:", restoredExists);
+    console.log("[restore] verificación append exitosa:", restoredExists);
 
     if (!restoredExists) {
-      return res.status(500).json({
-        ok: false,
-        message: "No se pudo restaurar el registro."
-      });
+      throw new Error("No se pudo verificar la restauración en activas.");
     }
 
     await deleteSheetRow(sheets, ARCHIVE_SHEET, archivedRow.rowNumber);
-    console.log("[prendas-restore] delete realizado en archivo");
+    console.log("[restore] delete realizado");
 
     return res.status(200).json({ ok: true, codigo, restored: true });
   } catch (error) {
     console.error("[prendas-restore] error:", error?.message || error);
     return res.status(500).json({
       ok: false,
-      message: "No se pudo restaurar el registro."
+      message: "Error restaurando registro.",
+      error: error.message
     });
   }
 }
