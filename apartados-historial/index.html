@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Historial de Apartados - HarujaGdl</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧷</text></svg>">
+
+  <style>
+    :root{
+      --bg:#f7f7f8;
+      --card:#ffffff;
+      --text:#111827;
+      --muted:#6b7280;
+      --line:#e5e7eb;
+      --brand:#5FA18E;
+      --brand-d:#4a8d7a;
+    }
+    *{ box-sizing:border-box }
+    html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif }
+
+    .container{ max-width:1200px; margin:28px auto; padding:0 16px }
+    .page-header-wrapper{ position:relative }
+    .panel-back-btn{
+      position:absolute;
+      top:20px;
+      right:24px;
+      padding:8px 16px;
+      background:#f3f4f6;
+      border-radius:999px;
+      font-size:14px;
+      font-weight:600;
+      color:#2563eb;
+      text-decoration:none;
+      border:1px solid #e5e7eb;
+      transition:all .2s ease;
+    }
+    .panel-back-btn:hover{ background:#e5e7eb }
+
+    .header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px }
+    .title{ font-size:28px; font-weight:800; letter-spacing:-.01em }
+    .brand img{ height:36px; width:auto; opacity:.95 }
+
+    .top-actions{ display:flex; gap:10px; justify-content:flex-end; margin-bottom:12px }
+    .btn-ghost, .btn-brand{
+      appearance:none; border-radius:12px; padding:10px 14px;
+      font-weight:800; cursor:pointer; text-decoration:none; font-size:14px;
+    }
+    .btn-ghost{ border:1px solid var(--line); background:#fff; color:#111827 }
+    .btn-brand{ border:0; background:var(--brand); color:#fff }
+    .btn-brand:hover{ background:var(--brand-d) }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:14px;
+      box-shadow:0 10px 20px rgba(17,24,39,.05);
+      overflow:hidden;
+    }
+    .card-hd{
+      background:#fafafa;
+      border-bottom:1px solid var(--line);
+      padding:14px 18px;
+      font-weight:800;
+    }
+    .card-bd{ padding:18px }
+
+    .search-wrap{ margin-bottom:14px }
+    .search{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:12px;
+      font-size:15px;
+    }
+
+    .status{ min-height:22px; font-size:14px; margin-bottom:10px }
+    .err{ color:#b91c1c; font-weight:700 }
+    .muted{ color:var(--muted) }
+
+    .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:10px }
+    table{ width:100%; border-collapse:collapse; min-width:900px; background:#fff }
+    th, td{ text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); font-size:14px }
+    th{ background:#fafafa; font-weight:800 }
+    tr:last-child td{ border-bottom:0 }
+
+    .estado{ font-weight:800; font-size:12px; padding:4px 8px; border-radius:999px; display:inline-block }
+    .estado.activo{ background:#fef3c7; color:#92400e }
+    .estado.liquidado{ background:#dcfce7; color:#166534 }
+
+    .actions{ display:flex; gap:8px; flex-wrap:wrap }
+    .action-link{
+      display:inline-block; text-decoration:none; font-size:12px; font-weight:700;
+      border-radius:8px; padding:6px 10px;
+    }
+    .abonar{ background:#dbeafe; color:#1d4ed8 }
+    .pdf{ background:#f3f4f6; color:#111827 }
+
+    @media (max-width: 640px) {
+      .panel-back-btn { top:14px; right:16px; font-size:13px; padding:6px 12px }
+      .title{ font-size:24px }
+    }
+  </style>
+</head>
+<body>
+  <div class="container page-header-wrapper">
+    <a href="/#/panel" class="panel-back-btn">← Volver al panel</a>
+
+    <div class="header">
+      <div class="title">Historial de Apartados</div>
+      <a class="brand" href="/#/panel" aria-label="Volver al panel">
+        <img src="/assets/haruja-logo.png" alt="HarujaGdl" onerror="this.style.display='none'">
+      </a>
+    </div>
+
+    <div class="top-actions">
+      <a class="btn-ghost" href="/#/panel">Panel</a>
+      <a class="btn-brand" href="/apartados">+ Registrar apartado</a>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">Listado de apartados</div>
+      <div class="card-bd">
+        <div class="search-wrap">
+          <input id="search" class="search" type="search" placeholder="Buscar por folio, cliente o contacto...">
+        </div>
+        <div id="status" class="status muted">Cargando apartados...</div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Folio</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Contacto</th>
+                <th>Total</th>
+                <th>Anticipo</th>
+                <th>Saldo</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      apartados: [],
+      filtered: [],
+    };
+
+    const statusEl = document.getElementById('status');
+    const rowsEl = document.getElementById('rows');
+    const searchEl = document.getElementById('search');
+
+    function formatMoney(value) {
+      const num = Number(value || 0);
+      return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(num);
+    }
+
+    function formatDate(value) {
+      if (!value) return '-';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return value;
+      return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(d);
+    }
+
+    function estadoClass(estado) {
+      return String(estado || '').toLowerCase() === 'liquidado' ? 'liquidado' : 'activo';
+    }
+
+    function renderRows() {
+      if (state.filtered.length === 0) {
+        rowsEl.innerHTML = '<tr><td colspan="9" class="muted">No se encontraron apartados.</td></tr>';
+        return;
+      }
+
+      rowsEl.innerHTML = state.filtered.map((item) => {
+        const abonoUrl = `/apartados?abono=1&folio=${encodeURIComponent(item.folio)}`;
+        const pdfButton = item.pdfUrl
+          ? `<a class="action-link pdf" href="${item.pdfUrl}" target="_blank" rel="noopener noreferrer">PDF</a>`
+          : '';
+
+        return `
+          <tr>
+            <td>${item.folio || '-'}</td>
+            <td>${formatDate(item.ultimoMovimiento || item.fecha)}</td>
+            <td>${item.cliente || '-'}</td>
+            <td>${item.contacto || '-'}</td>
+            <td>${formatMoney(item.total)}</td>
+            <td>${formatMoney(item.anticipo)}</td>
+            <td>${formatMoney(item.saldo)}</td>
+            <td><span class="estado ${estadoClass(item.estado)}">${item.estado || 'ACTIVO'}</span></td>
+            <td>
+              <div class="actions">
+                <a class="action-link abonar" href="${abonoUrl}">Abonar</a>
+                ${pdfButton}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function applyFilter() {
+      const term = searchEl.value.trim().toLowerCase();
+      if (!term) {
+        state.filtered = [...state.apartados];
+      } else {
+        state.filtered = state.apartados.filter((item) => {
+          return [item.folio, item.cliente, item.contacto]
+            .some((value) => String(value || '').toLowerCase().includes(term));
+        });
+      }
+      renderRows();
+      statusEl.textContent = `${state.filtered.length} apartado(s) mostrado(s).`;
+      statusEl.className = 'status muted';
+    }
+
+    async function loadHistorial() {
+      try {
+        const resp = await fetch('/api/apartados/historial');
+        const data = await resp.json();
+
+        if (!resp.ok || !data.ok) {
+          throw new Error(data.message || 'No se pudo cargar el historial.');
+        }
+
+        state.apartados = Array.isArray(data.apartados) ? data.apartados : [];
+        state.filtered = [...state.apartados];
+        renderRows();
+        statusEl.textContent = `${state.filtered.length} apartado(s) mostrado(s).`;
+      } catch (error) {
+        statusEl.textContent = error.message || 'Error cargando historial.';
+        statusEl.className = 'status err';
+        rowsEl.innerHTML = '<tr><td colspan="9" class="muted">Sin datos.</td></tr>';
+      }
+    }
+
+    searchEl.addEventListener('input', applyFilter);
+    loadHistorial();
+  </script>
+</body>
+</html>
