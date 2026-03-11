@@ -1,179 +1,201 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ticket de apartado</title>
-  <style>
-    * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; color: #111111; background: #f4f4f4; }
-    .page { padding: 18px; }
-    .actions { max-width: 900px; margin: 0 auto 12px; display: flex; justify-content: flex-end; gap: 8px; }
-    .btn { border: 1px solid #d0d0d0; background: #fff; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
-    .btn.primary { background: #111; color: #fff; border-color: #111; }
-    .ticket { max-width: 900px; margin: 0 auto; background: #fff; padding: 26px 26px 18px; }
-    .logo-wrap { text-align: center; margin-bottom: 8px; }
-    .logo { width: 290px; max-width: 100%; height: auto; object-fit: contain; display: inline-block; }
-    .top-line { border: 0; border-top: 5px solid #000; margin: 10px 0 22px; }
-    .top-row { display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 12px; margin-bottom: 14px; }
-    .ticket-title { font-size: 17px; font-weight: 700; letter-spacing: .2px; margin: 0 0 6px; text-transform: uppercase; }
-    .folio { font-size: 18px; font-weight: 800; white-space: nowrap; margin-top: 2px; }
-    .meta, .final-info { display: grid; grid-template-columns: 84px 1fr; row-gap: 3px; column-gap: 10px; margin-bottom: 16px; font-size: 13px; }
-    .meta .label, .final-info .label { font-weight: 700; }
-    .section-title { font-size: 14px; font-weight: 800; text-transform: uppercase; margin: 14px 0 8px; }
-    table.items { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 8px; border-top: 1px solid #d8d8d8; }
-    table.items thead th { font-size: 11px; font-weight: 800; text-transform: uppercase; text-align: left; padding: 7px 8px; border-bottom: 1px solid #d8d8d8; }
-    table.items tbody td { font-size: 12px; padding: 8px 8px; border-bottom: 1px solid #e6e6e6; vertical-align: top; }
-    table.items .code { width: 18%; font-weight: 700; } table.items .desc { width: 46%; } table.items .qty { width: 9%; text-align: center; } table.items .price { width: 13%; text-align: right; } table.items .amount { width: 14%; text-align: right; }
-    .totals { width: 260px; margin-left: auto; margin-top: 6px; border-collapse: collapse; }
-    .totals td { font-size: 12px; padding: 2px 0; }
-    .totals .label { text-align: left; font-weight: 700; padding-right: 12px; }
-    .totals .value { text-align: right; width: 110px; }
-    .totals .grand { border-top: 1px solid #d8d8d8; }
-    .totals .grand td { padding-top: 8px; font-size: 14px; font-weight: 800; }
-    .notes { margin-top: 18px; font-size: 12px; font-weight: 700; }
-    .legal { margin-top: 8px; font-size: 11px; line-height: 1.32; }
-    .legal p { margin: 0 0 8px; }
-    .legal .legal-heading { margin-top: 10px; margin-bottom: 4px; font-size: 12px; }
-    .bottom { margin-top: 14px; display: grid; grid-template-columns: 1fr 135px; gap: 14px; align-items: end; }
-    .qr-wrap { text-align: center; align-self: end; }
-    .qr { width: 115px; height: 115px; object-fit: contain; display: block; margin: 0 auto 5px; }
-    .qr-caption { font-size: 10px; color: #111; }
-    .status { max-width: 900px; margin: 30px auto; background: #fff; border-radius: 12px; padding: 16px; text-align: center; }
-    @media print {
-      body { background: #fff; }
-      .page { padding: 0; }
-      .actions { display: none; }
-      .ticket { max-width: none; margin: 0; padding: 12px 14px; }
-      @page { size: A4; margin: 10mm; }
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Ticket Haruja</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+
+<style>
+
+body{
+font-family: Arial, Helvetica, sans-serif;
+background:#f5f5f5;
+margin:0;
+padding:30px;
+}
+
+.ticket{
+max-width:500px;
+margin:auto;
+background:white;
+padding:30px;
+border-radius:10px;
+box-shadow:0 0 10px rgba(0,0,0,0.1);
+}
+
+.header{
+text-align:center;
+margin-bottom:20px;
+}
+
+.logo{
+max-width:120px;
+}
+
+.folio{
+font-size:18px;
+font-weight:bold;
+margin-top:10px;
+}
+
+.section{
+margin-top:15px;
+}
+
+.qr{
+text-align:center;
+margin-top:20px;
+}
+
+.buttons{
+position:fixed;
+top:20px;
+right:20px;
+display:flex;
+gap:10px;
+}
+
+button{
+padding:10px 16px;
+border:none;
+border-radius:6px;
+cursor:pointer;
+font-weight:bold;
+}
+
+.print{
+background:black;
+color:white;
+}
+
+.back{
+background:#eee;
+}
+
+.error{
+text-align:center;
+padding:40px;
+font-size:18px;
+}
+
+@media print{
+
+.buttons{
+display:none;
+}
+
+body{
+background:white;
+padding:0;
+}
+
+.ticket{
+box-shadow:none;
+}
+
+}
+
+</style>
 </head>
+
 <body>
-  <div class="page">
-    <div class="actions">
-      <button class="btn" id="btn-volver" type="button">Volver</button>
-      <button class="btn primary" id="btn-imprimir" type="button">Imprimir / Guardar PDF</button>
-    </div>
-    <div id="status" class="status">Cargando ticket...</div>
-    <article id="ticket" class="ticket" hidden></article>
-  </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-  <script>
-    const CURRENCY_FORMATTER = new Intl.NumberFormat('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const FOOTER_TEXT = `Gracias por tu compra en HarujaGdl\n\nTodos nuestros productos pasan por inspección para garantizar calidad, talla solicitada y que estén libres de defectos.\n\nCAMBIOS\nSolicítalo dentro de 7 días naturales de recibir tu compra.\n\nLa prenda debe estar nueva, sin uso, sin lavar y con etiquetas originales.\n\nNo aplican cambios en: prendas tejidas, bordadas, con aplicaciones, accesorios, prendas de ropa íntima, trajes de baño,\nrebajas o compras con cupón.\n\nLos gastos de envío corren por cuenta del cliente.\n\nSolicita tu cambio por WhatsApp al 33 3033 6506 indicando motivo, prenda y talla deseada.\n\nAPARTADOS\nPuedes apartar con 25% de anticipo.\nPlazo máximo para recoger: 30 días.\n\nPasado ese tiempo, la prenda vuelve a venta y el anticipo queda como saldo a favor por 3 meses a partir de la fecha inicial\ndel apartado.\n\nNo aplican cambios ni devoluciones en apartados.\n\nNo realizamos devoluciones de dinero. Todos los cambios son por producto de igual o mayor valor.\n\nGracias por elegirnos 💛`;
+<div class="buttons">
+<button class="back" onclick="history.back()">Volver</button>
+<button class="print" onclick="window.print()">Imprimir / Guardar PDF</button>
+</div>
 
-    const $ = (id) => document.getElementById(id);
+<div id="app"></div>
 
-    function escHtml(value) {
-      return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
-    }
+<script>
 
-    function fmtCurrency(value) {
-      return `$${CURRENCY_FORMATTER.format(Number(value || 0))}`;
-    }
+function getFolio(){
+const parts = location.pathname.split('/').filter(Boolean)
 
-    function getFolioFromUrl() {
-      const byQuery = new URLSearchParams(location.search).get('folio');
-      if (byQuery) return String(byQuery).trim();
-      const parts = location.pathname.split('/').filter(Boolean);
-      if (parts[0] === 'ticket' && parts[1]) return decodeURIComponent(parts[1]);
-      return '';
-    }
+if(parts[0]==="ticket" && parts[1]){
+return decodeURIComponent(parts[1])
+}
 
-    function buildFooterHtml() {
-      return FOOTER_TEXT.split('\n\n').map((block) => block.trim()).filter(Boolean).map((block) => {
-        const content = escHtml(block).replace(/\n/g, '<br>');
-        if (block === 'CAMBIOS' || block === 'APARTADOS') return `<p class="legal-heading"><strong>${content}</strong></p>`;
-        return `<p>${content}</p>`;
-      }).join('');
-    }
+return null
+}
 
-    async function buildQr(url) {
-      return await QRCode.toDataURL(url, { errorCorrectionLevel: 'M', margin: 0, width: 180, color: { dark: '#000000', light: '#FFFFFF' } });
-    }
+async function loadTicket(){
 
-    function renderTicket(ticket, qrSrc) {
-      const rows = (ticket.items || []).map((item) => `
-        <tr>
-          <td class="code">${escHtml(item.codigo)}</td>
-          <td class="desc">${escHtml(item.descripcion)}</td>
-          <td class="qty">${Number(item.cantidad) || 1}</td>
-          <td class="price">${fmtCurrency(item.precio)}</td>
-          <td class="amount">${fmtCurrency(item.subtotal)}</td>
-        </tr>`).join('');
+const folio = getFolio()
 
-      return `
-      <div class="logo-wrap"><img class="logo" src="/assets/haruja-logo.png" alt="HarujaGdl" /></div>
-      <hr class="top-line" />
-      <div class="top-row"><div><div class="ticket-title">Ticket de apartado</div></div><div class="folio">#${escHtml(ticket.folio)}</div></div>
-      <div class="meta">
-        <div class="label">Fecha:</div><div>${escHtml(ticket.fecha || '-')}</div>
-        <div class="label">Cliente:</div><div>${escHtml(ticket.cliente || '-')}</div>
-        <div class="label">Contacto:</div><div>${escHtml(ticket.contacto || '-')}</div>
-      </div>
-      <div class="section-title">Detalle</div>
-      <table class="items"><thead><tr><th class="code">Código</th><th class="desc">Descripción</th><th class="qty">Cant</th><th class="price">P.U.</th><th class="amount">Importe</th></tr></thead><tbody>${rows}</tbody></table>
-      <table class="totals">
-        <tr><td class="label">Subtotal:</td><td class="value">${fmtCurrency(ticket.subtotal)}</td></tr>
-        <tr><td class="label">Anticipo:</td><td class="value">${fmtCurrency(ticket.anticipo)}</td></tr>
-        <tr><td class="label">Descuento:</td><td class="value">${fmtCurrency(ticket.descuento)}</td></tr>
-        <tr class="grand"><td class="label">TOTAL</td><td class="value">${fmtCurrency(ticket.total)}</td></tr>
-      </table>
-      <div class="notes">Gracias por tu compra en HarujaGdl</div>
-      <section class="legal">${buildFooterHtml()}</section>
-      <div class="bottom">
-        <div class="final-info">
-          <div class="label">Pedido:</div><div>${escHtml(ticket.folio)}</div>
-          <div class="label">Fecha:</div><div>${escHtml(ticket.fecha || '-')}</div>
-          <div class="label">Cliente:</div><div>${escHtml(ticket.cliente || '-')}</div>
-          <div class="label">Contacto:</div><div>${escHtml(ticket.contacto || '-')}</div>
-        </div>
-        <div class="qr-wrap"><img class="qr" src="${escHtml(qrSrc)}" alt="QR apartado" /><div class="qr-caption">Escanea para ver tu apartado</div></div>
-      </div>`;
-    }
+if(!folio){
+document.getElementById("app").innerHTML =
+'<div class="error">Falta el folio en la URL.</div>'
+return
+}
 
-    async function init() {
-      const folio = getFolioFromUrl();
-      if (!folio) {
-        $('status').textContent = 'Falta el folio en la URL.';
-        return;
-      }
+try{
 
-      $('btn-volver').onclick = () => history.length > 1 ? history.back() : location.assign('/apartados-historial');
-      $('btn-imprimir').onclick = () => window.print();
+const res = await fetch(`/api/${folio}`)
+const data = await res.json()
 
-      try {
-        const res = await fetch(`/api/apartados/${encodeURIComponent(folio)}`);
-        const data = await res.json();
-        if (!res.ok || !data.ok || !data.apartado) throw new Error(data.message || 'No se pudo cargar el ticket.');
+if(!data.ok){
+throw new Error(data.message || "No encontrado")
+}
 
-        const ticket = {
-          folio: data.apartado.folio,
-          fecha: data.apartado.fecha,
-          cliente: data.apartado.cliente,
-          contacto: data.apartado.telefono || data.apartado.contacto || '',
-          items: (data.apartado.productos || []).map((item) => ({ codigo: item.codigo, descripcion: item.descripcion, precio: Number(item.precio || 0), cantidad: 1, subtotal: Number(item.precio || 0) })),
-          subtotal: Number(data.apartado.subtotal || 0),
-          anticipo: Number(data.apartado.anticipo || 0),
-          descuento: Number(data.apartado.descuento || 0),
-          total: Number(data.apartado.total || 0)
-        };
+renderTicket(data.ticket)
 
-        const appUrl = location.origin.replace(/\/$/, '');
-        const qrSrc = await buildQr(`${appUrl}/apartado/${encodeURIComponent(ticket.folio)}`);
+}catch(err){
 
-        document.title = `Ticket ${ticket.folio}`;
-        $('ticket').innerHTML = renderTicket(ticket, qrSrc);
-        $('ticket').hidden = false;
-        $('status').hidden = true;
-      } catch (error) {
-        $('status').textContent = error.message || 'Error al cargar el ticket.';
-      }
-    }
+document.getElementById("app").innerHTML =
+`<div class="error">No se pudo cargar el ticket</div>`
 
-    init();
-  </script>
+}
+
+}
+
+function renderTicket(ticket){
+
+const html = `
+
+<div class="ticket">
+
+<div class="header">
+<img class="logo" src="/public/assets/haruja-logo.png">
+<div class="folio">Folio: ${ticket.folio}</div>
+</div>
+
+<div class="section">
+<strong>Cliente:</strong> ${ticket.cliente || "-"}
+</div>
+
+<div class="section">
+<strong>Fecha:</strong> ${ticket.fecha || "-"}
+</div>
+
+<div class="section">
+<strong>Total:</strong> $${ticket.total || "0"}
+</div>
+
+<div class="qr">
+<canvas id="qr"></canvas>
+</div>
+
+</div>
+
+`
+
+document.getElementById("app").innerHTML = html
+
+QRCode.toCanvas(
+document.getElementById("qr"),
+location.href,
+{ width:140 }
+)
+
+}
+
+loadTicket()
+
+</script>
+
 </body>
 </html>
