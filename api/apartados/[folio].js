@@ -12,6 +12,7 @@ import {
   SHEET_HEADERS,
   updateSheetRow,
 } from "../../lib/apartados/sheets.js";
+import { syncApartadoPdf } from "../../lib/apartados/pdf-sync.js";
 
 function normalize(value) {
   return String(value || "").trim().toUpperCase();
@@ -144,6 +145,8 @@ async function handleGet(req, res) {
   if (!apartado) return res.status(404).json({ ok: false, message: "No se encontró el folio." });
 
   const detail = mapDetail(apartado, itemsRows, abonosRows);
+  const pdfSync = await syncApartadoPdf({ folio: detail.folio, reason: "status_lookup", apartado: detail });
+  if (pdfSync?.ok && pdfSync.pdfUrl) detail.pdfDriveUrl = pdfSync.pdfUrl;
 
   return res.status(200).json({
     ok: true,
@@ -206,7 +209,18 @@ async function handlePost(req, res) {
     });
     await appendSheetRow(sheets, spreadsheetId, "apartados_abonos", abonoRow);
 
-    return res.status(200).json({ ok: true, folio, ticketUrl: `/ticket/${encodeURIComponent(folio)}` });
+    const pdfSync = await syncApartadoPdf({
+      folio,
+      reason: "abono",
+      apartado: {
+        folio,
+        anticipo: nuevoAnticipo,
+        saldoPendiente: nuevoSaldo,
+        status: nuevoEstado,
+      },
+    });
+
+    return res.status(200).json({ ok: true, folio, ticketUrl: `/ticket/${encodeURIComponent(folio)}`, pdfDriveUrl: pdfSync?.pdfUrl || "" });
   }
 
   if (!fecha || !cliente || !contacto || !folio) throw new Error("Completa los campos obligatorios para registrar el apartado.");
@@ -287,7 +301,24 @@ async function handlePost(req, res) {
     );
   }
 
-  return res.status(200).json({ ok: true, folio, ticketUrl: `/ticket/${encodeURIComponent(folio)}` });
+  const pdfSync = await syncApartadoPdf({
+    folio,
+    reason: "create",
+    apartado: {
+      folio,
+      cliente,
+      contacto,
+      fecha,
+      subtotal,
+      anticipo,
+      descuento: descuentoMXN,
+      total,
+      saldoPendiente: saldo,
+      status: estado,
+    },
+  });
+
+  return res.status(200).json({ ok: true, folio, ticketUrl: `/ticket/${encodeURIComponent(folio)}`, pdfDriveUrl: pdfSync?.pdfUrl || "" });
 }
 
 export default async function handler(req, res) {
