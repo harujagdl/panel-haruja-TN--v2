@@ -79,6 +79,10 @@
           <input id="month" type="month" />
         </div>
         <div class="field">
+          <label for="search">Buscar</label>
+          <input id="search" type="text" placeholder="Ticket, order_id o cliente" />
+        </div>
+        <div class="field">
           <label for="storeId">Store ID Tiendanube</label>
           <input id="storeId" type="text" placeholder="Se carga desde configuración" readonly />
         </div>
@@ -103,7 +107,7 @@
       <thead>
         <tr>
           <th>Fecha</th>
-          <th>Venta #</th>
+          <th>Ticket</th>
           <th>Cliente</th>
           <th>Total pagado</th>
           <th>Estado</th>
@@ -120,6 +124,7 @@
 
     const monthInput = document.getElementById("month");
     const storeIdInput = document.getElementById("storeId");
+    const searchInput = document.getElementById("search");
     const statusEl = document.getElementById("status");
     const tbody = document.getElementById("tbody");
     const totalMesEl = document.getElementById("totalMes");
@@ -156,6 +161,7 @@
     const formatMoney = (value) => moneyMx.format(Number(value) || 0);
     const formatDate = (value) => value ? new Date(value).toLocaleDateString("es-MX") : "—";
     const formatMonth = (value) => String(value || "").slice(0, 7);
+    const ticketText = (venta) => venta.ticket_label || (venta.ticket_number ? `#${venta.ticket_number}` : null) || venta.order_id || "-";
 
     const paymentStatusEs = {
       paid: "Pagado",
@@ -237,10 +243,11 @@
       return payload.data || {};
     };
 
-    const loadVentasDetalle = async (month) => {
+    const loadVentasDetalle = async (month, search) => {
       const url = new URL("/api/core", location.origin);
       url.searchParams.set("action", "ventas-detalle");
       if (month) url.searchParams.set("month", month);
+      if (search) url.searchParams.set("search", search);
       const res = await fetch(url.toString());
       const payload = await safeJson(res, "No se pudo cargar el detalle de ventas");
       if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar el detalle de ventas");
@@ -267,7 +274,7 @@
         return `
           <tr data-order-id="${venta.order_id}">
             <td>${formatDate(venta.created_at)}</td>
-            <td>${venta.order_id}</td>
+            <td>${ticketText(venta)}</td>
             <td>${venta.customer_name || "—"}</td>
             <td>${formatMoney(venta.total)}</td>
             <td>${formatEstado(venta)}</td>
@@ -285,7 +292,7 @@
 
       const headers = [
         "Fecha",
-        "Venta #",
+        "Ticket",
         "Cliente",
         "Total pagado",
         "Payment Status",
@@ -301,7 +308,7 @@
       ventasActuales.forEach((venta) => {
         const row = [
           formatCsvDate(venta.created_at),
-          venta.order_id || "",
+          ticketText(venta),
           venta.customer_name || "",
           Number(venta.total) || 0,
           normalizeStatus(venta.payment_status),
@@ -351,9 +358,10 @@
     const loadData = async () => {
       setStatus("Cargando ventas...");
       const month = formatMonth(monthInput.value);
+      const search = String(searchInput.value || "").trim();
       const [resumen, detalle] = await Promise.all([
         loadVentasResumen(month),
-        loadVentasDetalle(month)
+        loadVentasDetalle(month, search)
       ]);
 
       ventasActuales = detalle;
@@ -386,6 +394,10 @@
     };
 
     document.getElementById("btnLoad").addEventListener("click", () => loadData().catch((e) => setStatus(e.message || String(e), "error")));
+    searchInput.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") loadData().catch((e) => setStatus(e.message || String(e), "error"));
+    });
+
     document.getElementById("btnSync").addEventListener("click", () => syncVentas().catch((e) => setStatus(e.message || String(e), "error")));
     document.getElementById("btnCsv").addEventListener("click", exportCsv);
 
