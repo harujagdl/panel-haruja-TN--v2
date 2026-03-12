@@ -1,5 +1,5 @@
 export async function loadBaseRowsFromSheets() {
-  const res = await fetch("/api/prendas-list");
+  const res = await fetch("/api/prendas?action=list");
 
   if (!res.ok) {
     throw new Error("Error cargando datos desde Sheets");

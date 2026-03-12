@@ -1,5 +1,5 @@
 export async function createPrendaInSheets(payload) {
-  const response = await fetch("/api/prendas-create", {
+  const response = await fetch("/api/prendas?action=create", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

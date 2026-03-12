@@ -1,5 +1,5 @@
 export async function loadArchivedPrendas() {
-  const response = await fetch("/api/prendas-archived-list", {
+  const response = await fetch("/api/prendas-admin?action=archived-list", {
     method: "GET",
     headers: {
       Accept: "application/json"

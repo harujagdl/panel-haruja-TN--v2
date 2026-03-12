@@ -226,7 +226,7 @@
 
     async function loadHistorial() {
       try {
-        const resp = await fetch('/api/apartados/_list');
+        const resp = await fetch('/api/apartados?action=list');
         const data = await resp.json();
 
         if (!resp.ok || !data.ok) {

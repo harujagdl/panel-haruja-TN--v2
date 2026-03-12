@@ -10,7 +10,7 @@ const normalizeEntries = (entries = []) => {
 };
 
 export async function loadDictionariesFromSheets() {
-  const response = await fetch("/api/dictionaries", {
+  const response = await fetch("/api/catalogos", {
     method: "GET",
     headers: { Accept: "application/json" }
   });

@@ -1,5 +1,5 @@
 export async function restorePrendaInSheets(codigo) {
-  const response = await fetch("/api/prendas-restore", {
+  const response = await fetch("/api/prendas-admin?action=restore", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
