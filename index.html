@@ -3789,7 +3789,7 @@ Errores: 0</pre>
         }
 
         try {
-          const url = new URL("/dashboard/sales-summary", window.location.origin);
+          const url = new URL("/api/dashboard/sales-summary", window.location.origin);
           url.searchParams.set("storeId", storeId);
           url.searchParams.set("month", month);
           const response = await fetch(url.toString());

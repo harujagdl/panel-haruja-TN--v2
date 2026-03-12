@@ -45,7 +45,7 @@ export async function getMonthlyTotalFromVentasComisionesSource(db, year, month0
     return 0;
   }
 
-  const url = new URL("/dashboard/sales-summary", window.location.origin);
+  const url = new URL("/api/dashboard/sales-summary", window.location.origin);
   url.searchParams.set("storeId", storeId);
   url.searchParams.set("month", docId);
 
