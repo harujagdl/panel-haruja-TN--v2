@@ -10,17 +10,18 @@ const normalizeEntries = (entries = []) => {
 };
 
 export async function loadDictionariesFromSheets() {
-  const response = await fetch("/api/catalogos", {
-    method: "GET",
-    headers: { Accept: "application/json" }
+  const response = await fetch('/api/core?action=catalogos', {
+    method: 'GET',
+    headers: { Accept: 'application/json' }
   });
 
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || "No se pudieron cargar los diccionarios desde Sheets.");
+  const payload = await response.json().catch(() => ({}));
+  const data = payload?.data || {};
+
+  if (!response.ok || payload?.ok === false) {
+    throw new Error(payload?.message || 'No se pudieron cargar los diccionarios desde Sheets.');
   }
 
-  const data = await response.json();
   return {
     tipos: normalizeEntries(data?.tipos || []),
     proveedores: normalizeEntries(data?.proveedores || []),

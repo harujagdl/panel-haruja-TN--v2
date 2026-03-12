@@ -1,17 +1,18 @@
 export async function processCorrectionsFileRows({ rows, dryRun }) {
-  const response = await fetch("/api/prendas-admin?action=import-corrections", {
-    method: "POST",
+  const response = await fetch('/api/core?action=prendas-import-corrections', {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json"
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
     },
     body: JSON.stringify({ rows: Array.isArray(rows) ? rows : [], dryRun: Boolean(dryRun) })
   });
 
-  const payload = await response.json().catch(() => null);
+  const result = await response.json().catch(() => null);
+  const payload = result?.data;
 
-  if (!response.ok || !payload?.ok) {
-    throw new Error(payload?.message || `Error procesando correcciones (HTTP ${response.status})`);
+  if (!response.ok || result?.ok === false || !payload?.ok) {
+    throw new Error(result?.message || payload?.message || `Error procesando correcciones (HTTP ${response.status})`);
   }
 
   return payload;

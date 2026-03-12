@@ -315,7 +315,8 @@ return
 }
 
 const res=await fetch(`/api/apartados?action=detail&folio=${folio}`)
-const data=await res.json()
+const payload=await res.json()
+const data=payload?.data||payload
 
 renderTicket(data)
 await syncPdfUi(folio)
@@ -350,8 +351,9 @@ refreshBtn.disabled=true
 statusEl.textContent='Se está generando el PDF…'
 try{
 const res=await fetch(`/api/documentos?action=pdf-refresh&folio=${encodeURIComponent(folio)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:'manual_refresh'})})
-const data=await res.json()
-if(!res.ok||data?.ok===false) throw new Error(data?.message||`HTTP ${res.status}`)
+const payload=await res.json()
+const data=payload?.data||payload
+if(!res.ok||payload?.ok===false) throw new Error(payload?.message||`HTTP ${res.status}`)
 applyPdf(data.pdfUrl||'',data.updatedAt||'')
 statusEl.textContent='PDF actualizado correctamente.'
 }catch(err){
@@ -363,8 +365,9 @@ refreshBtn.disabled=false
 
 try{
 const res=await fetch(`/api/documentos?action=pdf-status&folio=${encodeURIComponent(folio)}`)
-const data=await res.json()
-if(!res.ok||data?.ok===false) throw new Error(data?.message||`HTTP ${res.status}`)
+const payload=await res.json()
+const data=payload?.data||payload
+if(!res.ok||payload?.ok===false) throw new Error(payload?.message||`HTTP ${res.status}`)
 applyPdf(data.pdfUrl||'',data.updatedAt||'')
 }catch(err){
 statusEl.textContent=`No se pudo consultar PDF persistente: ${err?.message||'error'}`

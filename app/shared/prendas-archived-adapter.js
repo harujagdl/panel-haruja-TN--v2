@@ -1,16 +1,16 @@
 export async function loadArchivedPrendas() {
-  const response = await fetch("/api/prendas-admin?action=archived-list", {
-    method: "GET",
+  const response = await fetch('/api/core?action=prendas-archived-list', {
+    method: 'GET',
     headers: {
-      Accept: "application/json"
+      Accept: 'application/json'
     }
   });
 
-  const data = await response.json().catch(() => []);
+  const result = await response.json().catch(() => ({}));
+  const data = result?.data;
 
-  if (!response.ok) {
-    const message = data?.message || "No se pudo cargar el histórico archivado.";
-    throw new Error(message);
+  if (!response.ok || result?.ok === false) {
+    throw new Error(result?.message || 'No se pudo cargar el histórico archivado.');
   }
 
   return Array.isArray(data) ? data : [];
