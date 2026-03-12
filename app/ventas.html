@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ventas & Comisiones | Haruja</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #f6f7fb; color: #111827; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #faf7f2; color: #383234; }
     .wrap { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
     .page-header-wrapper { position: relative; }
     .panel-back-btn {
@@ -42,7 +42,7 @@
       width:auto;
       display:block;
     }
-    .card { background:#fff; border-radius:16px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); padding: 18px; }
+    .card { background:#fff; border-radius:16px; box-shadow: 0 10px 30px rgba(56,50,52,0.08); padding: 18px; border:1px solid #f1ece4; }
     h1 { margin: 0 0 12px; font-size: 34px; }
     .controls { display:flex; gap: 12px; flex-wrap: wrap; align-items: end; }
     .field { display:flex; flex-direction:column; gap: 6px; }
@@ -50,13 +50,13 @@
     input, select { padding: 10px 12px; border-radius: 10px; border:1px solid #e5e7eb; font-size:14px; background:#fff; }
     input.readonly { background:#f3f4f6; color:#111827; }
     button { padding: 10px 14px; border-radius: 12px; border: none; font-weight: 600; cursor:pointer; }
-    .btn-primary { background:#2563eb; color:#fff; }
-    .btn-primary:hover { background:#1d4ed8; }
-    .btn-secondary { background:#e5e7eb; color:#111827; }
-    .btn-secondary:hover { background:#d1d5db; }
+    .btn-primary { background:#383234; color:#fff; }
+    .btn-primary:hover { background:#2f2a2c; }
+    .btn-secondary { background:#f1ece4; color:#383234; border:1px solid #e5ddd0; }
+    .btn-secondary:hover { background:#e7dfd2; }
     .status { margin-top: 8px; font-size: 13px; color:#6b7280; min-height: 18px; }
     .stats { display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
-    .stat { background:#f8fafc; border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px; }
+    .stat { background:#ffffff; border: 1px solid #f1ece4; border-radius: 14px; padding: 12px; }
     .stat .label { font-size: 12px; color:#6b7280; }
     .stat .value { font-size: 18px; font-weight: 800; margin-top: 2px; }
     .tableWrap { margin-top: 14px; }
@@ -156,11 +156,10 @@
     const topSellerEl = document.getElementById("topSeller");
     const sinAsignarEl = document.getElementById("sinAsignar");
 
-    // ✅ Store fijo (Haruja = 1 tienda)
-    const FIXED_STORE_ID = "6432936";
+    // Store por defecto (editable y persistido en localStorage)
+    const DEFAULT_STORE_ID = "6432936";
 
-    // ✅ Solo estas 2 opciones (como pediste)
-    const sellers = ["Vendedora", "Haru"];
+    const sellers = ["Sam", "Haru"];
 
     const setStatus = (txt = "") => { statusEl.textContent = txt; };
 
@@ -209,6 +208,7 @@
 
     const loadData = async () => {
       const storeId = storeIdInput.value.trim();
+      localStorage.setItem("haruja_tn_store_id", storeId);
       const month = monthInput.value;
 
       if (!storeId) { setStatus("No hay storeId configurado."); return; }
@@ -217,7 +217,7 @@
       tbody.innerHTML = `<tr><td colspan="6">Cargando...</td></tr>`;
 
       try {
-        const url = new URL("/dashboard/sales-details", location.origin);
+        const url = new URL("/api/dashboard/sales-details", location.origin);
         url.searchParams.set("storeId", storeId);
         if (month) url.searchParams.set("month", month);
 
@@ -258,10 +258,10 @@
 
     const saveSeller = async (orderId, seller) => {
       try {
-        const res = await fetch("/dashboard/order-seller", {
+        const res = await fetch("/api/dashboard/order-seller", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId, seller: seller || "" })
+          body: JSON.stringify({ storeId: storeIdInput.value.trim(), orderId, seller: seller || "" })
         });
 
         const data = await safeJson(res);
@@ -281,7 +281,7 @@
       if (!storeId) return setStatus("No hay storeId configurado.");
 
       try {
-        const url = new URL("/dashboard/sales-export.csv", location.origin);
+        const url = new URL("/api/dashboard/sales-export.csv", location.origin);
         url.searchParams.set("storeId", storeId);
         if (month) url.searchParams.set("month", month);
 
@@ -304,11 +304,14 @@
       }
     };
 
-    // ✅ Init: storeId fijo + readonly
-    storeIdInput.value = FIXED_STORE_ID;
-    storeIdInput.readOnly = true;
-    storeIdInput.classList.add("readonly");
-    localStorage.setItem("haruja_tn_store_id", FIXED_STORE_ID);
+    const query = new URLSearchParams(location.search);
+    const queryStoreId = query.get("storeId") || "";
+    const savedStoreId = localStorage.getItem("haruja_tn_store_id") || "";
+    storeIdInput.value = queryStoreId || savedStoreId || DEFAULT_STORE_ID;
+
+    storeIdInput.addEventListener("change", () => {
+      localStorage.setItem("haruja_tn_store_id", storeIdInput.value.trim());
+    });
 
     // Mes default: mes actual (YYYY-MM)
     const now = new Date();
