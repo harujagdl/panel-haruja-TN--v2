@@ -349,7 +349,7 @@ refreshBtn.onclick=async()=>{
 refreshBtn.disabled=true
 statusEl.textContent='Se está generando el PDF…'
 try{
-const res=await fetch(`/api/pdf-apartado/${encodeURIComponent(folio)}/refresh`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:'manual_refresh'})})
+const res=await fetch(`/api/pdf-apartado/${encodeURIComponent(folio)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:'manual_refresh'})})
 const data=await res.json()
 if(!res.ok||data?.ok===false) throw new Error(data?.message||`HTTP ${res.status}`)
 applyPdf(data.pdfUrl||'',data.updatedAt||'')
