@@ -1897,6 +1897,8 @@ body.admin-on .admin-only{ display:table-cell; }
 }
 .sales-mini-item strong{
   font-size: 14px;
+  line-height: 1.25;
+  word-break: break-word;
 }
 @media (max-width: 640px){
   .sales-mini-grid{ grid-template-columns: 1fr; }
@@ -3767,8 +3769,15 @@ Errores: 0</pre>
       const resolveSalesContext = () => {
         const query = new URLSearchParams(window.location.search);
         const month = query.get("month") || new Date().toISOString().slice(0, 7);
-        const storeId = query.get("storeId") || safeStorageGet(window.localStorage, "haruja_tn_store_id", "") || "";
-        return {month, storeId};
+        return {month};
+      };
+
+      const isValidMonthKey = (value) => /^\d{4}-\d{2}$/.test(String(value || "").trim());
+
+      const salesSummaryBySeller = (samTotal, haruTotal) => {
+        const sam = moneyMx.format(Number(samTotal) || 0);
+        const haru = moneyMx.format(Number(haruTotal) || 0);
+        return `Sam/Haru ${sam} / ${haru}`;
       };
 
       const loadSalesMiniDashboard = async () => {
@@ -3780,35 +3789,46 @@ Errores: 0</pre>
           debugLog("sales mini omitido en embed");
           return;
         }
-        const {month, storeId} = resolveSalesContext();
-        if (!storeId) {
+
+        let hasConfig = false;
+        let month = resolveSalesContext().month;
+
+        try {
+          const configResponse = await fetch("/api/core?action=ventas-config");
+          if (!configResponse.ok) throw new Error("No fue posible cargar configuración de ventas");
+          const configPayload = await safeJson(configResponse);
+          const config = configPayload?.data || null;
+          hasConfig = Boolean(config?.store_id);
+        } catch (error) {
+          console.error("ventas-config error", error);
+        }
+
+        if (!hasConfig) {
           salesMiniTotal.textContent = "Configura storeId";
           salesMiniTopSeller.textContent = "—";
           salesMiniUnassigned.textContent = "—";
           return;
         }
 
+        if (!isValidMonthKey(month)) month = new Date().toISOString().slice(0, 7);
+
         try {
-          const url = new URL("/dashboard/sales-summary", window.location.origin);
-          url.searchParams.set("storeId", storeId);
+          const url = new URL("/api/core", window.location.origin);
+          url.searchParams.set("action", "ventas-resumen");
           url.searchParams.set("month", month);
           const response = await fetch(url.toString());
-          if (!response.ok) throw new Error("No fue posible cargar ventas");
+          if (!response.ok) throw new Error("No fue posible cargar resumen de ventas");
           const payload = await safeJson(response);
-          const top = Array.isArray(payload.totalPorVendedora) && payload.totalPorVendedora.length
-            ? payload.totalPorVendedora[0]
-            : null;
+          const summary = payload?.data || {};
 
-          salesMiniTotal.textContent = moneyMx.format(payload.totalMes || 0);
-          salesMiniTopSeller.textContent = top
-            ? `${top.seller}: ${moneyMx.format(top.total || 0)}`
-            : "Sin datos";
-          salesMiniUnassigned.textContent = moneyMx.format(payload.totalSinAsignar || 0);
+          salesMiniTotal.textContent = moneyMx.format(Number(summary.total_mes) || 0);
+          salesMiniTopSeller.textContent = salesSummaryBySeller(summary.total_sam, summary.total_haru);
+          salesMiniUnassigned.textContent = moneyMx.format(Number(summary.sin_asignar) || 0);
         } catch (error) {
           console.error("sales mini dashboard error", error);
-          salesMiniTotal.textContent = "Error";
-          salesMiniTopSeller.textContent = "Error";
-          salesMiniUnassigned.textContent = "Error";
+          salesMiniTotal.textContent = moneyMx.format(0);
+          salesMiniTopSeller.textContent = salesSummaryBySeller(0, 0);
+          salesMiniUnassigned.textContent = moneyMx.format(0);
         }
       };
 

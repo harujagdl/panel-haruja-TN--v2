@@ -3,16 +3,19 @@ import {
   createPrenda,
   deletePrenda,
   getCatalogos,
+  getVentasConfig,
   getVentasComisiones,
+  getVentasResumen,
   importCorrections,
   listArchivedPrendas,
   listPrendas,
   restorePrenda,
+  saveVentasConfig,
   updateVentasComisiones,
 } from '../lib/api/core.js';
 
-const GET_ACTIONS = new Set(['catalogos', 'prendas-list', 'prendas-archived-list', 'ventas-comisiones']);
-const POST_ACTIONS = new Set(['prendas-create', 'prendas-delete', 'prendas-archive', 'prendas-restore', 'prendas-import-corrections', 'ventas-comisiones']);
+const GET_ACTIONS = new Set(['catalogos', 'prendas-list', 'prendas-archived-list', 'ventas-comisiones', 'ventas-config', 'ventas-resumen']);
+const POST_ACTIONS = new Set(['prendas-create', 'prendas-delete', 'prendas-archive', 'prendas-restore', 'prendas-import-corrections', 'ventas-comisiones', 'ventas-config-save']);
 
 function success(res, data) {
   return res.status(200).json({ ok: true, data });
@@ -62,6 +65,23 @@ export default async function handler(req, res) {
     if (action === 'ventas-comisiones') {
       if (req.method === 'GET') return success(res, await getVentasComisiones(req.query || {}, req));
       return success(res, await updateVentasComisiones(req.body || {}, req));
+    }
+
+    if (action === 'ventas-config') {
+      if (req.method !== 'GET') return error(res, 405, 'Method not allowed para esta action.');
+      return success(res, await getVentasConfig());
+    }
+
+    if (action === 'ventas-config-save') {
+      if (req.method !== 'POST') return error(res, 405, 'Method not allowed para esta action.');
+      const payload = req.body || {};
+      if (!String(payload.store_id || '').trim()) return error(res, 400, 'store_id es obligatorio.');
+      return success(res, await saveVentasConfig(payload));
+    }
+
+    if (action === 'ventas-resumen') {
+      if (req.method !== 'GET') return error(res, 405, 'Method not allowed para esta action.');
+      return success(res, await getVentasResumen(req.query?.month));
     }
 
     return error(res, 400, 'Acción inválida para /api/core.');
