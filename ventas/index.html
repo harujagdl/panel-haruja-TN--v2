@@ -87,6 +87,7 @@
         <button id="btnSync" class="btn btn-primary">Sincronizar</button>
       </div>
       <div id="status" class="status"></div>
+      <div id="autoRefreshInfo" class="status">Actualización automática cada 60 s · Última actualización: —</div>
     </div>
 
     <div class="stats">
@@ -121,7 +122,11 @@
     const totalMesEl = document.getElementById("totalMes");
     const totalsBySellerEl = document.getElementById("totalsBySeller");
     const sinAsignarEl = document.getElementById("sinAsignar");
+    const autoRefreshInfoEl = document.getElementById("autoRefreshInfo");
     let ventasActuales = [];
+    let isUpdatingSeller = false;
+    let autoRefreshTimer = null;
+    let lastUpdatedAt = null;
 
     const setStatus = (txt = "", type = "info") => {
       statusEl.textContent = txt;
@@ -335,8 +340,29 @@
       window.history.replaceState({}, '', nextUrl);
     };
 
-    const loadData = async () => {
-      setStatus("Cargando ventas...");
+
+    const updateLastRefreshUi = () => {
+      const label = lastUpdatedAt
+        ? `Actualización automática cada 60 s · Última actualización: ${lastUpdatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+        : "Actualización automática cada 60 s · Última actualización: —";
+      autoRefreshInfoEl.textContent = label;
+    };
+
+    const reloadVistaVentasSilenciosa = async () => {
+      const month = formatMonth(monthInput.value);
+      const [resumen, detalle] = await Promise.all([
+        loadVentasResumen(month),
+        loadVentasDetalle(month)
+      ]);
+      ventasActuales = detalle;
+      renderResumen(resumen);
+      renderTabla(detalle);
+      lastUpdatedAt = new Date();
+      updateLastRefreshUi();
+    };
+
+    const loadData = async ({ silent = false } = {}) => {
+      if (!silent) setStatus("Cargando ventas...");
       const month = formatMonth(monthInput.value);
       const [resumen, detalle] = await Promise.all([
         loadVentasResumen(month),
@@ -346,7 +372,9 @@
       ventasActuales = detalle;
       renderResumen(resumen);
       renderTabla(detalle);
-      setStatus(`Listo. ${detalle.length} ventas.`);
+      lastUpdatedAt = new Date();
+      updateLastRefreshUi();
+      if (!silent) setStatus(`Listo. ${detalle.length} ventas.`);
     };
 
     const syncVentas = async () => {
@@ -355,8 +383,8 @@
       const payload = await safeJson(res, "No se pudo sincronizar ventas");
       if (!payload?.ok) throw new Error(payload?.message || "No se pudo sincronizar ventas");
       const data = payload.data || {};
-      setStatus(`Sync OK: ${data.synced || 0} pedidos (${data.inserted || 0} nuevos / ${data.updated || 0} actualizados).`);
-      await loadData();
+      await loadData({ silent: true });
+      setStatus(`Ventas actualizadas. Sync OK: ${data.synced || 0} pedidos (${data.inserted || 0} nuevos / ${data.updated || 0} actualizados).`);
     };
 
     const asignarVendedora = async (orderId, seller) => {
@@ -369,7 +397,15 @@
       });
       const payload = await safeJson(res, "No se pudo asignar vendedora");
       if (!payload?.ok) throw new Error(payload?.message || "No se pudo asignar vendedora");
-      await loadData();
+      await loadData({ silent: true });
+    };
+
+    const startAutoRefresh = () => {
+      if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+      autoRefreshTimer = setInterval(() => {
+        if (isUpdatingSeller) return;
+        reloadVistaVentasSilenciosa().catch((e) => setStatus(e.message || String(e), "error"));
+      }, 60000);
     };
 
     document.getElementById("btnLoad").addEventListener("click", () => loadData().catch((e) => setStatus(e.message || String(e), "error")));
@@ -385,10 +421,17 @@
         setStatus("Selecciona Haru o Vendedora para guardar la asignación.", "error");
         return;
       }
-      asignarVendedora(orderId, seller).catch((e) => setStatus(e.message || String(e), "error"));
+      isUpdatingSeller = true;
+      asignarVendedora(orderId, seller)
+        .catch((e) => setStatus(e.message || String(e), "error"))
+        .finally(() => {
+          isUpdatingSeller = false;
+        });
     });
 
     monthInput.value = new Date().toISOString().slice(0, 7);
+    updateLastRefreshUi();
+    startAutoRefresh();
     (async () => {
       try {
         showOAuthMessage();
