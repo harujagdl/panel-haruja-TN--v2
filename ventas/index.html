@@ -87,6 +87,7 @@
         <button id="btnSync" class="btn btn-primary">Sincronizar</button>
       </div>
       <div id="status" class="status"></div>
+      <div class="status">Actualización automática por Tiendanube + refresh cada 60 s.</div>
     </div>
 
     <div class="stats">
@@ -397,6 +398,9 @@
         setStatus(`No se pudo cargar configuración: ${e.message || String(e)}`, "error");
       }
       loadData().catch((e) => setStatus(e.message || String(e), "error"));
+      setInterval(() => {
+        loadData().catch(() => {});
+      }, 60000);
     })();
   </script>
 </body>

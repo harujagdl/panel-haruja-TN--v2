@@ -16,6 +16,7 @@ import {
   restorePrenda,
   saveVentasConfig,
   syncVentasFromTiendanube,
+  registerTiendanubeWebhooks,
   updateVentasComisiones,
 } from '../lib/api/core.js';
 
@@ -40,6 +41,7 @@ const POST_ACTIONS = new Set([
   'ventas-sync',
   'venta-asignar-vendedora',
   'ventas-rebuild',
+  'tiendanube-webhooks-register',
 ]);
 
 function success(res, data) {
@@ -48,6 +50,15 @@ function success(res, data) {
 
 function error(res, status, message, err) {
   return res.status(status).json({ ok: false, message, ...(err ? { error: err } : {}) });
+}
+
+function getBaseUrl(reqLike = {}) {
+  const configured = String(process.env.APP_URL || '').trim().replace(/\\/$/, '');
+  if (configured) return configured;
+  const headers = reqLike.headers || {};
+  const host = headers['x-forwarded-host'] || headers.host || '';
+  const proto = headers['x-forwarded-proto'] || 'https';
+  return host ? `${proto}://${host}` : '';
 }
 
 export default async function handler(req, res) {
@@ -133,6 +144,12 @@ export default async function handler(req, res) {
       if (req.method !== 'POST') return error(res, 405, 'Method not allowed para esta action.');
       const month = req.body?.month || req.query?.month;
       return success(res, await rebuildVentasResumen(month));
+    }
+
+
+    if (action === 'tiendanube-webhooks-register') {
+      if (req.method !== 'POST') return error(res, 405, 'Method not allowed para esta action.');
+      return success(res, await registerTiendanubeWebhooks(getBaseUrl(req)));
     }
 
     return error(res, 400, 'Acción inválida para /api/core.');
