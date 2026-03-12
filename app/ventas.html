@@ -156,11 +156,9 @@
     const topSellerEl = document.getElementById("topSeller");
     const sinAsignarEl = document.getElementById("sinAsignar");
 
-    // ✅ Store fijo (Haruja = 1 tienda)
     const FIXED_STORE_ID = "6432936";
-
-    // ✅ Solo estas 2 opciones (como pediste)
     const sellers = ["Vendedora", "Haru"];
+    let currentOrders = [];
 
     const setStatus = (txt = "") => { statusEl.textContent = txt; };
 
@@ -175,12 +173,10 @@
       }
     };
 
-    // ✅ FIX: evita "Invalid Date"
     const formatFecha = (value) => {
       if (!value) return "—";
       const d = new Date(value);
       if (Number.isNaN(d.getTime())) {
-        // Soporte simple para YYYY-MM-DD
         if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
           const d2 = new Date(value.trim() + "T00:00:00");
           if (!Number.isNaN(d2.getTime())) return d2.toLocaleDateString("es-MX");
@@ -198,9 +194,9 @@
     };
 
     const setStats = (data) => {
-      const totalMes = Number(data?.totalMes) || 0;
-      const totalSinAsignar = Number(data?.totalSinAsignar) || 0;
-      const top = Array.isArray(data?.totalPorVendedora) ? data.totalPorVendedora[0] : null;
+      const totalMes = Number(data?.summary?.totalMes) || 0;
+      const totalSinAsignar = Number(data?.summary?.totalSinAsignar) || 0;
+      const top = Array.isArray(data?.summary?.totalPorVendedora) ? data.summary.totalPorVendedora[0] : null;
 
       totalMesEl.textContent = moneyMx.format(totalMes);
       sinAsignarEl.textContent = moneyMx.format(totalSinAsignar);
@@ -217,7 +213,7 @@
       tbody.innerHTML = `<tr><td colspan="6">Cargando...</td></tr>`;
 
       try {
-        const url = new URL("/dashboard/sales-details", location.origin);
+        const url = new URL("/api/ventas-comisiones", location.origin);
         url.searchParams.set("storeId", storeId);
         if (month) url.searchParams.set("month", month);
 
@@ -231,6 +227,7 @@
         setStats(data);
 
         const orders = Array.isArray(data.orders) ? data.orders : [];
+        currentOrders = orders;
         if (!orders.length) {
           tbody.innerHTML = `<tr><td colspan="6">No hay ventas pagadas para este mes.</td></tr>`;
           setStatus(`Listo. 0 pedidos.`);
@@ -258,8 +255,8 @@
 
     const saveSeller = async (orderId, seller) => {
       try {
-        const res = await fetch("/dashboard/order-seller", {
-          method: "PATCH",
+        const res = await fetch("/api/ventas-comisiones", {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ orderId, seller: seller || "" })
         });
@@ -275,49 +272,40 @@
       }
     };
 
-    const exportCsv = async () => {
-      const storeId = storeIdInput.value.trim();
-      const month = monthInput.value;
-      if (!storeId) return setStatus("No hay storeId configurado.");
-
-      try {
-        const url = new URL("/dashboard/sales-export.csv", location.origin);
-        url.searchParams.set("storeId", storeId);
-        if (month) url.searchParams.set("month", month);
-
-        const res = await fetch(url.toString(), { method: "GET" });
-        if (!res.ok) {
-          const txt = await res.text();
-          throw new Error(txt || `HTTP ${res.status}`);
-        }
-        const blob = await res.blob();
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `ventas-comisiones-${month || "mes"}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setStatus("CSV descargado.");
-      } catch (e) {
-        console.error(e);
-        setStatus(`No se pudo exportar CSV: ${e.message || e}`);
+    const exportCsv = () => {
+      if (!currentOrders.length) {
+        setStatus("No hay datos para exportar CSV.");
+        return;
       }
+      const month = monthInput.value;
+      const headers = ["fecha", "orderId", "orderNumber", "cliente", "totalPagado", "estado", "seller"];
+      const rows = currentOrders.map((order) => headers.map((key) => {
+        const value = order?.[key] ?? "";
+        const escaped = String(value).replaceAll('"', '""');
+        return `"${escaped}"`;
+      }).join(","));
+      const csv = [headers.join(","), ...rows].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `ventas-comisiones-${month || "mes"}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setStatus("CSV descargado.");
     };
 
-    // ✅ Init: storeId fijo + readonly
     storeIdInput.value = FIXED_STORE_ID;
     storeIdInput.readOnly = true;
     storeIdInput.classList.add("readonly");
     localStorage.setItem("haruja_tn_store_id", FIXED_STORE_ID);
 
-    // Mes default: mes actual (YYYY-MM)
     const now = new Date();
     monthInput.value = now.toISOString().slice(0, 7);
 
     document.getElementById("btnLoad").addEventListener("click", loadData);
     document.getElementById("btnCsv").addEventListener("click", exportCsv);
 
-    // Guardar vendedora al cambiar select
     tbody.addEventListener("change", (ev) => {
       const sel = ev.target;
       if (!(sel instanceof HTMLSelectElement)) return;
@@ -329,7 +317,6 @@
       saveSeller(orderId, sel.value);
     });
 
-    // auto load
     loadData();
   </script>
 
