@@ -1,21 +1,46 @@
 import {
   archivePrenda,
+  assignVentaSeller,
   createPrenda,
   deletePrenda,
   getCatalogos,
-  getVentasConfig,
   getVentasComisiones,
+  getVentasConfig,
+  getVentasDetalle,
   getVentasResumen,
+  getVentasSinAsignar,
   importCorrections,
   listArchivedPrendas,
   listPrendas,
+  rebuildVentasResumen,
   restorePrenda,
   saveVentasConfig,
+  syncVentasFromTiendanube,
   updateVentasComisiones,
 } from '../lib/api/core.js';
 
-const GET_ACTIONS = new Set(['catalogos', 'prendas-list', 'prendas-archived-list', 'ventas-comisiones', 'ventas-config', 'ventas-resumen']);
-const POST_ACTIONS = new Set(['prendas-create', 'prendas-delete', 'prendas-archive', 'prendas-restore', 'prendas-import-corrections', 'ventas-comisiones', 'ventas-config-save']);
+const GET_ACTIONS = new Set([
+  'catalogos',
+  'prendas-list',
+  'prendas-archived-list',
+  'ventas-comisiones',
+  'ventas-config',
+  'ventas-resumen',
+  'ventas-detalle',
+  'ventas-sin-asignar',
+]);
+const POST_ACTIONS = new Set([
+  'prendas-create',
+  'prendas-delete',
+  'prendas-archive',
+  'prendas-restore',
+  'prendas-import-corrections',
+  'ventas-comisiones',
+  'ventas-config-save',
+  'ventas-sync',
+  'venta-asignar-vendedora',
+  'ventas-rebuild',
+]);
 
 function success(res, data) {
   return res.status(200).json({ ok: true, data });
@@ -84,8 +109,36 @@ export default async function handler(req, res) {
       return success(res, await getVentasResumen(req.query?.month));
     }
 
+    if (action === 'ventas-detalle') {
+      if (req.method !== 'GET') return error(res, 405, 'Method not allowed para esta action.');
+      return success(res, await getVentasDetalle(req.query?.month));
+    }
+
+    if (action === 'ventas-sin-asignar') {
+      if (req.method !== 'GET') return error(res, 405, 'Method not allowed para esta action.');
+      return success(res, await getVentasSinAsignar(req.query?.month));
+    }
+
+    if (action === 'ventas-sync') {
+      if (req.method !== 'POST') return error(res, 405, 'Method not allowed para esta action.');
+      return success(res, await syncVentasFromTiendanube());
+    }
+
+    if (action === 'venta-asignar-vendedora') {
+      if (req.method !== 'POST') return error(res, 405, 'Method not allowed para esta action.');
+      return success(res, await assignVentaSeller(req.body || {}));
+    }
+
+    if (action === 'ventas-rebuild') {
+      if (req.method !== 'POST') return error(res, 405, 'Method not allowed para esta action.');
+      const month = req.body?.month || req.query?.month;
+      return success(res, await rebuildVentasResumen(month));
+    }
+
     return error(res, 400, 'Acción inválida para /api/core.');
   } catch (err) {
-    return error(res, 400, err?.message || 'Error en /api/core.', err?.stack ? String(err.message || '') : undefined);
+    const message = err?.message || 'Error en /api/core.';
+    const status = /no se encontr[oó] la venta/i.test(message) ? 404 : 400;
+    return error(res, status, message, err?.stack ? String(err.message || '') : undefined);
   }
 }
