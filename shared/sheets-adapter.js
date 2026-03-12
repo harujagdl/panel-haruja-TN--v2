@@ -1,11 +1,12 @@
 export async function loadBaseRowsFromSheets() {
-  const res = await fetch("/api/prendas?action=list");
+  const res = await fetch("/api/core?action=prendas-list");
 
   if (!res.ok) {
     throw new Error("Error cargando datos desde Sheets");
   }
 
-  const rows = await res.json();
+  const payload = await res.json();
+  const rows = payload?.data || [];
 
   return rows.map((row, index) => {
     const codigo = row["Código"] || `row-${index}`;

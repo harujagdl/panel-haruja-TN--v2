@@ -233,7 +233,8 @@
           throw new Error(data.message || 'No se pudo cargar el historial.');
         }
 
-        state.apartados = (Array.isArray(data.apartados) ? data.apartados : []).map((item) => ({ ...item, contacto: item.telefono || item.contacto || '', estado: item.status || item.estado || 'ACTIVO', saldo: item.saldoPendiente ?? item.saldo ?? 0, pdfUrl: item.pdfUrl || `/ticket/${encodeURIComponent(item.folio || '')}` }));
+        const body = data.data || {};
+        state.apartados = (Array.isArray(body.apartados) ? body.apartados : []).map((item) => ({ ...item, contacto: item.telefono || item.contacto || '', estado: item.status || item.estado || 'ACTIVO', saldo: item.saldoPendiente ?? item.saldo ?? 0, pdfUrl: item.pdfUrl || `/ticket/${encodeURIComponent(item.folio || '')}` }));
         state.filtered = [...state.apartados];
         renderRows();
         statusEl.textContent = `${state.filtered.length} apartado(s) mostrado(s).`;

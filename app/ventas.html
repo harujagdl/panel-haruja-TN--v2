@@ -213,7 +213,8 @@
       tbody.innerHTML = `<tr><td colspan="6">Cargando...</td></tr>`;
 
       try {
-        const url = new URL("/api/ventas-comisiones", location.origin);
+        const url = new URL("/api/core", location.origin);
+        url.searchParams.set("action", "ventas-comisiones");
         url.searchParams.set("storeId", storeId);
         if (month) url.searchParams.set("month", month);
 
@@ -221,12 +222,13 @@
         const data = await safeJson(res);
 
         if (!res.ok || !data?.ok) {
-          throw new Error(data?.error || `Error al cargar ventas (HTTP ${res.status}).`);
+          throw new Error(data?.message || data?.error || `Error al cargar ventas (HTTP ${res.status}).`);
         }
 
-        setStats(data);
+        const body = data?.data || {};
+        setStats(body);
 
-        const orders = Array.isArray(data.orders) ? data.orders : [];
+        const orders = Array.isArray(body.orders) ? body.orders : [];
         currentOrders = orders;
         if (!orders.length) {
           tbody.innerHTML = `<tr><td colspan="6">No hay ventas pagadas para este mes.</td></tr>`;
@@ -255,7 +257,7 @@
 
     const saveSeller = async (orderId, seller) => {
       try {
-        const res = await fetch("/api/ventas-comisiones", {
+        const res = await fetch("/api/core?action=ventas-comisiones", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ orderId, seller: seller || "" })
@@ -263,7 +265,7 @@
 
         const data = await safeJson(res);
         if (!res.ok || !data?.ok) {
-          throw new Error(data?.error || `No se pudo guardar (HTTP ${res.status}).`);
+          throw new Error(data?.message || data?.error || `No se pudo guardar (HTTP ${res.status}).`);
         }
         setStatus(`Guardado: ${orderId} → ${seller || "Sin asignar"}`);
       } catch (e) {

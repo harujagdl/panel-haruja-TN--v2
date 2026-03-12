@@ -433,7 +433,7 @@
         throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
       }
 
-      return data;
+      return data?.data || data;
     }
 
     async function fetchNextFolio(){

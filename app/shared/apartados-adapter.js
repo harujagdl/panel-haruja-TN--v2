@@ -3,7 +3,7 @@ async function parseApiResponse(response, fallbackMessage) {
   if (!response.ok || data?.ok === false) {
     throw new Error(data?.message || fallbackMessage);
   }
-  return data;
+  return data?.data || data;
 }
 
 export async function fetchNextFolioFromSheets() {
