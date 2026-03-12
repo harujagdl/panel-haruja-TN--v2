@@ -48,3 +48,11 @@ Response esperada:
 ## Nota
 
 Si no se definen variables de entorno, la app sigue funcionando sin bloquear el alta/abono; solo omite la sincronización de Drive.
+
+
+## Endpoints puente en Vercel
+
+- `GET /api/pdf-apartado/{folio}`: consulta si existe el PDF persistente y regresa `pdfUrl`, `exists`, `updatedAt`.
+- `POST /api/pdf-apartado/{folio}/refresh`: fuerza regeneración/reemplazo del PDF vigente y regresa la URL actualizada.
+
+Ambos endpoints delegan en `lib/apartados/pdf-sync.js` y mantienen la lógica sensible fuera del frontend.

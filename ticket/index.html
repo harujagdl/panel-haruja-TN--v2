@@ -59,6 +59,19 @@ background:var(--coffee);
 color:var(--ivory);
 }
 
+.btn-secondary{
+background:#f1ece4;
+color:var(--coffee);
+border:1px solid rgba(56,50,52,.2);
+}
+
+.pdf-status{
+max-width:900px;
+margin:0 auto 10px;
+font-size:13px;
+color:#5b5457;
+}
+
 .card{
 width:min(100%,820px);
 margin:auto;
@@ -247,8 +260,12 @@ padding:14px;
 <div class="actions">
 <button class="btn btn-back" onclick="history.back()">Volver</button>
 <button class="btn btn-print" onclick="window.print()">Imprimir / Guardar PDF</button>
+<button id="btn-view-pdf" class="btn btn-secondary" style="display:none">Ver PDF guardado</button>
+<button id="btn-download-pdf" class="btn btn-secondary" style="display:none">Descargar PDF</button>
+<button id="btn-refresh-pdf" class="btn btn-secondary" style="display:none">Actualizar PDF</button>
 </div>
 
+<div id="pdf-status" class="pdf-status"></div>
 <div id="app"></div>
 
 <script>
@@ -284,7 +301,57 @@ const res=await fetch(`/api/apartados/${folio}`)
 const data=await res.json()
 
 renderTicket(data)
+await syncPdfUi(folio)
 
+}
+
+
+async function syncPdfUi(folio){
+const statusEl=document.getElementById('pdf-status')
+const viewBtn=document.getElementById('btn-view-pdf')
+const downloadBtn=document.getElementById('btn-download-pdf')
+const refreshBtn=document.getElementById('btn-refresh-pdf')
+if(!statusEl||!viewBtn||!downloadBtn||!refreshBtn||!folio) return
+
+const applyPdf=(pdfUrl,updatedAt)=>{
+if(pdfUrl){
+viewBtn.style.display='inline-block'
+downloadBtn.style.display='inline-block'
+viewBtn.onclick=()=>window.open(pdfUrl,'_blank','noopener')
+downloadBtn.onclick=()=>window.open(pdfUrl,'_blank','noopener')
+statusEl.textContent=`PDF persistente disponible${updatedAt?` · Actualizado: ${updatedAt}`:''}`
+}else{
+viewBtn.style.display='none'
+downloadBtn.style.display='none'
+statusEl.textContent='No existe PDF persistente todavía.'
+}
+}
+
+refreshBtn.style.display='inline-block'
+refreshBtn.onclick=async()=>{
+refreshBtn.disabled=true
+statusEl.textContent='Se está generando el PDF…'
+try{
+const res=await fetch(`/api/pdf-apartado/${encodeURIComponent(folio)}/refresh`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:'manual_refresh'})})
+const data=await res.json()
+if(!res.ok||data?.ok===false) throw new Error(data?.message||`HTTP ${res.status}`)
+applyPdf(data.pdfUrl||'',data.updatedAt||'')
+statusEl.textContent='PDF actualizado correctamente.'
+}catch(err){
+statusEl.textContent=`No se pudo actualizar el PDF: ${err?.message||'error'}`
+}finally{
+refreshBtn.disabled=false
+}
+}
+
+try{
+const res=await fetch(`/api/pdf-apartado/${encodeURIComponent(folio)}`)
+const data=await res.json()
+if(!res.ok||data?.ok===false) throw new Error(data?.message||`HTTP ${res.status}`)
+applyPdf(data.pdfUrl||'',data.updatedAt||'')
+}catch(err){
+statusEl.textContent=`No se pudo consultar PDF persistente: ${err?.message||'error'}`
+}
 }
 
 function renderTicket(payload){
