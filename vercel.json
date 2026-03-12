@@ -4,5 +4,11 @@
     { "source": "/ticket/:folio", "destination": "/ticket" },
     { "source": "/apartado/:folio", "destination": "/apartados" },
     { "source": "/", "destination": "/index.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/core?action=ventas-sync",
+      "schedule": "0 9 * * *"
+    }
   ]
 }
