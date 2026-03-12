@@ -18,6 +18,7 @@
     button { padding: 10px 14px; border-radius: 12px; border: none; font-weight: 600; cursor:pointer; }
     .btn-primary { background:#2563eb; color:#fff; }
     .btn-secondary { background:#e5e7eb; color:#111827; }
+    .btn-disabled { background:#f3f4f6; color:#6b7280; }
     .status { margin-top: 8px; font-size: 13px; color:#6b7280; min-height: 18px; }
     .stats { display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
     .stat { background:#f8fafc; border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px; }
@@ -33,7 +34,7 @@
   <div class="wrap">
     <div class="topbar">
       <a class="brandlink" href="https://paneltb.harujagdl.com/#/panel">
-        <img src="assets/haruja-logo.png" alt="HarujaGdl">
+        <img src="/assets/haruja-logo.png" alt="HarujaGdl">
       </a>
     </div>
 
@@ -44,7 +45,12 @@
           <label for="month">Mes</label>
           <input id="month" type="month" />
         </div>
+        <div class="field">
+          <label for="storeId">Store ID Tiendanube</label>
+          <input id="storeId" type="text" placeholder="Se carga desde configuración" />
+        </div>
         <button id="btnLoad" class="btn-secondary">Ver detalle</button>
+        <button id="btnCsv" class="btn-disabled">Export CSV</button>
         <button id="btnSync" class="btn-primary">Sincronizar</button>
       </div>
       <div id="status" class="status"></div>
@@ -78,15 +84,41 @@
     const moneyMx = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 });
 
     const monthInput = document.getElementById("month");
+    const storeIdInput = document.getElementById("storeId");
     const statusEl = document.getElementById("status");
     const tbody = document.getElementById("tbody");
     const totalMesEl = document.getElementById("totalMes");
     const totalsBySellerEl = document.getElementById("totalsBySeller");
     const sinAsignarEl = document.getElementById("sinAsignar");
 
-    const setStatus = (txt = "") => { statusEl.textContent = txt; };
-    const safeJson = async (res) => JSON.parse(await res.text() || "{}");
-    const fmtDate = (value) => value ? new Date(value).toLocaleDateString("es-MX") : "—";
+    const setStatus = (txt = "", type = "info") => {
+      statusEl.textContent = txt;
+      statusEl.style.color = type === "error" ? "#b91c1c" : "#6b7280";
+    };
+
+    const safeJson = async (res, fallbackError = "Error inesperado") => {
+      const raw = await res.text();
+      let payload = {};
+      if (raw) {
+        try {
+          payload = JSON.parse(raw);
+        } catch (_err) {
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${raw.slice(0, 180) || fallbackError}`);
+          }
+          throw new Error(`Respuesta no JSON del servidor: ${raw.slice(0, 180)}`);
+        }
+      }
+      if (!res.ok) {
+        const msg = payload?.message || raw.slice(0, 180) || fallbackError;
+        throw new Error(`HTTP ${res.status}: ${msg}`);
+      }
+      return payload;
+    };
+
+    const formatMoney = (value) => moneyMx.format(Number(value) || 0);
+    const formatDate = (value) => value ? new Date(value).toLocaleDateString("es-MX") : "—";
+    const formatMonth = (value) => String(value || "").slice(0, 7);
 
     const normalizeSeller = (value = "") => {
       const raw = String(value).trim().toLowerCase();
@@ -100,91 +132,128 @@
       return `<select data-seller>${options}</select>`;
     };
 
-    const loadResumen = async () => {
-      const month = monthInput.value;
+    const loadVentasConfig = async () => {
+      const url = new URL("/api/core", location.origin);
+      url.searchParams.set("action", "ventas-config");
+      const res = await fetch(url.toString());
+      const payload = await safeJson(res, "No se pudo cargar la configuración de ventas");
+      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar la configuración de ventas");
+      const data = payload.data || {};
+      storeIdInput.value = data.store_id || "";
+      return data;
+    };
+
+    const loadVentasResumen = async (month) => {
       const url = new URL("/api/core", location.origin);
       url.searchParams.set("action", "ventas-resumen");
       if (month) url.searchParams.set("month", month);
       const res = await fetch(url.toString());
-      const payload = await safeJson(res);
-      if (!res.ok || !payload?.ok) throw new Error(payload?.message || "No se pudo cargar resumen");
-      const data = payload.data || {};
-      totalMesEl.textContent = moneyMx.format(Number(data.total_mes) || 0);
-      totalsBySellerEl.textContent = `Haru ${moneyMx.format(Number(data.total_haru) || 0)} · Vendedora ${moneyMx.format(Number(data.total_vendedora) || 0)}`;
-      sinAsignarEl.textContent = String(Number(data.sin_asignar) || 0);
+      const payload = await safeJson(res, "No se pudo cargar el resumen de ventas");
+      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar el resumen de ventas");
+      return payload.data || {};
     };
 
-    const loadDetalle = async () => {
-      setStatus("Cargando ventas...");
-      const month = monthInput.value;
+    const loadVentasDetalle = async (month) => {
       const url = new URL("/api/core", location.origin);
       url.searchParams.set("action", "ventas-detalle");
       if (month) url.searchParams.set("month", month);
-
       const res = await fetch(url.toString());
-      const payload = await safeJson(res);
-      if (!res.ok || !payload?.ok) throw new Error(payload?.message || "No se pudo cargar detalle");
+      const payload = await safeJson(res, "No se pudo cargar el detalle de ventas");
+      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar el detalle de ventas");
+      return Array.isArray(payload.data) ? payload.data : [];
+    };
 
-      const rows = Array.isArray(payload.data) ? payload.data : [];
-      if (!rows.length) {
+    const renderResumen = (resumen) => {
+      totalMesEl.textContent = formatMoney(resumen.total_mes);
+      totalsBySellerEl.textContent = `Haru ${formatMoney(resumen.total_haru)} · Vendedora ${formatMoney(resumen.total_vendedora)}`;
+      sinAsignarEl.textContent = String(Number(resumen.sin_asignar) || 0);
+    };
+
+    const renderTabla = (ventas) => {
+      if (!ventas.length) {
         tbody.innerHTML = `<tr><td colspan="8">No hay ventas para este mes.</td></tr>`;
-      } else {
-        tbody.innerHTML = rows.map((row) => {
-          const seller = normalizeSeller(row.seller);
-          const noAssigned = !seller || !row.seller_assigned;
-          return `
-            <tr data-order-id="${row.order_id}">
-              <td>${row.order_id}</td>
-              <td>${fmtDate(row.created_at)}</td>
-              <td>${row.customer_name || "—"}</td>
-              <td>${moneyMx.format(Number(row.total) || 0)}</td>
-              <td>${sellerSelectHtml(seller)} ${noAssigned ? '<span class="badge">Sin asignar</span>' : ''}</td>
-              <td>${moneyMx.format(Number(row.commission_amount) || 0)}</td>
-              <td>${row.payment_status || "—"}</td>
-              <td>${row.fulfillment_status || "—"}</td>
-            </tr>`;
-        }).join("");
+        return;
       }
+      tbody.innerHTML = ventas.map((row) => {
+        const seller = normalizeSeller(row.seller);
+        const noAssigned = !seller || !row.seller_assigned;
+        return `
+          <tr data-order-id="${row.order_id}">
+            <td>${row.order_id}</td>
+            <td>${formatDate(row.created_at)}</td>
+            <td>${row.customer_name || "—"}</td>
+            <td>${formatMoney(row.total)}</td>
+            <td>${sellerSelectHtml(seller)} ${noAssigned ? '<span class="badge">Sin asignar</span>' : ''}</td>
+            <td>${formatMoney(row.commission_amount)}</td>
+            <td>${row.payment_status || "—"}</td>
+            <td>${row.fulfillment_status || "—"}</td>
+          </tr>`;
+      }).join("");
+    };
 
-      await loadResumen();
-      setStatus(`Listo. ${rows.length} ventas.`);
+    const loadData = async () => {
+      setStatus("Cargando ventas...");
+      const month = formatMonth(monthInput.value);
+      const _storeId = (storeIdInput.value || "").trim();
+
+      const [resumen, detalle] = await Promise.all([
+        loadVentasResumen(month),
+        loadVentasDetalle(month)
+      ]);
+
+      renderResumen(resumen);
+      renderTabla(detalle);
+      setStatus(`Listo. ${detalle.length} ventas.`);
     };
 
     const syncVentas = async () => {
       setStatus("Sincronizando con Tiendanube...");
       const res = await fetch("/api/core?action=ventas-sync", { method: "POST" });
-      const payload = await safeJson(res);
-      if (!res.ok || !payload?.ok) throw new Error(payload?.message || "No se pudo sincronizar");
+      const payload = await safeJson(res, "No se pudo sincronizar ventas");
+      if (!payload?.ok) throw new Error(payload?.message || "No se pudo sincronizar ventas");
       const data = payload.data || {};
       setStatus(`Sync OK: ${data.synced || 0} pedidos (${data.inserted || 0} nuevos / ${data.updated || 0} actualizados).`);
-      await loadDetalle();
+      await loadData();
     };
 
-    const assignSeller = async (orderId, seller) => {
+    const asignarVendedora = async (orderId, seller) => {
+      const normalized = normalizeSeller(seller);
+      if (!normalized) throw new Error("Selecciona una vendedora válida (Haru o Vendedora)");
       const res = await fetch("/api/core?action=venta-asignar-vendedora", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_id: orderId, seller })
+        body: JSON.stringify({ order_id: orderId, seller: normalized })
       });
-      const payload = await safeJson(res);
-      if (!res.ok || !payload?.ok) throw new Error(payload?.message || "No se pudo asignar vendedora");
-      await loadDetalle();
+      const payload = await safeJson(res, "No se pudo asignar vendedora");
+      if (!payload?.ok) throw new Error(payload?.message || "No se pudo asignar vendedora");
+      await loadData();
     };
 
-    document.getElementById("btnLoad").addEventListener("click", () => loadDetalle().catch((e) => setStatus(e.message || String(e))));
-    document.getElementById("btnSync").addEventListener("click", () => syncVentas().catch((e) => setStatus(e.message || String(e))));
+    document.getElementById("btnLoad").addEventListener("click", () => loadData().catch((e) => setStatus(e.message || String(e), "error")));
+    document.getElementById("btnSync").addEventListener("click", () => syncVentas().catch((e) => setStatus(e.message || String(e), "error")));
+    document.getElementById("btnCsv").addEventListener("click", () => setStatus("La exportación CSV se implementará en la siguiente fase."));
 
     tbody.addEventListener("change", (ev) => {
       if (!(ev.target instanceof HTMLSelectElement) || !ev.target.hasAttribute("data-seller")) return;
       const row = ev.target.closest("tr");
       const orderId = row?.getAttribute("data-order-id") || "";
       const seller = ev.target.value;
-      if (!orderId || !seller) return;
-      assignSeller(orderId, seller).catch((e) => setStatus(e.message || String(e)));
+      if (!orderId || !seller) {
+        setStatus("Selecciona Haru o Vendedora para guardar la asignación.", "error");
+        return;
+      }
+      asignarVendedora(orderId, seller).catch((e) => setStatus(e.message || String(e), "error"));
     });
 
     monthInput.value = new Date().toISOString().slice(0, 7);
-    loadDetalle().catch((e) => setStatus(e.message || String(e)));
+    (async () => {
+      try {
+        await loadVentasConfig();
+      } catch (e) {
+        setStatus(`No se pudo cargar configuración: ${e.message || String(e)}`, "error");
+      }
+      loadData().catch((e) => setStatus(e.message || String(e), "error"));
+    })();
   </script>
 </body>
 </html>
