@@ -3774,10 +3774,10 @@ Errores: 0</pre>
 
       const isValidMonthKey = (value) => /^\d{4}-\d{2}$/.test(String(value || "").trim());
 
-      const salesSummaryBySeller = (samTotal, haruTotal) => {
-        const sam = moneyMx.format(Number(samTotal) || 0);
+      const salesSummaryBySeller = (haruTotal, vendedoraTotal) => {
         const haru = moneyMx.format(Number(haruTotal) || 0);
-        return `Sam/Haru ${sam} / ${haru}`;
+        const vendedora = moneyMx.format(Number(vendedoraTotal) || 0);
+        return `Haru ${haru} / Vendedora ${vendedora}`;
       };
 
       const loadSalesMiniDashboard = async () => {
@@ -3822,13 +3822,13 @@ Errores: 0</pre>
           const summary = payload?.data || {};
 
           salesMiniTotal.textContent = moneyMx.format(Number(summary.total_mes) || 0);
-          salesMiniTopSeller.textContent = salesSummaryBySeller(summary.total_sam, summary.total_haru);
-          salesMiniUnassigned.textContent = moneyMx.format(Number(summary.sin_asignar) || 0);
+          salesMiniTopSeller.textContent = salesSummaryBySeller(summary.total_haru, summary.total_vendedora);
+          salesMiniUnassigned.textContent = String(Number(summary.sin_asignar) || 0);
         } catch (error) {
           console.error("sales mini dashboard error", error);
           salesMiniTotal.textContent = moneyMx.format(0);
           salesMiniTopSeller.textContent = salesSummaryBySeller(0, 0);
-          salesMiniUnassigned.textContent = moneyMx.format(0);
+          salesMiniUnassigned.textContent = "0";
         }
       };
 
