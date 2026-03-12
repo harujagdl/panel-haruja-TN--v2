@@ -154,12 +154,21 @@
 
 
     .public-view{ max-width:900px; margin:28px auto; padding:0 16px 28px; }
+    .public-logo{ display:block; width:140px; max-width:56%; height:auto; margin:0 0 10px; }
     .public-head{ background:#fffdf9; border:1px solid #e8e2d7; border-radius:16px; padding:20px; box-shadow:0 10px 24px rgba(56,50,52,.08); }
     .public-title{ font-size:28px; font-weight:800; color:#383234; margin:0 0 8px; }
     .public-sub{ color:#6b6668; margin:0 0 14px; }
     .public-chip{ display:inline-block; padding:6px 12px; border-radius:999px; background:#eef1ec; border:1px solid rgba(167,181,158,.45); color:#383234; font-weight:700; font-size:13px; }
+    .public-kpi{ display:grid; gap:10px; grid-template-columns:1fr; margin-top:14px; }
+    .public-kpi-card{ border:1px solid #ece6db; border-radius:12px; background:#fff; padding:12px 14px; }
+    .public-kpi-lab{ color:#6b6668; font-size:13px; }
+    .public-kpi-val{ color:#383234; font-size:24px; font-weight:800; margin-top:4px; }
+    .public-kpi-status{ font-size:14px; font-weight:800; }
+    .status-ok{ color:#567451; }
+    .status-pending{ color:#9f7c2c; }
+    .status-expired{ color:#9f3f3f; }
     .public-grid{ display:grid; gap:14px; grid-template-columns:1fr; margin-top:14px; }
-    @media (min-width:800px){ .public-grid{ grid-template-columns:1fr 1fr; } }
+    @media (min-width:800px){ .public-grid{ grid-template-columns:1fr 1fr; } .public-kpi{ grid-template-columns:1fr 1fr; } }
     .public-card{ background:#fff; border:1px solid #ece6db; border-radius:14px; padding:16px; }
     .public-card h3{ margin:0 0 10px; color:#a7b59e; font-size:13px; letter-spacing:.05em; text-transform:uppercase; }
     .public-kv{ display:grid; grid-template-columns:120px 1fr; gap:8px 10px; font-size:14px; }
@@ -167,6 +176,7 @@
     .public-actions{ display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
     .public-btn{ text-decoration:none; border-radius:10px; padding:10px 14px; font-weight:700; border:1px solid rgba(56,50,52,.18); color:#383234; background:#f3ece2; }
     .public-btn.primary{ background:#383234; color:#faf7f2; border-color:#383234; }
+    .public-empty{ color:#6b6668; font-size:14px; }
     .public-list{ margin:0; padding-left:18px; color:#383234; }
     .public-list li{ margin:6px 0; }
     @media (max-width: 640px) {
@@ -531,24 +541,74 @@
     }
 
 
-    function renderPublicApartado(apartado){
+    function formatDateLabel(rawDate){
+      if (!rawDate) return '-';
+      const dt = new Date(rawDate);
+      if (Number.isNaN(dt.getTime())) return String(rawDate);
+      return dt.toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' });
+    }
+
+    function derivePublicStatus(apartado, saldoPendiente){
+      const apiStatus = String(apartado.status || '').trim().toUpperCase();
+      if (saldoPendiente <= 0) return 'LIQUIDADO';
+
+      const now = new Date();
+      const due = apartado.fechaLimite ? new Date(apartado.fechaLimite) : null;
+      if (due && !Number.isNaN(due.getTime()) && now > due) return 'VENCIDO';
+      if (apiStatus === 'VENCIDO') return 'VENCIDO';
+      if (apiStatus === 'ACTIVO') return 'PENDIENTE DE LIQUIDAR';
+      return apiStatus || 'PENDIENTE DE LIQUIDAR';
+    }
+
+    function getStatusClass(status){
+      if (status === 'LIQUIDADO') return 'status-ok';
+      if (status === 'VENCIDO') return 'status-expired';
+      return 'status-pending';
+    }
+
+    function renderPublicApartado(apartado, folioConsulta){
       const app = $('public-apartado-app');
-      const totalAbonos = (apartado.historialAbonos || []).reduce((sum, item) => sum + toNum(item.monto), 0);
-      const waText = encodeURIComponent(`Hola Haruja, tengo dudas sobre mi apartado ${apartado.folio}.`);
+      const historialAbonos = Array.isArray(apartado.historialAbonos) ? apartado.historialAbonos : [];
+      const totalAbonosHistorial = historialAbonos.reduce((sum, item) => sum + toNum(item.monto), 0);
+      const anticipo = toNum(apartado.anticipo);
+      const total = toNum(apartado.total);
+      const saldoApi = toNum(apartado.saldoPendiente);
+      const saldoFallback = Math.max(0, total - anticipo - totalAbonosHistorial);
+      const saldoPendiente = (Number.isFinite(saldoApi) && saldoApi >= 0) ? saldoApi : saldoFallback;
+      const totalAbonado = anticipo + totalAbonosHistorial;
+      const statusLabel = derivePublicStatus(apartado, saldoPendiente);
+      const folio = (apartado.folio || folioConsulta || '-').trim();
+      const apartadoUrl = `${window.location.origin}/apartado/${encodeURIComponent(folio)}`;
+      const waText = encodeURIComponent(`Hola ✨
+Te compartimos el estado de tu apartado Haruja:
+${apartadoUrl}
+
+Si tienes dudas o quieres liquidarlo, escríbenos por aquí 💛`);
       const waHref = `https://wa.me/523330336506?text=${waText}`;
-      const items = (apartado.productos || []).map((item) => `<li>${item.codigo || '-'} — ${item.descripcion || 'Producto'} (${fmtMX(item.precio || 0)})</li>`).join('') || '<li>Sin productos registrados.</li>';
-      const abonos = (apartado.historialAbonos || []).map((ab) => `<li>${ab.fecha || '-'} · ${fmtMX(ab.monto || 0)} ${ab.metodo ? `· ${ab.metodo}` : ''}</li>`).join('') || '<li>Sin abonos registrados.</li>';
+      const items = (apartado.productos || []).map((item) => `<li>${item.codigo || '-'} — ${item.descripcion || 'Producto'} (${fmtMX(item.precio || 0)})</li>`).join('') || '<li class="public-empty">Aún no hay productos registrados.</li>';
+      const abonos = historialAbonos.map((ab) => `<li>${formatDateLabel(ab.fecha)} · ${fmtMX(ab.monto || 0)}${ab.comentario ? ` · ${ab.comentario}` : ''}</li>`).join('') || '<li class="public-empty">Aún no hay abonos registrados.</li>';
       const pdfPersistido = apartado.pdfDriveUrl || apartado.pdfUrlPersistido || '';
 
       app.innerHTML = `
         <section class="public-view">
           <div class="public-head">
-            <h1 class="public-title">Status de apartado</h1>
-            <p class="public-sub">Consulta rápida de tu apartado Haruja.</p>
-            <span class="public-chip">${apartado.status || 'ACTIVO'} · Folio ${apartado.folio || '-'}</span>
+            <img class="public-logo" src="/assets/haruja-logo.png" alt="Haruja" onerror="this.style.display='none'">
+            <h1 class="public-title">Status de tu apartado</h1>
+            <p class="public-sub">Consulta rápida, clara y segura de tu pedido Haruja.</p>
+            <span class="public-chip">Folio ${folio}</span>
+            <div class="public-kpi">
+              <div class="public-kpi-card">
+                <div class="public-kpi-lab">Estado</div>
+                <div class="public-kpi-status ${getStatusClass(statusLabel)}">${statusLabel}</div>
+              </div>
+              <div class="public-kpi-card">
+                <div class="public-kpi-lab">${saldoPendiente > 0 ? 'Saldo pendiente' : 'Liquidado'}</div>
+                <div class="public-kpi-val">${fmtMX(saldoPendiente)}</div>
+              </div>
+            </div>
             <div class="public-actions">
-              <a class="public-btn" href="/ticket/${encodeURIComponent(apartado.folio || '')}" target="_blank" rel="noopener">Ver ticket</a>
-              <a class="public-btn primary" href="/ticket/${encodeURIComponent(apartado.folio || '')}" target="_blank" rel="noopener">Descargar / imprimir ticket</a>
+              <a class="public-btn" href="/ticket/${encodeURIComponent(folio)}" target="_blank" rel="noopener">Ver ticket</a>
+              <a class="public-btn primary" href="/ticket/${encodeURIComponent(folio)}" target="_blank" rel="noopener">Imprimir / Guardar PDF</a>
               <a class="public-btn" href="${waHref}" target="_blank" rel="noopener">WhatsApp</a>
               ${pdfPersistido ? `<a class="public-btn" href="${pdfPersistido}" target="_blank" rel="noopener">Ver PDF guardado</a>` : ''}
             </div>
@@ -557,16 +617,16 @@
             <article class="public-card">
               <h3>Resumen</h3>
               <div class="public-kv">
-                <b>Folio</b><div>${apartado.folio || '-'}</div>
-                <b>Fecha</b><div>${apartado.fecha || '-'}</div>
+                <b>Folio</b><div>${folio}</div>
+                <b>Fecha</b><div>${formatDateLabel(apartado.fecha)}</div>
                 <b>Cliente</b><div>${apartado.cliente || '-'}</div>
-                <b>Contacto</b><div>${apartado.telefono || '-'}</div>
+                <b>Contacto</b><div>${apartado.telefono || apartado.contacto || '-'}</div>
                 <b>Subtotal</b><div>${fmtMX(apartado.subtotal || 0)}</div>
-                <b>Anticipo</b><div>${fmtMX(apartado.anticipo || 0)}</div>
+                <b>Anticipo</b><div>${fmtMX(anticipo)}</div>
                 <b>Descuento</b><div>${fmtMX(apartado.descuento || 0)}</div>
-                <b>Total</b><div>${fmtMX(apartado.total || 0)}</div>
-                <b>Saldo pendiente</b><div>${fmtMX(apartado.saldoPendiente || 0)}</div>
-                <b>Total abonado</b><div>${fmtMX(totalAbonos || 0)}</div>
+                <b>Total</b><div>${fmtMX(total)}</div>
+                <b>Saldo pendiente</b><div>${fmtMX(saldoPendiente)}</div>
+                <b>Total abonado</b><div>${fmtMX(totalAbonado)}</div>
               </div>
             </article>
             <article class="public-card">
@@ -589,11 +649,19 @@
       const app = $('public-apartado-app');
       app.style.display = 'block';
       app.innerHTML = '<section class="public-view"><div class="public-card">Cargando apartado…</div></section>';
+      if (!folio) {
+        app.innerHTML = '<section class="public-view"><div class="public-card">No encontramos este apartado.</div></section>';
+        return;
+      }
       try {
         const data = await apiFetch(`/api/apartados/${encodeURIComponent(folio)}`);
-        renderPublicApartado(data.apartado || {});
+        renderPublicApartado(data.apartado || {}, folio);
       } catch (error) {
-        app.innerHTML = `<section class="public-view"><div class="public-card">No se pudo cargar el apartado: ${error.message || 'Error'}</div></section>`;
+        const message = String(error?.message || 'Error').toLowerCase();
+        const humanMessage = message.includes('no se encontró')
+          ? 'No encontramos este apartado.'
+          : 'No se pudo cargar la información. Intenta de nuevo.';
+        app.innerHTML = `<section class="public-view"><div class="public-card">${humanMessage}</div></section>`;
       }
     }
 
