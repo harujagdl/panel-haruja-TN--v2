@@ -207,8 +207,13 @@
     };
 
     const sellerSelectHtml = (selected = "") => {
-      const options = ["", ...SELLERS].map((name) => `<option value="${name}" ${name === selected ? "selected" : ""}>${name || "Sin asignar"}</option>`).join("");
-      return `<select data-seller>${options}</select>`;
+      const currentSeller = normalizeSeller(selected);
+      return `
+        <select data-seller>
+          <option value="__unassigned__" ${!currentSeller ? "selected" : ""}>Sin asignar</option>
+          <option value="Haru" ${currentSeller === "Haru" ? "selected" : ""}>Haru</option>
+          <option value="Vendedora" ${currentSeller === "Vendedora" ? "selected" : ""}>Vendedora</option>
+        </select>`;
     };
 
     const loadVentasConfig = async () => {
@@ -243,10 +248,11 @@
     };
 
     const renderResumen = (resumen) => {
+      const ticketPromedio = Number(resumen?.ticket_promedio ?? 0);
       totalMesEl.textContent = formatMoney(resumen.total_mes);
       totalsBySellerEl.textContent = `Haru ${formatMoney(resumen.total_haru)} · Vendedora ${formatMoney(resumen.total_vendedora)}`;
       sinAsignarEl.textContent = String(Number(resumen.sin_asignar) || 0);
-      ticketPromedioEl.textContent = formatMoney(resumen.ticket_promedio ?? 0);
+      ticketPromedioEl.textContent = formatMoney(ticketPromedio);
     };
 
     const renderTabla = (ventas) => {
@@ -254,17 +260,18 @@
         tbody.innerHTML = `<tr><td colspan="6">No hay ventas para este mes.</td></tr>`;
         return;
       }
-      tbody.innerHTML = ventas.map((row) => {
-        const seller = normalizeSeller(row.seller);
-        const noAssigned = !seller || !row.seller_assigned;
+      tbody.innerHTML = ventas.map((venta) => {
+        console.log("[ventas-detalle]", venta.order_id, venta.seller);
+        const seller = normalizeSeller((venta.seller || "").trim());
+        const noAssigned = !seller;
         return `
-          <tr data-order-id="${row.order_id}">
-            <td>${formatDate(row.created_at)}</td>
-            <td>${row.order_id}</td>
-            <td>${row.customer_name || "—"}</td>
-            <td>${formatMoney(row.total)}</td>
-            <td>${formatEstado(row)}</td>
-            <td>${sellerSelectHtml(seller)} ${noAssigned ? '<span class="badge">Sin asignar</span>' : ''}</td>
+          <tr data-order-id="${venta.order_id}">
+            <td>${formatDate(venta.created_at)}</td>
+            <td>${venta.order_id}</td>
+            <td>${venta.customer_name || "—"}</td>
+            <td>${formatMoney(venta.total)}</td>
+            <td>${formatEstado(venta)}</td>
+            <td>${sellerSelectHtml(seller)} ${noAssigned ? '<span class="badge">Pendiente</span>' : ''}</td>
           </tr>`;
       }).join("");
     };
@@ -368,7 +375,7 @@
     const asignarVendedora = async (orderId, seller) => {
       const normalized = normalizeSeller(seller);
       if (!normalized) throw new Error("Selecciona una vendedora válida (Haru o Vendedora)");
-      const res = await fetch("/api/core?action=venta-asignar-vendedora", {
+      const res = await fetch("/api/core?action=assign-seller", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order_id: orderId, seller: normalized })
@@ -387,7 +394,7 @@
       const row = ev.target.closest("tr");
       const orderId = row?.getAttribute("data-order-id") || "";
       const seller = ev.target.value;
-      if (!orderId || !seller) {
+      if (!orderId || seller === "__unassigned__") {
         setStatus("Selecciona Haru o Vendedora para guardar la asignación.", "error");
         return;
       }
