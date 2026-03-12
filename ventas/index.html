@@ -94,6 +94,7 @@
       <div class="stat"><div class="label">Total del mes</div><div id="totalMes" class="value">—</div></div>
       <div class="stat"><div class="label">Total por vendedora</div><div id="totalsBySeller" class="value">—</div></div>
       <div class="stat"><div class="label">Sin asignar</div><div id="sinAsignar" class="value">—</div></div>
+      <div class="stat"><div class="label">Ticket promedio</div><div id="ticketPromedio" class="value">—</div></div>
     </div>
 
     <table>
@@ -122,6 +123,7 @@
     const totalMesEl = document.getElementById("totalMes");
     const totalsBySellerEl = document.getElementById("totalsBySeller");
     const sinAsignarEl = document.getElementById("sinAsignar");
+    const ticketPromedioEl = document.getElementById("ticketPromedio");
     let ventasActuales = [];
 
     const setStatus = (txt = "", type = "info") => {
@@ -242,6 +244,7 @@
       totalMesEl.textContent = formatMoney(resumen.total_mes);
       totalsBySellerEl.textContent = `Haru ${formatMoney(resumen.total_haru)} · Vendedora ${formatMoney(resumen.total_vendedora)}`;
       sinAsignarEl.textContent = String(Number(resumen.sin_asignar) || 0);
+      ticketPromedioEl.textContent = formatMoney(resumen.ticket_promedio ?? 0);
     };
 
     const renderTabla = (ventas) => {
