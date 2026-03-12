@@ -437,12 +437,12 @@
     }
 
     async function fetchNextFolio(){
-      const r = await apiFetch('/api/apartados/_next', { method: 'GET' });
+      const r = await apiFetch('/api/apartados?action=next', { method: 'GET' });
       return r.folio;
     }
 
     async function postRegistrar(payload){
-      return await apiFetch(`/api/apartados/${encodeURIComponent(payload.folio || '')}`, {
+      return await apiFetch(`/api/apartados?action=create`, {
         method: 'POST',
         body: JSON.stringify(payload)
       });
@@ -655,7 +655,7 @@ Si tienes dudas o quieres liquidarlo, escríbenos por aquí 💛`);
         return;
       }
       try {
-        const data = await apiFetch(`/api/apartados/${encodeURIComponent(folio)}`);
+        const data = await apiFetch(`/api/apartados?action=detail&folio=${encodeURIComponent(folio)}`);
         renderPublicApartado(data.apartado || {}, folio);
       } catch (error) {
         const message = String(error?.message || 'Error').toLowerCase();

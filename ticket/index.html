@@ -314,7 +314,7 @@ document.getElementById('app').innerHTML="Folio inválido"
 return
 }
 
-const res=await fetch(`/api/apartados/${folio}`)
+const res=await fetch(`/api/apartados?action=detail&folio=${folio}`)
 const data=await res.json()
 
 renderTicket(data)
@@ -349,7 +349,7 @@ refreshBtn.onclick=async()=>{
 refreshBtn.disabled=true
 statusEl.textContent='Se está generando el PDF…'
 try{
-const res=await fetch(`/api/pdf-apartado/${encodeURIComponent(folio)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:'manual_refresh'})})
+const res=await fetch(`/api/documentos?action=pdf-refresh&folio=${encodeURIComponent(folio)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:'manual_refresh'})})
 const data=await res.json()
 if(!res.ok||data?.ok===false) throw new Error(data?.message||`HTTP ${res.status}`)
 applyPdf(data.pdfUrl||'',data.updatedAt||'')
@@ -362,7 +362,7 @@ refreshBtn.disabled=false
 }
 
 try{
-const res=await fetch(`/api/pdf-apartado/${encodeURIComponent(folio)}`)
+const res=await fetch(`/api/documentos?action=pdf-status&folio=${encodeURIComponent(folio)}`)
 const data=await res.json()
 if(!res.ok||data?.ok===false) throw new Error(data?.message||`HTTP ${res.status}`)
 applyPdf(data.pdfUrl||'',data.updatedAt||'')

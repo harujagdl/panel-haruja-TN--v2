@@ -5,7 +5,7 @@
 ### Ya desacoplado de Firebase Hosting legacy
 - Se eliminó la dependencia de scripts `//__/firebase/*` y `shared/firebase-init.js` en `index.html`.
 - La configuración de Firebase se centraliza en el bloque moderno `script type="module"`.
-- El módulo de **Base de datos códigos HarujaGdl** carga desde `GET /api/prendas-list` (Google Sheets API adapter).
+- El módulo de **Base de datos códigos HarujaGdl** carga desde `GET /api/prendas?action=list` (Google Sheets API adapter).
 
 ### Sigue usando Firebase (por compatibilidad)
 - Autenticación de admin con Google.

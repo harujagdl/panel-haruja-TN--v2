@@ -1,5 +1,5 @@
 export async function archivePrendaInSheets(codigo) {
-  const response = await fetch("/api/prendas-archive", {
+  const response = await fetch("/api/prendas?action=archive", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

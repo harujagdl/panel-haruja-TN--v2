@@ -1,5 +1,5 @@
 export async function processCorrectionsFileRows({ rows, dryRun }) {
-  const response = await fetch("/api/prendas-import-corrections", {
+  const response = await fetch("/api/prendas-admin?action=import-corrections", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

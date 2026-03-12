@@ -1,5 +1,5 @@
 export async function deletePrendaInSheets(codigo) {
-  const response = await fetch("/api/prendas-delete", {
+  const response = await fetch("/api/prendas?action=delete", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
