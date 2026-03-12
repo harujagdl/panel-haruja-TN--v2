@@ -28,6 +28,7 @@ const GET_ACTIONS = new Set([
   'ventas-resumen',
   'ventas-detalle',
   'ventas-sin-asignar',
+  'ventas-sync',
 ]);
 const POST_ACTIONS = new Set([
   'prendas-create',
@@ -120,7 +121,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'ventas-sync') {
-      if (req.method !== 'POST') return error(res, 405, 'Method not allowed para esta action.');
+      if (!['GET', 'POST'].includes(req.method || '')) return error(res, 405, 'Method not allowed para esta action.');
       return success(res, await syncVentasFromTiendanube());
     }
 

@@ -1,5 +1,11 @@
 {
   "cleanUrls": true,
+  "crons": [
+    {
+      "path": "/api/core?action=ventas-sync",
+      "schedule": "*/10 * * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/ticket/:folio", "destination": "/ticket" },
     { "source": "/apartado/:folio", "destination": "/apartados" },
