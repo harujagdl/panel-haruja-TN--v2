@@ -40,6 +40,7 @@ const POST_ACTIONS = new Set([
   'ventas-config-save',
   'ventas-sync',
   'venta-asignar-vendedora',
+  'assign-seller',
   'ventas-rebuild',
   'tiendanube-webhooks-register',
 ]);
@@ -138,7 +139,7 @@ export default async function handler(req, res) {
         return success(res, await syncVentasFromTiendanube());
       }
 
-      if (action === 'venta-asignar-vendedora') {
+      if (action === 'venta-asignar-vendedora' || action === 'assign-seller') {
         if (req.method !== 'POST') return error(res, 405, 'Method not allowed para esta action.');
         return success(res, await assignVentaSeller(req.body || {}));
       }
