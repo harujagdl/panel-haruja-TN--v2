@@ -610,7 +610,8 @@ Si tienes dudas o quieres liquidarlo, escríbenos por aquí 💛`);
               <a class="public-btn" href="/ticket/${encodeURIComponent(folio)}" target="_blank" rel="noopener">Ver ticket</a>
               <a class="public-btn primary" href="/ticket/${encodeURIComponent(folio)}" target="_blank" rel="noopener">Imprimir / Guardar PDF</a>
               <a class="public-btn" href="${waHref}" target="_blank" rel="noopener">WhatsApp</a>
-              ${pdfPersistido ? `<a class="public-btn" href="${pdfPersistido}" target="_blank" rel="noopener">Ver PDF guardado</a>` : ''}
+              ${pdfPersistido ? `<a class="public-btn" href="${pdfPersistido}" target="_blank" rel="noopener">Ver PDF guardado</a>` : `<a class="public-btn" href="/ticket/${encodeURIComponent(folio)}" target="_blank" rel="noopener">Generar PDF</a>`}
+              ${pdfPersistido ? `<a class="public-btn" href="${pdfPersistido}" target="_blank" rel="noopener" download>Descargar PDF</a>` : ''}
             </div>
           </div>
           <div class="public-grid">

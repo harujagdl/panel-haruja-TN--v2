@@ -12,7 +12,7 @@ import {
   SHEET_HEADERS,
   updateSheetRow,
 } from "../../lib/apartados/sheets.js";
-import { syncApartadoPdf } from "../../lib/apartados/pdf-sync.js";
+import { getApartadoPdf, syncApartadoPdf } from "../../lib/apartados/pdf-sync.js";
 
 function normalize(value) {
   return String(value || "").trim().toUpperCase();
@@ -145,7 +145,7 @@ async function handleGet(req, res) {
   if (!apartado) return res.status(404).json({ ok: false, message: "No se encontró el folio." });
 
   const detail = mapDetail(apartado, itemsRows, abonosRows);
-  const pdfSync = await syncApartadoPdf({ folio: detail.folio, reason: "status_lookup", apartado: detail });
+  const pdfSync = await getApartadoPdf({ folio: detail.folio });
   if (pdfSync?.ok && pdfSync.pdfUrl) detail.pdfDriveUrl = pdfSync.pdfUrl;
 
   return res.status(200).json({
