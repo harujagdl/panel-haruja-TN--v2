@@ -70,6 +70,7 @@
         </div>
         <button id="btnLoad" class="btn-secondary">Ver detalle</button>
         <button id="btnCsv" class="btn-secondary">Export CSV</button>
+        <a href="/api/tiendanube/start" class="btn-secondary" style="display:inline-flex;align-items:center;text-decoration:none;">Conectar Tiendanube</a>
         <button id="btnSync" class="btn-primary">Sincronizar</button>
       </div>
       <div id="status" class="status"></div>
@@ -206,6 +207,19 @@
       }).join("");
     };
 
+
+    const showOAuthMessage = () => {
+      const params = new URLSearchParams(location.search);
+      const oauth = params.get('oauth');
+      if (!oauth) return;
+      const message = params.get('message') || '';
+      if (oauth === 'success') {
+        setStatus('Conexión con Tiendanube completada.', 'info');
+        return;
+      }
+      setStatus(message || 'No se pudo completar la autorización', 'error');
+    };
+
     const loadData = async () => {
       setStatus("Cargando ventas...");
       const month = formatMonth(monthInput.value);
@@ -261,6 +275,7 @@
     monthInput.value = new Date().toISOString().slice(0, 7);
     (async () => {
       try {
+        showOAuthMessage();
         await loadVentasConfig();
       } catch (e) {
         setStatus(`No se pudo cargar configuración: ${e.message || String(e)}`, "error");
