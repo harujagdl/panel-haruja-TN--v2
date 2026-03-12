@@ -31,5 +31,6 @@ export default async function handler(req, res) {
     updatedAt: result.updatedAt || "",
     fileId: result.fileId || "",
     fileName: result.fileName || "",
+    replaced: Boolean(result.replaced),
   });
 }
