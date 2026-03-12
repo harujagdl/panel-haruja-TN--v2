@@ -53,7 +53,7 @@ function error(res, status, message, err) {
 }
 
 function getBaseUrl(reqLike = {}) {
-  const configured = String(process.env.APP_URL || '').trim().replace(/\\/$/, '');
+  const configured = String(process.env.APP_URL || '').trim().replace(/\/$/, '');
   if (configured) return configured;
   const headers = reqLike.headers || {};
   const host = headers['x-forwarded-host'] || headers.host || '';
