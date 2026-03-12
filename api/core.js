@@ -126,7 +126,7 @@ export default async function handler(req, res) {
 
       if (action === 'ventas-detalle') {
         if (req.method !== 'GET') return error(res, 405, 'Method not allowed para esta action.');
-        return success(res, await getVentasDetalle(req.query?.month));
+        return success(res, await getVentasDetalle(req.query?.month, req.query?.search));
       }
 
       if (action === 'ventas-sin-asignar') {
