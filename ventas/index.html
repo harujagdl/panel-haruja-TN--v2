@@ -213,11 +213,18 @@
       const oauth = params.get('oauth');
       if (!oauth) return;
       const message = params.get('message') || '';
+
       if (oauth === 'success') {
         setStatus('Conexión con Tiendanube completada.', 'info');
-        return;
+      } else {
+        setStatus(message || 'No se pudo completar la conexión con Tiendanube.', 'error');
       }
-      setStatus(message || 'No se pudo completar la autorización', 'error');
+
+      params.delete('oauth');
+      params.delete('message');
+      const search = params.toString();
+      const nextUrl = `${location.pathname}${search ? `?${search}` : ''}${location.hash}`;
+      window.history.replaceState({}, '', nextUrl);
     };
 
     const loadData = async () => {
