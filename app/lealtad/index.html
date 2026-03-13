@@ -249,8 +249,9 @@
       card.style.display = 'block';
 
       const rawQr = String(client?.qrLink || '').trim();
-      const qrLink = (!rawQr || rawQr.toLowerCase().includes('run.app'))
-        ? buildPwaQrLink(client)
+      const qrBaseUrl = 'https://paneltn.harujagdl.com';
+      const qrLink = (!rawQr || rawQr.includes('.vercel.app') || rawQr.includes('run.app'))
+        ? `${qrBaseUrl}/tarjeta-lealtad.html?token=${encodeURIComponent(client?.token || '')}`
         : rawQr;
 
       summary.innerHTML = `
