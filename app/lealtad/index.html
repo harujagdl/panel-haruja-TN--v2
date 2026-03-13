@@ -22,6 +22,7 @@
     <div class="segmented" role="tablist" aria-label="Vistas de lealtad">
       <button data-view="panel" class="seg active" type="button">Panel</button>
       <button data-view="db" class="seg" type="button">Clientes registrados</button>
+      <button data-view="promotions" class="seg" type="button">Promociones</button>
     </div>
 
     <main id="view-panel" class="view active">
@@ -125,6 +126,67 @@
         <div id="dbResults" class="results top-12"></div>
       </section>
     </main>
+
+    <main id="view-promotions" class="view">
+      <section class="card">
+        <h2>Promociones</h2>
+        <p class="muted">Crea y administra promociones de temporada para niveles del plan de lealtad.</p>
+        <div id="promoFormMsg" class="muted top-8"></div>
+        <div class="grid2 top-8">
+          <div>
+            <div class="label">Título</div>
+            <input id="promoTitle" placeholder="Promo Primavera Oro y VIP" />
+          </div>
+          <div>
+            <div class="label">Etiqueta / temporada</div>
+            <input id="promoTag" placeholder="Primavera" />
+          </div>
+        </div>
+        <div class="top-8">
+          <div class="label">Descripción</div>
+          <textarea id="promoDescription" rows="3" placeholder="Descripción de la promoción"></textarea>
+        </div>
+        <div class="grid2 top-8">
+          <div>
+            <div class="label">Fecha inicio</div>
+            <input id="promoStartAt" type="datetime-local" />
+          </div>
+          <div>
+            <div class="label">Fecha fin</div>
+            <input id="promoEndAt" type="datetime-local" />
+          </div>
+        </div>
+        <div class="top-8">
+          <div class="label">Niveles aplicables</div>
+          <div class="levels-group">
+            <label><input type="checkbox" name="promoLevels" value="bronce" /> Bronce</label>
+            <label><input type="checkbox" name="promoLevels" value="plata" /> Plata</label>
+            <label><input type="checkbox" name="promoLevels" value="oro" /> Oro</label>
+            <label><input type="checkbox" name="promoLevels" value="vip" /> VIP</label>
+          </div>
+        </div>
+        <div class="grid2 top-8">
+          <label class="switch-like">
+            <input id="promoActive" type="checkbox" checked />
+            <span>Activa</span>
+          </label>
+          <div>
+            <div class="label">Prioridad</div>
+            <input id="promoPriority" type="number" min="0" step="1" value="1" />
+          </div>
+        </div>
+        <div class="row top-12">
+          <button class="btn" id="promoSaveBtn" type="button">Guardar promoción</button>
+          <button class="btn btn-secondary" id="promoCancelBtn" type="button" style="display:none;">Cancelar edición</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Promociones registradas</h2>
+        <div id="promotionsList" class="results top-8"></div>
+      </section>
+    </main>
+
   </div>
 
   <div id="toast"></div>
@@ -144,6 +206,7 @@
       getDocs,
       setDoc,
       updateDoc,
+      deleteDoc,
       query,
       where,
       orderBy,
@@ -174,6 +237,7 @@
       getDocs,
       setDoc,
       updateDoc,
+      deleteDoc,
       query,
       where,
       orderBy,
@@ -195,12 +259,16 @@
 
     const views = {
       panel: document.getElementById('view-panel'),
-      db: document.getElementById('view-db')
+      db: document.getElementById('view-db'),
+      promotions: document.getElementById('view-promotions')
     };
     const segButtons = Array.from(document.querySelectorAll('.seg'));
     let dbLoaded = false;
     let selectedClient = null;
     let saveClientInFlight = false;
+    let promotionsLoaded = false;
+    let promotionsInFlight = false;
+    let editingPromotionId = null;
 
     const toast = (msg, ok = true) => {
       const el = document.getElementById('toast');
@@ -217,6 +285,9 @@
       Object.entries(views).forEach(([name, el]) => el.classList.toggle('active', name === viewName));
       if (viewName === 'db' && !dbLoaded) {
         await loadClientsRegistered();
+      }
+      if (viewName === 'promotions' && !promotionsLoaded) {
+        await loadPromotions();
       }
     };
 
@@ -448,6 +519,167 @@
         toast(e.message, false);
       }
     };
+
+    const toDateTimeLocal = (isoValue) => {
+      if (!isoValue) return '';
+      const d = new Date(isoValue);
+      if (Number.isNaN(d.getTime())) return '';
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
+    const getPromotionFormPayload = () => ({
+      title: document.getElementById('promoTitle').value.trim(),
+      description: document.getElementById('promoDescription').value.trim(),
+      tag: document.getElementById('promoTag').value.trim(),
+      startAt: document.getElementById('promoStartAt').value || null,
+      endAt: document.getElementById('promoEndAt').value || null,
+      levels: Array.from(document.querySelectorAll('input[name="promoLevels"]:checked')).map((el) => el.value),
+      active: document.getElementById('promoActive').checked,
+      priority: Number(document.getElementById('promoPriority').value)
+    });
+
+    const validatePromotionPayload = (payload) => {
+      if (!payload.title) return 'El título es obligatorio.';
+      if (!payload.description) return 'La descripción es obligatoria.';
+      if (!payload.levels.length) return 'Selecciona al menos un nivel.';
+      if (Number.isNaN(payload.priority)) return 'La prioridad debe ser numérica.';
+      if (payload.startAt && Number.isNaN(new Date(payload.startAt).getTime())) return 'Fecha de inicio inválida.';
+      if (payload.endAt && Number.isNaN(new Date(payload.endAt).getTime())) return 'Fecha de fin inválida.';
+      if (payload.startAt && payload.endAt && new Date(payload.endAt) < new Date(payload.startAt)) {
+        return 'La fecha fin no puede ser menor a la fecha inicio.';
+      }
+      return '';
+    };
+
+    const clearPromotionForm = () => {
+      editingPromotionId = null;
+      document.getElementById('promoTitle').value = '';
+      document.getElementById('promoDescription').value = '';
+      document.getElementById('promoTag').value = '';
+      document.getElementById('promoStartAt').value = '';
+      document.getElementById('promoEndAt').value = '';
+      document.getElementById('promoActive').checked = true;
+      document.getElementById('promoPriority').value = '1';
+      document.querySelectorAll('input[name="promoLevels"]').forEach((el) => { el.checked = false; });
+      document.getElementById('promoSaveBtn').textContent = 'Guardar promoción';
+      document.getElementById('promoCancelBtn').style.display = 'none';
+      document.getElementById('promoFormMsg').textContent = '';
+    };
+
+    const fillPromotionForm = (promotion) => {
+      editingPromotionId = promotion.id;
+      document.getElementById('promoTitle').value = promotion.title || '';
+      document.getElementById('promoDescription').value = promotion.description || '';
+      document.getElementById('promoTag').value = promotion.tag || '';
+      document.getElementById('promoStartAt').value = toDateTimeLocal(promotion.startAt);
+      document.getElementById('promoEndAt').value = toDateTimeLocal(promotion.endAt);
+      document.getElementById('promoActive').checked = promotion.active === true;
+      document.getElementById('promoPriority').value = String(Number(promotion.priority || 0));
+      document.querySelectorAll('input[name="promoLevels"]').forEach((el) => {
+        el.checked = Array.isArray(promotion.levels) && promotion.levels.includes(el.value);
+      });
+      document.getElementById('promoSaveBtn').textContent = 'Guardar cambios';
+      document.getElementById('promoCancelBtn').style.display = 'inline-flex';
+      document.getElementById('promoFormMsg').textContent = 'Editando promoción.';
+    };
+
+    const renderPromotions = (items) => {
+      const box = document.getElementById('promotionsList');
+      if (!items.length) {
+        box.innerHTML = '<p class="muted">Aún no hay promociones registradas.</p>';
+        return;
+      }
+      box.innerHTML = '';
+      items.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'promotion-item';
+        const startLabel = item.startAt ? new Date(item.startAt).toLocaleString('es-MX') : 'Sin inicio';
+        const endLabel = item.endAt ? new Date(item.endAt).toLocaleString('es-MX') : 'Sin fin';
+        const levels = Array.isArray(item.levels) ? item.levels.join(', ') : '-';
+        row.innerHTML = `
+          <div class="promotion-head">
+            <div><b>${item.title || '(sin título)'}</b> <span class="pill">${item.tag || 'Sin tag'}</span></div>
+            <div class="muted">${item.active ? 'Activa' : 'Inactiva'} · Prioridad ${Number(item.priority || 0)}</div>
+          </div>
+          <div class="muted">${item.description || '-'}</div>
+          <div class="muted">Vigencia: ${startLabel} → ${endLabel}</div>
+          <div class="muted">Niveles: ${levels}</div>
+          <div class="row top-8">
+            <button class="btn btn-small" data-action="edit">Editar</button>
+            <button class="btn btn-secondary btn-small" data-action="toggle">${item.active ? 'Desactivar' : 'Activar'}</button>
+            <button class="btn btn-small btn-danger" data-action="delete">Eliminar</button>
+          </div>
+        `;
+
+        row.querySelector('[data-action="edit"]').onclick = () => fillPromotionForm(item);
+        row.querySelector('[data-action="toggle"]').onclick = async () => {
+          try {
+            await window.loyaltyService.togglePromotion(item.id, !item.active);
+            toast('Estado actualizado');
+            await loadPromotions();
+          } catch (e) {
+            toast(e.message, false);
+          }
+        };
+        row.querySelector('[data-action="delete"]').onclick = async () => {
+          if (!confirm('¿Eliminar esta promoción?')) return;
+          try {
+            await window.loyaltyService.deletePromotion(item.id);
+            if (editingPromotionId === item.id) clearPromotionForm();
+            toast('Promoción eliminada');
+            await loadPromotions();
+          } catch (e) {
+            toast(e.message, false);
+          }
+        };
+
+        box.appendChild(row);
+      });
+    };
+
+    const loadPromotions = async () => {
+      try {
+        const { items } = await window.loyaltyService.listPromotions();
+        promotionsLoaded = true;
+        renderPromotions(items);
+      } catch (e) {
+        toast(e.message, false);
+      }
+    };
+
+    document.getElementById('promoSaveBtn').onclick = async () => {
+      if (promotionsInFlight) return;
+      const payload = getPromotionFormPayload();
+      const error = validatePromotionPayload(payload);
+      const msg = document.getElementById('promoFormMsg');
+      if (error) {
+        msg.textContent = error;
+        return;
+      }
+
+      promotionsInFlight = true;
+      msg.textContent = 'Guardando...';
+
+      try {
+        if (editingPromotionId) {
+          await window.loyaltyService.updatePromotion({ id: editingPromotionId, ...payload });
+          toast('Promoción actualizada');
+        } else {
+          await window.loyaltyService.createPromotion(payload);
+          toast('Promoción creada');
+        }
+        clearPromotionForm();
+        await loadPromotions();
+      } catch (e) {
+        msg.textContent = e.message;
+        toast(e.message, false);
+      } finally {
+        promotionsInFlight = false;
+      }
+    };
+
+    document.getElementById('promoCancelBtn').onclick = () => clearPromotionForm();
 
     segButtons.forEach((btn) => {
       btn.addEventListener('click', () => setView(btn.dataset.view));
