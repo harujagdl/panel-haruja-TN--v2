@@ -12,6 +12,27 @@
   const safeLower = (value) => normalizeText(value).toLowerCase();
 
   const nowIso = () => new Date().toISOString();
+  const FINAL_BASE_URL = 'https://paneltn.harujagdl.com';
+
+  const normalizeLevelKey = (value) => safeLower(value).replace(/\s+/g, '_');
+
+  const buildCardLink = (token) => `${FINAL_BASE_URL}/tarjeta-lealtad.html?token=${encodeURIComponent(normalizeText(token))}`;
+
+  const ensureFinalQrLink = (token, currentQrLink = '') => {
+    const clean = normalizeText(currentQrLink);
+    if (!clean || clean.includes('.vercel.app') || clean.includes('run.app')) {
+      return buildCardLink(token);
+    }
+    return clean;
+  };
+
+  const toDate = (value) => {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (typeof value?.toDate === 'function') return value.toDate();
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
 
   const buildSearchIndex = ({ clientId = '', name = '', phone = '', instagram = '', email = '' }) => {
     return [
@@ -56,14 +77,100 @@
     email: data.email || '',
     points: Number(data.points || 0),
     level: data.level || 'Bronce',
+    levelKey: data.levelKey || normalizeLevelKey(data.level || 'Bronce'),
     totalPurchases: Number(data.totalPurchases || 0),
     visits: Number(data.visits || 0),
     token: data.token || '',
-    qrLink: data.qrLink || '',
+    qrLink: ensureFinalQrLink(data.token || '', data.qrLink || ''),
     active: data.active !== false,
     createdAt: data.createdAt || null,
     updatedAt: data.updatedAt || null
   });
+
+  const getLevels = async () => {
+    const fb = ensureFirebase();
+    const snap = await fb.getDocs(fb.collection(fb.db, 'loyalty_levels'));
+    const items = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((item) => item.active !== false)
+      .map((item) => ({
+        ...item,
+        key: normalizeLevelKey(item.key || item.name || item.id),
+        name: normalizeText(item.name || item.id || ''),
+        minPoints: Number(item.minPoints || 0),
+        maxPoints: item.maxPoints == null ? null : Number(item.maxPoints),
+        priority: Number(item.priority || 9999),
+        benefits: Array.isArray(item.benefits) ? item.benefits : []
+      }))
+      .sort((a, b) => (a.priority - b.priority) || (a.minPoints - b.minPoints));
+
+    return items;
+  };
+
+  const resolveLevel = (points = 0, levels = []) => {
+    const safePoints = Number(points || 0);
+    const match = levels.find((level) => {
+      const minOk = safePoints >= Number(level.minPoints || 0);
+      const maxValue = level.maxPoints;
+      const maxOk = maxValue == null || Number.isNaN(Number(maxValue)) || safePoints <= Number(maxValue);
+      return minOk && maxOk;
+    });
+
+    if (match) return match;
+    return levels[0] || null;
+  };
+
+  const isPromotionActiveNow = (promo, now = new Date()) => {
+    if (!promo || promo.active === false) return false;
+    const start = toDate(promo.startAt);
+    const end = toDate(promo.endAt);
+    if (start && now < start) return false;
+    if (end && now > end) return false;
+    return true;
+  };
+
+  const getActivePromotions = async () => {
+    const fb = ensureFirebase();
+    const now = new Date();
+    const snap = await fb.getDocs(fb.collection(fb.db, 'loyalty_promotions'));
+
+    const items = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((item) => isPromotionActiveNow(item, now))
+      .map((item) => ({
+        ...item,
+        priority: Number(item.priority || 9999),
+        levels: Array.isArray(item.levels) ? item.levels.map((v) => normalizeLevelKey(v)) : [],
+        startAtDate: toDate(item.startAt),
+        endAtDate: toDate(item.endAt)
+      }))
+      .filter((item) => item.levels.length > 0)
+      .sort((a, b) => {
+        const byPriority = a.priority - b.priority;
+        if (byPriority) return byPriority;
+        return (a.startAtDate?.getTime() || 0) - (b.startAtDate?.getTime() || 0);
+      });
+
+    return items;
+  };
+
+  const getPromotionsForLevel = async (levelKey) => {
+    const cleanLevel = normalizeLevelKey(levelKey);
+    if (!cleanLevel) return [];
+    const promos = await getActivePromotions();
+    return promos.filter((promo) => promo.levels.includes(cleanLevel));
+  };
+
+  const recomputeClientLevel = async (client = {}) => {
+    const levels = await getLevels();
+    const resolved = resolveLevel(client.points, levels);
+    return {
+      ...client,
+      level: resolved?.name || client.level || '',
+      levelKey: resolved?.key || normalizeLevelKey(client.level || ''),
+      levelConfig: resolved || null
+    };
+  };
 
   const getConfig = async () => {
     const fb = ensureFirebase();
@@ -223,8 +330,9 @@
     const clientId = await makeClientId();
     const token = makeToken();
     const welcomePoints = Number(config.welcomePoints || 0);
-    const qrBaseUrl = 'https://paneltn.harujagdl.com';
-    const qrLink = `${qrBaseUrl}/tarjeta-lealtad.html?token=${encodeURIComponent(token)}`;
+    const levels = await getLevels();
+    const resolvedLevel = resolveLevel(welcomePoints, levels);
+    const qrLink = buildCardLink(token);
 
     const docRef = await fb.addDoc(fb.collection(fb.db, 'loyalty_customers'), {
       clientId,
@@ -233,7 +341,8 @@
       instagram,
       email,
       points: welcomePoints,
-      level: 'Bronce',
+      level: resolvedLevel?.name || 'Bronce',
+      levelKey: resolvedLevel?.key || 'bronce',
       totalPurchases: 0,
       visits: 0,
       token,
@@ -289,6 +398,7 @@
       phone,
       instagram,
       email,
+      qrLink: ensureFinalQrLink(current.token, current.qrLink),
       searchIndex: buildSearchIndex({
         clientId,
         name,
@@ -323,8 +433,14 @@
 
     const ref = fb.doc(fb.db, 'loyalty_customers', current.id);
 
+    const nextPoints = Number(current.points || 0) + pointsEarned;
+    const recomputed = await recomputeClientLevel({ ...current, points: nextPoints });
+
     await fb.updateDoc(ref, {
-      points: Number(current.points || 0) + pointsEarned,
+      points: nextPoints,
+      level: recomputed.level,
+      levelKey: recomputed.levelKey,
+      qrLink: ensureFinalQrLink(current.token, current.qrLink),
       totalPurchases: Number(current.totalPurchases || 0) + amount,
       updatedAt: nowIso(),
       serverUpdatedAt: fb.serverTimestamp()
@@ -365,8 +481,14 @@
 
     const ref = fb.doc(fb.db, 'loyalty_customers', current.id);
 
+    const nextPoints = Number(current.points || 0) - rewardPts;
+    const recomputed = await recomputeClientLevel({ ...current, points: nextPoints });
+
     await fb.updateDoc(ref, {
-      points: Number(current.points || 0) - rewardPts,
+      points: nextPoints,
+      level: recomputed.level,
+      levelKey: recomputed.levelKey,
+      qrLink: ensureFinalQrLink(current.token, current.qrLink),
       updatedAt: nowIso(),
       serverUpdatedAt: fb.serverTimestamp()
     });
@@ -426,8 +548,14 @@
 
     const ref = fb.doc(fb.db, 'loyalty_customers', current.id);
 
+    const nextPoints = Number(current.points || 0) + points;
+    const recomputed = await recomputeClientLevel({ ...current, points: nextPoints });
+
     await fb.updateDoc(ref, {
-      points: Number(current.points || 0) + points,
+      points: nextPoints,
+      level: recomputed.level,
+      levelKey: recomputed.levelKey,
+      qrLink: ensureFinalQrLink(current.token, current.qrLink),
       updatedAt: nowIso(),
       serverUpdatedAt: fb.serverTimestamp()
     });
@@ -486,6 +614,13 @@
     addPurchase,
     redeemReward,
     redeem,
-    addVisit
+    addVisit,
+    getLevels,
+    resolveLevel,
+    getActivePromotions,
+    getPromotionsForLevel,
+    recomputeClientLevel,
+    ensureFinalQrLink,
+    buildCardLink
   };
 })(window);

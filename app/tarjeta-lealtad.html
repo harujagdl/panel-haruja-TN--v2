@@ -5,84 +5,159 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tarjeta de Lealtad Haruja</title>
   <style>
-    body{font-family:Arial,sans-serif;background:#faf6f1;color:#383234;min-height:100vh;margin:0}
-    .page{max-width:420px;width:92%;margin:24px auto}
-    .page-header-wrapper { position: relative; }
-    .panel-back-btn {
-      position: absolute;
-      top: 20px;
-      right: 24px;
-      padding: 8px 16px;
-      background: #f3f4f6;
-      border-radius: 999px;
-      font-size: 14px;
-      font-weight: 600;
-      color: #2563eb;
-      text-decoration: none;
-      border: 1px solid #e5e7eb;
-      transition: all .2s ease;
+    :root {
+      --olive: #A7B59E;
+      --brown: #383234;
+      --beige: #FAF6F1;
+      --card: #fff;
+      --muted: #6b5f58;
     }
-    .panel-back-btn:hover { background: #e5e7eb; }
-    .topbar{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      margin: 16px 0 12px;
-    }
-    .brandlink{ display:flex; align-items:center; text-decoration:none; }
-    .brandlink img{ height:36px; width:auto; display:block; }
-    .card{background:#fff;border:1px solid #e7ddd3;border-radius:14px;padding:20px;max-width:420px;width:100%}
-    h1{margin:0 0 10px;font-size:22px}
-    .pill{background:#d6c4b3;padding:4px 10px;border-radius:999px;display:inline-block}
-    ul{padding-left:18px}
-    @media (max-width: 640px) {
-      .panel-back-btn {
-        top: 14px;
-        right: 16px;
-        font-size: 13px;
-        padding: 6px 12px;
-      }
-    }
+    body { font-family: Arial, sans-serif; background: var(--beige); color: var(--brown); min-height: 100vh; margin: 0; }
+    .page { max-width: 520px; width: 92%; margin: 20px auto; }
+    .topbar { display: flex; justify-content: center; margin-bottom: 12px; }
+    .brandlink img { height: 42px; width: auto; }
+    .card { background: var(--card); border: 1px solid #e7ddd3; border-radius: 16px; padding: 18px; box-shadow: 0 6px 24px rgba(56,50,52,.08); }
+    .header { padding: 14px; border-radius: 12px; background: linear-gradient(120deg, var(--olive), #c7d2c1); margin-bottom: 14px; }
+    h1 { margin: 0; font-size: 22px; }
+    .muted { color: var(--muted); }
+    .pill { display: inline-block; background: #e9efe5; color: var(--brown); border: 1px solid #ccd7c5; border-radius: 999px; padding: 4px 10px; font-weight: 600; }
+    .section { margin-top: 14px; }
+    ul { margin: 8px 0 0; padding-left: 18px; }
+    .promo { border: 1px solid #e6e2de; border-radius: 10px; padding: 10px; margin-top: 8px; background: #fff; }
+    .tag { display: inline-block; font-size: 12px; font-weight: 700; color: #2f3b2f; background: #e4ecdf; border-radius: 999px; padding: 3px 8px; margin-bottom: 6px; }
+    .error { border: 1px solid #f1d3d3; background: #fff3f3; border-radius: 12px; padding: 12px; }
   </style>
 </head>
 <body>
-  <div class="page page-header-wrapper">
-    <a href="https://paneltb.harujagdl.com/#/panel" class="panel-back-btn">← Volver al panel</a>
+  <div class="page">
     <div class="topbar">
-      <a class="brandlink" href="https://paneltb.harujagdl.com/#/panel">
+      <a class="brandlink" href="https://paneltn.harujagdl.com/lealtad" aria-label="Haruja">
         <img src="assets/haruja-logo.png" alt="HarujaGdl">
       </a>
     </div>
-  <div class="card">
-    <h1>Tarjeta de Lealtad</h1>
-    <div id="content">Cargando...</div>
+    <div class="card">
+      <div class="header">
+        <h1>Tarjeta de Lealtad</h1>
+      </div>
+      <div id="content" class="muted">Cargando datos…</div>
+    </div>
   </div>
-  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      serverTimestamp,
+      doc,
+      getDoc,
+      getDocs,
+      setDoc,
+      updateDoc,
+      query,
+      where,
+      orderBy,
+      limit
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB6vH_TI5Wh-hYHXE64coVobuI3vzn9D1Q",
+      authDomain: "haruja-loyalty.firebaseapp.com",
+      projectId: "haruja-loyalty",
+      storageBucket: "haruja-loyalty.firebasestorage.app",
+      messagingSenderId: "229949615835",
+      appId: "1:229949615835:web:dfcd3e81e52c916a2aa6fe",
+      measurementId: "G-LKVRFX04CL"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    window.loyaltyFirebase = {
+      app,
+      db,
+      collection,
+      addDoc,
+      serverTimestamp,
+      doc,
+      getDoc,
+      getDocs,
+      setDoc,
+      updateDoc,
+      query,
+      where,
+      orderBy,
+      limit
+    };
+  </script>
+
   <script src="/shared/loyaltyService.js"></script>
   <script>
     const token = new URLSearchParams(location.search).get('token');
     const content = document.getElementById('content');
-    const rewardLine = (r) => `<li>${r.label} ${r.available ? '✅' : `(faltan ${r.missingPoints} pts)`}</li>`;
+
+    const renderError = (message) => {
+      content.innerHTML = `<div class="error"><b>No pudimos cargar tu tarjeta.</b><br><span class="muted">${message}</span></div>`;
+    };
+
+    const renderPromotions = (items = []) => {
+      if (!items.length) return '<div class="muted">No hay promociones activas para tu nivel por ahora.</div>';
+      return items.map((promo) => `
+        <div class="promo">
+          ${promo.tag ? `<div class="tag">${promo.tag}</div>` : ''}
+          <div><b>${promo.title || 'Promoción'}</b></div>
+          <div class="muted">${promo.description || ''}</div>
+        </div>
+      `).join('');
+    };
 
     const run = async () => {
-      if (!token) { content.textContent = 'Falta token.'; return; }
+      if (!token) {
+        renderError('Token no encontrado en el enlace QR.');
+        return;
+      }
+
       try {
         const data = await window.loyaltyService.getCustomer({ token });
-        window.loyaltyService.addVisit(token).catch(() => null);
-        const c = data.clientPublic || data.client || data.customer || {};
+        const customer = data.clientPublic || data.client || data.customer;
+        if (!customer) {
+          renderError('Cliente no encontrado o tarjeta inválida.');
+          return;
+        }
+
+        const customerWithLevel = typeof window.loyaltyService.recomputeClientLevel === 'function'
+          ? await window.loyaltyService.recomputeClientLevel(customer)
+          : customer;
+
+        const promotions = typeof window.loyaltyService.getPromotionsForLevel === 'function'
+          ? await window.loyaltyService.getPromotionsForLevel(customerWithLevel.levelKey || customerWithLevel.level)
+          : [];
+
+        const benefits = Array.isArray(customerWithLevel?.levelConfig?.benefits) ? customerWithLevel.levelConfig.benefits : [];
+
         content.innerHTML = `
-          <p><b>${c.name}</b></p>
-          <p>Nivel: <span class="pill">${c.level}</span></p>
-          <p>Puntos: <b>${c.points}</b></p>
-          <p>Compras acumuladas: <b>$${Number(c.totalPurchases||0).toFixed(2)}</b></p>
-          <p>Recompensas:</p>
-          <ul>${(c.rewardOptions||[]).map(rewardLine).join('')}</ul>
+          <div><b>${customerWithLevel.name || 'Cliente Haruja'}</b> <span class="pill">${customerWithLevel.clientId || ''}</span></div>
+          <div class="section">Puntos actuales: <b>${Number(customerWithLevel.points || 0)}</b></div>
+          <div class="section">Nivel actual: <span class="pill">${customerWithLevel.level || 'Sin nivel'}</span></div>
+
+          <div class="section">
+            <div><b>Beneficios de tu nivel</b></div>
+            ${benefits.length ? `<ul>${benefits.map((item) => `<li>${item}</li>`).join('')}</ul>` : '<div class="muted">Aún no hay beneficios configurados para este nivel.</div>'}
+          </div>
+
+          <div class="section">
+            <div><b>Promociones activas</b></div>
+            ${renderPromotions(promotions)}
+          </div>
         `;
-      } catch (e) {
-        content.textContent = e.message;
+
+        window.loyaltyService.addVisit(token).catch(() => null);
+      } catch (error) {
+        renderError(error?.message || 'Intenta nuevamente más tarde.');
       }
     };
+
     run();
   </script>
 </body>

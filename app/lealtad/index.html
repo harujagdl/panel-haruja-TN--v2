@@ -184,7 +184,7 @@
   </script>
 
   <script>
-    const PWA_PUBLIC_BASE_URL = 'https://haruja-panel.vercel.app';
+    const PWA_PUBLIC_BASE_URL = 'https://paneltn.harujagdl.com';
 
     const api = async (action, payload = {}, options = {}) => {
       const method = options.method || 'GET';
@@ -226,6 +226,26 @@
       return `${PWA_PUBLIC_BASE_URL}/tarjeta-lealtad.html?token=${encodeURIComponent(token)}`;
     };
 
+    const getTokenFromQrLink = (qrLink = '') => {
+      try {
+        const url = new URL(String(qrLink || '').trim());
+        return url.searchParams.get('token') || '';
+      } catch (_err) {
+        return '';
+      }
+    };
+
+    const renderLevelBenefits = (client) => {
+      const benefits = Array.isArray(client?.levelConfig?.benefits) ? client.levelConfig.benefits : [];
+      if (!benefits.length) return '<div class="muted">Beneficios de nivel no definidos</div>';
+      return `<ul>${benefits.map((item) => `<li>${item}</li>`).join('')}</ul>`;
+    };
+
+    const renderPromotions = (promotions = []) => {
+      if (!promotions.length) return '<div class="muted">Sin promociones activas para este nivel</div>';
+      return `<ul>${promotions.map((promo) => `<li><b>${promo.title || 'Promoción'}</b>${promo.tag ? ` · <span class="pill">${promo.tag}</span>` : ''}<br>${promo.description || ''}</li>`).join('')}</ul>`;
+    };
+
     function renderQrInto(el, text) {
       el.innerHTML = '';
       const qr = qrcode(0, 'M');
@@ -242,23 +262,46 @@
       }
     }
 
-    const renderClient = (client) => {
+    const renderClient = async (client) => {
       selectedClient = client;
       const summary = document.getElementById('clientSummary');
       const card = document.getElementById('card-selected');
       card.style.display = 'block';
 
       const rawQr = String(client?.qrLink || '').trim();
-      const qrBaseUrl = 'https://paneltn.harujagdl.com';
+      const rawToken = String(client?.token || '').trim();
+      const fallbackToken = rawToken || getTokenFromQrLink(rawQr);
       const qrLink = (!rawQr || rawQr.includes('.vercel.app') || rawQr.includes('run.app'))
-        ? `${qrBaseUrl}/tarjeta-lealtad.html?token=${encodeURIComponent(client?.token || '')}`
+        ? buildPwaQrLink({ token: fallbackToken })
         : rawQr;
 
+      let enhancedClient = { ...client, qrLink };
+      let promotions = [];
+
+      try {
+        if (typeof window.loyaltyService.recomputeClientLevel === 'function') {
+          enhancedClient = await window.loyaltyService.recomputeClientLevel(enhancedClient);
+        }
+        if (typeof window.loyaltyService.getPromotionsForLevel === 'function') {
+          promotions = await window.loyaltyService.getPromotionsForLevel(enhancedClient.levelKey || enhancedClient.level);
+        }
+      } catch (_err) {
+        promotions = [];
+      }
+
       summary.innerHTML = `
-        <div><b>${client.name}</b> <span class="pill">${client.clientId}</span></div>
-        <div class="muted">Puntos: <b>${client.points}</b> · Nivel: <b>${client.level}</b> · Compras: <b>$${Number(client.totalPurchases || 0).toFixed(2)}</b></div>
-        <div class="notice mono">Token: <code>${client.token || '-'}</code></div>
+        <div><b>${enhancedClient.name}</b> <span class="pill">${enhancedClient.clientId}</span></div>
+        <div class="muted">Puntos: <b>${enhancedClient.points}</b> · Nivel: <b>${enhancedClient.level}</b> · Compras: <b>$${Number(enhancedClient.totalPurchases || 0).toFixed(2)}</b></div>
+        <div class="notice mono">Token: <code>${enhancedClient.token || '-'}</code></div>
         <div class="notice mono">QR: <a href="${qrLink}" target="_blank" rel="noopener">${qrLink}</a></div>
+        <div class="top-8">
+          <div><b>Beneficios del nivel</b></div>
+          ${renderLevelBenefits(enhancedClient)}
+        </div>
+        <div class="top-8">
+          <div><b>Promociones activas</b></div>
+          ${renderPromotions(promotions)}
+        </div>
         <div class="qr-section top-8">
           <div class="qr-wrap"><div id="qrPreview" class="qr" aria-label="QR"></div></div>
           <div class="qr-actions">
@@ -268,7 +311,8 @@
       `;
 
       renderQrInto(document.getElementById('qrPreview'), qrLink);
-      fillEditForm(client);
+      fillEditForm(enhancedClient);
+      selectedClient = enhancedClient;
 
       const copyBtn = document.getElementById('copyQrBtn');
       copyBtn.onclick = async () => {
@@ -346,7 +390,7 @@
         };
         const { client } = await window.loyaltyService.registerClient(payload);
         toast('Cliente registrado');
-        renderClient(client);
+        await renderClient(client);
       } catch (e) {
         toast(e.message, false);
       }
@@ -401,7 +445,7 @@
         });
 
         selectedClient = { ...selectedClient, ...client };
-        renderClient(selectedClient);
+        await renderClient(selectedClient);
         toggleEditForm(false);
 
         if (dbLoaded) await loadClientsRegistered();
@@ -427,7 +471,7 @@
         };
         const { client } = await window.loyaltyService.addPurchase(payload);
         toast('Compra registrada');
-        renderClient({ ...selectedClient, ...client });
+        await renderClient({ ...selectedClient, ...client });
       } catch (e) {
         toast(e.message, false);
       }
@@ -443,7 +487,7 @@
         };
         const { client } = await window.loyaltyService.redeemReward(payload);
         toast('Canje aplicado');
-        renderClient({ ...selectedClient, ...client });
+        await renderClient({ ...selectedClient, ...client });
       } catch (e) {
         toast(e.message, false);
       }
