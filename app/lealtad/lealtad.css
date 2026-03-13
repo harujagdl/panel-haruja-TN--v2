@@ -87,3 +87,10 @@ input:focus,select:focus,textarea:focus{border-color:rgba(167,181,158,.55);box-s
 @media (max-width:520px){
   .search-row{display:grid;grid-template-columns:1fr;gap:10px}
 }
+
+.level-item{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff;display:grid;gap:6px}
+.level-head{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.level-color-dot{display:inline-block;width:12px;height:12px;border-radius:999px;border:1px solid rgba(56,50,52,.2);vertical-align:middle;margin:0 6px}
+.benefits-list{margin:6px 0 0 18px;padding:0;color:#383234;font-size:14px}
+.benefits-list li{margin:2px 0}
+.level-active-toggle{align-self:end}

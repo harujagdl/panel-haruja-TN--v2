@@ -169,6 +169,32 @@
       line-height: 1.45;
     }
 
+    .info-box{
+      margin-top: 12px;
+      text-align: left;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(167,181,158,.1);
+    }
+
+    .info-box h3{
+      margin: 0 0 8px;
+      font-size: 13px;
+      color: #383234;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .info-box ul{
+      margin: 0;
+      padding-left: 18px;
+      color: var(--text);
+      font-size: 13px;
+      display: grid;
+      gap: 4px;
+    }
+
     .badge{
       display:inline-flex;
       align-items:center;
@@ -220,6 +246,16 @@
 
       <div class="qrtext" id="qrTexto" style="display:none;">
         Escanéame en caja para buscar tu cuenta rápidamente en el sistema de lealtad 🔎
+      </div>
+
+      <div class="info-box" id="beneficiosBox" style="display:none;">
+        <h3>Beneficios del nivel</h3>
+        <ul id="beneficiosNivel"></ul>
+      </div>
+
+      <div class="info-box" id="promosBox" style="display:none;">
+        <h3>Promociones activas</h3>
+        <ul id="promosNivel"></ul>
       </div>
 
       <button class="btn" id="btnRefresh" type="button">Actualizar datos</button>
@@ -321,8 +357,38 @@
       document.getElementById("qrBox").style.display = "none";
       document.getElementById("qrTexto").style.display = "none";
       document.getElementById("tokenBadge").style.display = "none";
+      document.getElementById('beneficiosBox').style.display = 'none';
+      document.getElementById('promosBox').style.display = 'none';
 
       setStatus(msg || "No encontramos tu tarjeta, revisa el link con Haruja.", true);
+    }
+
+
+    function fillList(listId, values = []) {
+      const ul = document.getElementById(listId);
+      ul.innerHTML = values.map((value) => `<li>${value}</li>`).join('');
+    }
+
+    function setLevelExtras(client, promotions = []) {
+      const benefits = Array.isArray(client?.levelBenefits) ? client.levelBenefits : [];
+      const promoLabels = promotions.map((item) => item.title).filter(Boolean);
+
+      const beneficiosBox = document.getElementById('beneficiosBox');
+      const promosBox = document.getElementById('promosBox');
+
+      if (benefits.length) {
+        fillList('beneficiosNivel', benefits);
+        beneficiosBox.style.display = 'block';
+      } else {
+        beneficiosBox.style.display = 'none';
+      }
+
+      if (promoLabels.length) {
+        fillList('promosNivel', promoLabels);
+        promosBox.style.display = 'block';
+      } else {
+        promosBox.style.display = 'none';
+      }
     }
 
     function loadScript(src) {
@@ -363,6 +429,17 @@
         document.getElementById("visitasCliente").textContent = Number(c.visits || 0);
         document.getElementById("nivelCliente").textContent = c.level || "Nuevo";
         document.getElementById("comprasCliente").textContent = money(c.totalPurchases || 0);
+
+        let promotions = [];
+        if (c.levelId) {
+          try {
+            const promoResponse = await window.loyaltyService.getPromotionsForLevel(c.levelId);
+            promotions = promoResponse.items || [];
+          } catch (_err) {
+            promotions = [];
+          }
+        }
+        setLevelExtras(c, promotions);
 
         const pwaLink = `${DOMAIN_BASE}/tarjeta-lealtad.html?token=${encodeURIComponent(token)}`;
         setQrFromLink(pwaLink);
