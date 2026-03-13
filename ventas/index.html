@@ -56,6 +56,7 @@
     table { width:100%; border-collapse: collapse; font-size: 13px; background:#fff; margin-top: 14px; }
     th, td { padding: 10px; border-bottom: 1px solid #e5e7eb; text-align:left; vertical-align: middle; }
     .badge { font-size: 12px; border-radius: 999px; padding: 4px 8px; background: #fff3cd; color: #92400e; border: 1px solid #fde68a; }
+    .ticket-tech { display:block; font-size: 11px; color:#6b7280; margin-top: 2px; }
     @media (max-width: 900px) { .stats { grid-template-columns: 1fr; } }
     @media (max-width: 640px) {
       .panel-back-btn { top: 14px; right: 16px; font-size: 13px; padding: 6px 12px; }
@@ -162,6 +163,7 @@
     const formatDate = (value) => value ? new Date(value).toLocaleDateString("es-MX") : "—";
     const formatMonth = (value) => String(value || "").slice(0, 7);
     const ticketText = (venta) => venta.ticket_label || (venta.ticket_number ? `#${venta.ticket_number}` : null) || venta.order_id || "-";
+    const ticketCellHtml = (venta) => `${ticketText(venta)}<span class="ticket-tech">order_id: ${venta.order_id || "-"}</span>`;
 
     const paymentStatusEs = {
       paid: "Pagado",
@@ -274,7 +276,7 @@
         return `
           <tr data-order-id="${venta.order_id}">
             <td>${formatDate(venta.created_at)}</td>
-            <td>${ticketText(venta)}</td>
+            <td>${ticketCellHtml(venta)}</td>
             <td>${venta.customer_name || "—"}</td>
             <td>${formatMoney(venta.total)}</td>
             <td>${formatEstado(venta)}</td>
