@@ -1,209 +1,252 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tarjeta de Lealtad Haruja</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #faf6f1;
+      color: #383234;
+      min-height: 100vh;
+      margin: 0;
+    }
 
-<title>Tarjeta de Lealtad Haruja</title>
+    .page {
+      max-width: 420px;
+      width: 92%;
+      margin: 24px auto;
+    }
 
-<style>
+    .page-header-wrapper {
+      position: relative;
+    }
 
-body{
-  font-family: Arial, sans-serif;
-  background:#faf6f1;
-  color:#383234;
-  min-height:100vh;
-  margin:0;
-}
+    .panel-back-btn {
+      position: absolute;
+      top: 20px;
+      right: 24px;
+      padding: 8px 16px;
+      background: #f3f4f6;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #2563eb;
+      text-decoration: none;
+      border: 1px solid #e5e7eb;
+      transition: all .2s ease;
+    }
 
-.page{
-  max-width:420px;
-  width:92%;
-  margin:24px auto;
-}
+    .panel-back-btn:hover {
+      background: #e5e7eb;
+    }
 
-.page-header-wrapper{
-  position:relative;
-}
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 16px 0 12px;
+    }
 
-.panel-back-btn{
-  position:absolute;
-  top:20px;
-  right:24px;
-  padding:8px 16px;
-  background:#f3f4f6;
-  border-radius:999px;
-  font-size:14px;
-  font-weight:600;
-  color:#2563eb;
-  text-decoration:none;
-  border:1px solid #e5e7eb;
-}
+    .brandlink {
+      display: flex;
+      align-items: center;
+      text-decoration: none;
+    }
 
-.topbar{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  margin:16px 0 12px;
-}
+    .brandlink img {
+      height: 36px;
+      width: auto;
+      display: block;
+    }
 
-.brandlink img{
-  height:36px;
-}
+    .card {
+      background: #fff;
+      border: 1px solid #e7ddd3;
+      border-radius: 14px;
+      padding: 20px;
+      max-width: 420px;
+      width: 100%;
+    }
 
-.card{
-  background:#fff;
-  border:1px solid #e7ddd3;
-  border-radius:14px;
-  padding:22px;
-}
+    h1 {
+      margin: 0 0 10px;
+      font-size: 22px;
+    }
 
-h1{
-  margin:0 0 12px;
-  font-size:22px;
-}
+    .pill {
+      background: #d6c4b3;
+      padding: 4px 10px;
+      border-radius: 999px;
+      display: inline-block;
+    }
 
-.pill{
-  background:#d6c4b3;
-  padding:4px 10px;
-  border-radius:999px;
-  font-size:13px;
-}
+    .muted {
+      color: #6b7280;
+    }
 
-ul{
-  padding-left:18px;
-}
+    .section-title {
+      margin-top: 16px;
+      margin-bottom: 8px;
+      font-size: 15px;
+      font-weight: 700;
+    }
 
-.stat{
-  margin:6px 0;
-}
+    ul {
+      padding-left: 18px;
+      margin-top: 8px;
+      margin-bottom: 0;
+    }
 
-.loading{
-  opacity:.7;
-}
+    .empty {
+      color: #6b7280;
+      font-size: 14px;
+    }
 
-</style>
+    @media (max-width: 640px) {
+      .panel-back-btn {
+        top: 14px;
+        right: 16px;
+        font-size: 13px;
+        padding: 6px 12px;
+      }
+    }
+  </style>
 </head>
-
 <body>
+  <div class="page page-header-wrapper">
+    <a href="https://paneltn.harujagdl.com/#/panel" class="panel-back-btn">← Volver al panel</a>
 
-<div class="page page-header-wrapper">
+    <div class="topbar">
+      <a class="brandlink" href="https://paneltn.harujagdl.com/#/panel">
+        <img
+          src="/assets/haruja-logo.png"
+          alt="HarujaGdl"
+          onerror="this.onerror=null;this.src='/app/assets/haruja-logo.png';"
+        />
+      </a>
+    </div>
 
-<a href="https://paneltn.harujagdl.com/#/panel" class="panel-back-btn">
-← Volver al panel
-</a>
+    <div class="card">
+      <h1>Tarjeta de Lealtad</h1>
+      <div id="content">Cargando...</div>
+    </div>
+  </div>
 
-<div class="topbar">
-<a class="brandlink" href="https://paneltn.harujagdl.com/#/panel">
-<img src="/assets/haruja-logo.png" alt="HarujaGdl">
-</a>
-</div>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      serverTimestamp,
+      doc,
+      getDoc,
+      getDocs,
+      setDoc,
+      updateDoc,
+      query,
+      where,
+      orderBy,
+      limit
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-<div class="card">
+    const firebaseConfig = {
+      apiKey: "AIzaSyB6vH_TI5Wh-hYHXE64coVobuI3vzn9D1Q",
+      authDomain: "haruja-loyalty.firebaseapp.com",
+      projectId: "haruja-loyalty",
+      storageBucket: "haruja-loyalty.firebasestorage.app",
+      messagingSenderId: "229949615835",
+      appId: "1:229949615835:web:dfcd3e81e52c916a2aa6fe",
+      measurementId: "G-LKVRFX04CL"
+    };
 
-<h1>Tarjeta de Lealtad</h1>
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-<div id="content" class="loading">
-Cargando tarjeta...
-</div>
+    window.loyaltyFirebase = {
+      app,
+      db,
+      collection,
+      addDoc,
+      serverTimestamp,
+      doc,
+      getDoc,
+      getDocs,
+      setDoc,
+      updateDoc,
+      query,
+      where,
+      orderBy,
+      limit
+    };
 
-</div>
-</div>
+    console.log("[tarjeta-lealtad] Firebase conectado:", firebaseConfig.projectId);
+  </script>
 
-<!-- loyalty service -->
-<script src="/shared/loyaltyService.js"></script>
+  <script src="/shared/loyaltyService.js"></script>
 
-<script>
+  <script>
+    const token = new URLSearchParams(location.search).get("token");
+    const content = document.getElementById("content");
 
-const params = new URLSearchParams(location.search);
-const token = params.get('token');
+    const rewardLine = (r) => {
+      const label = r?.label || "Recompensa";
+      if (r?.available) {
+        return `<li>${label} ✅</li>`;
+      }
+      return `<li>${label} ${(typeof r?.missingPoints === "number") ? `(faltan ${r.missingPoints} pts)` : ""}</li>`;
+    };
 
-const content = document.getElementById('content');
+    const renderEmptyRewards = () => {
+      return `<div class="empty">Aún no hay recompensas configuradas para este cliente.</div>`;
+    };
 
-function rewardLine(r){
+    const run = async () => {
+      if (!token) {
+        content.textContent = "Falta token.";
+        return;
+      }
 
-if(r.available){
+      if (!window.loyaltyService) {
+        content.textContent = "Firebase de loyalty no está inicializado.";
+        return;
+      }
 
-return `<li>${r.label} ✅</li>`;
+      try {
+        const data = await window.loyaltyService.getCustomer({ token });
+        window.loyaltyService.addVisit(token).catch(() => null);
 
-}
+        const c = data.clientPublic || data.client || data.customer || null;
 
-return `<li>${r.label} (faltan ${r.missingPoints} pts)</li>`;
+        if (!c) {
+          content.textContent = "Cliente no encontrado.";
+          return;
+        }
 
-}
+        const rewardsHtml = Array.isArray(c.rewardOptions) && c.rewardOptions.length
+          ? `<ul>${c.rewardOptions.map(rewardLine).join("")}</ul>`
+          : renderEmptyRewards();
 
-async function loadCard(){
+        content.innerHTML = `
+          <p><b>${c.name || "Cliente"}</b></p>
+          <p class="muted">ID: ${c.clientId || "-"}</p>
+          <p>Nivel: <span class="pill">${c.level || "Bronce"}</span></p>
+          <p>Puntos: <b>${Number(c.points || 0)}</b></p>
+          <p>Compras acumuladas: <b>$${Number(c.totalPurchases || 0).toFixed(2)}</b></p>
 
-if(!token){
+          <div class="section-title">Recompensas</div>
+          ${rewardsHtml}
+        `;
+      } catch (e) {
+        console.error(e);
+        content.textContent = e?.message || "No se pudo cargar la tarjeta.";
+      }
+    };
 
-content.innerHTML="Token inválido.";
-return;
-
-}
-
-if(!window.loyaltyService){
-
-content.innerHTML="Firebase de loyalty no está inicializado.";
-return;
-
-}
-
-try{
-
-const data = await window.loyaltyService.getCustomer({token});
-
-window.loyaltyService.addVisit(token).catch(()=>null);
-
-const c =
-data.clientPublic ||
-data.client ||
-data.customer ||
-{};
-
-content.classList.remove("loading");
-
-content.innerHTML = `
-
-<p><b>${c.name || "Cliente"}</b></p>
-
-<div class="stat">
-Nivel: <span class="pill">${c.level || "Bronce"}</span>
-</div>
-
-<div class="stat">
-Puntos: <b>${c.points || 0}</b>
-</div>
-
-<div class="stat">
-Compras acumuladas:
-<b>$${Number(c.totalPurchases || 0).toFixed(2)}</b>
-</div>
-
-<div class="stat">
-Recompensas disponibles
-</div>
-
-<ul>
-${(c.rewardOptions || []).map(rewardLine).join("")}
-</ul>
-
-`;
-
-}catch(e){
-
-console.error(e);
-
-content.classList.remove("loading");
-
-content.innerHTML="No se pudo cargar la tarjeta.";
-
-}
-
-}
-
-loadCard();
-
-</script>
-
+    run();
+  </script>
 </body>
 </html>
