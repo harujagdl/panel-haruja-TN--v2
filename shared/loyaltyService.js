@@ -12,6 +12,7 @@
   const safeLower = (value) => normalizeText(value).toLowerCase();
 
   const nowIso = () => new Date().toISOString();
+  const LEVEL_KEYS = ['bronce', 'plata', 'oro', 'vip'];
 
   const buildSearchIndex = ({ clientId = '', name = '', phone = '', instagram = '', email = '' }) => {
     return [
@@ -445,6 +446,187 @@
 
   const redeem = async (payload = {}) => redeemReward(payload);
 
+  const normalizePromotionDates = ({ startAt, endAt }) => {
+    const cleanStart = normalizeText(startAt);
+    const cleanEnd = normalizeText(endAt);
+
+    const parsedStart = cleanStart ? new Date(cleanStart) : null;
+    const parsedEnd = cleanEnd ? new Date(cleanEnd) : null;
+
+    if (parsedStart && Number.isNaN(parsedStart.getTime())) throw new Error('startAt inválida');
+    if (parsedEnd && Number.isNaN(parsedEnd.getTime())) throw new Error('endAt inválida');
+
+    return {
+      startAtIso: parsedStart ? parsedStart.toISOString() : null,
+      endAtIso: parsedEnd ? parsedEnd.toISOString() : null
+    };
+  };
+
+  const normalizePromotionLevels = (levels = []) => {
+    if (!Array.isArray(levels)) return [];
+    const values = levels
+      .map((level) => safeLower(level))
+      .filter((level) => LEVEL_KEYS.includes(level));
+    return Array.from(new Set(values));
+  };
+
+  const normalizePromotionShape = (docId, data = {}) => ({
+    id: docId,
+    title: normalizeText(data.title),
+    description: normalizeText(data.description),
+    tag: normalizeText(data.tag),
+    levels: normalizePromotionLevels(data.levels),
+    active: data.active === true,
+    startAt: normalizeText(data.startAt) || null,
+    endAt: normalizeText(data.endAt) || null,
+    priority: Number(data.priority || 0),
+    createdAt: data.createdAt || null,
+    updatedAt: data.updatedAt || null
+  });
+
+  const sortPromotions = (items = []) => {
+    return [...items].sort((a, b) => {
+      const priorityDiff = Number(a.priority || 0) - Number(b.priority || 0);
+      if (priorityDiff !== 0) return priorityDiff;
+      return String(b.startAt || '').localeCompare(String(a.startAt || ''));
+    });
+  };
+
+  const listPromotions = async () => {
+    const fb = ensureFirebase();
+    const snap = await fb.getDocs(fb.collection(fb.db, 'loyalty_promotions'));
+    const items = sortPromotions(snap.docs.map((d) => normalizePromotionShape(d.id, d.data())));
+    return { ok: true, items };
+  };
+
+  const getPromotionById = async (id) => {
+    const fb = ensureFirebase();
+    const cleanId = normalizeText(id);
+    if (!cleanId) throw new Error('id es obligatorio');
+    const ref = fb.doc(fb.db, 'loyalty_promotions', cleanId);
+    const snap = await fb.getDoc(ref);
+    if (!snap.exists()) return { ok: true, promotion: null };
+    return { ok: true, promotion: normalizePromotionShape(snap.id, snap.data()) };
+  };
+
+  const createPromotion = async (payload = {}) => {
+    const fb = ensureFirebase();
+    const title = normalizeText(payload.title);
+    const description = normalizeText(payload.description);
+    const tag = normalizeText(payload.tag);
+    const levels = normalizePromotionLevels(payload.levels);
+    const priority = Number(payload.priority || 0);
+    const active = payload.active !== false;
+    const { startAtIso, endAtIso } = normalizePromotionDates(payload);
+
+    if (!title) throw new Error('El título es obligatorio');
+    if (!description) throw new Error('La descripción es obligatoria');
+    if (!levels.length) throw new Error('Selecciona al menos un nivel');
+    if (Number.isNaN(priority)) throw new Error('La prioridad debe ser numérica');
+    if (startAtIso && endAtIso && endAtIso < startAtIso) throw new Error('La fecha final no puede ser menor a la inicial');
+
+    const docRef = await fb.addDoc(fb.collection(fb.db, 'loyalty_promotions'), {
+      title,
+      description,
+      tag,
+      levels,
+      active,
+      startAt: startAtIso,
+      endAt: endAtIso,
+      priority,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      serverCreatedAt: fb.serverTimestamp(),
+      serverUpdatedAt: fb.serverTimestamp()
+    });
+
+    return getPromotionById(docRef.id);
+  };
+
+  const updatePromotion = async (payload = {}) => {
+    const fb = ensureFirebase();
+    const id = normalizeText(payload.id);
+    if (!id) throw new Error('id es obligatorio');
+
+    const current = await getPromotionById(id);
+    if (!current.promotion) throw new Error('Promoción no encontrada');
+
+    const title = normalizeText(payload.title);
+    const description = normalizeText(payload.description);
+    const tag = normalizeText(payload.tag);
+    const levels = normalizePromotionLevels(payload.levels);
+    const priority = Number(payload.priority || 0);
+    const active = payload.active === true;
+    const { startAtIso, endAtIso } = normalizePromotionDates(payload);
+
+    if (!title) throw new Error('El título es obligatorio');
+    if (!description) throw new Error('La descripción es obligatoria');
+    if (!levels.length) throw new Error('Selecciona al menos un nivel');
+    if (Number.isNaN(priority)) throw new Error('La prioridad debe ser numérica');
+    if (startAtIso && endAtIso && endAtIso < startAtIso) throw new Error('La fecha final no puede ser menor a la inicial');
+
+    const ref = fb.doc(fb.db, 'loyalty_promotions', id);
+    await fb.updateDoc(ref, {
+      title,
+      description,
+      tag,
+      levels,
+      active,
+      startAt: startAtIso,
+      endAt: endAtIso,
+      priority,
+      updatedAt: nowIso(),
+      serverUpdatedAt: fb.serverTimestamp()
+    });
+
+    return getPromotionById(id);
+  };
+
+  const deletePromotion = async (id) => {
+    const fb = ensureFirebase();
+    const cleanId = normalizeText(id);
+    if (!cleanId) throw new Error('id es obligatorio');
+    await fb.deleteDoc(fb.doc(fb.db, 'loyalty_promotions', cleanId));
+    return { ok: true };
+  };
+
+  const togglePromotion = async (id, active) => {
+    const fb = ensureFirebase();
+    const cleanId = normalizeText(id);
+    if (!cleanId) throw new Error('id es obligatorio');
+    await fb.updateDoc(fb.doc(fb.db, 'loyalty_promotions', cleanId), {
+      active: active === true,
+      updatedAt: nowIso(),
+      serverUpdatedAt: fb.serverTimestamp()
+    });
+    return getPromotionById(cleanId);
+  };
+
+  const isPromotionCurrentlyValid = (promotion, nowDate = new Date()) => {
+    if (!promotion || promotion.active !== true) return false;
+    const nowTime = nowDate.getTime();
+    const startTime = promotion.startAt ? new Date(promotion.startAt).getTime() : null;
+    const endTime = promotion.endAt ? new Date(promotion.endAt).getTime() : null;
+    if (startTime && nowTime < startTime) return false;
+    if (endTime && nowTime > endTime) return false;
+    return true;
+  };
+
+  const getActivePromotions = async () => {
+    const base = await listPromotions();
+    const nowDate = new Date();
+    const items = base.items.filter((promotion) => isPromotionCurrentlyValid(promotion, nowDate));
+    return { ok: true, items: sortPromotions(items) };
+  };
+
+  const getPromotionsForLevel = async (levelKey) => {
+    const cleanLevel = safeLower(levelKey);
+    if (!cleanLevel) throw new Error('levelKey es obligatorio');
+    const base = await getActivePromotions();
+    const items = base.items.filter((promotion) => promotion.levels.includes(cleanLevel));
+    return { ok: true, items: sortPromotions(items) };
+  };
+
   const addVisit = async (token) => {
     const fb = ensureFirebase();
 
@@ -486,6 +668,15 @@
     addPurchase,
     redeemReward,
     redeem,
-    addVisit
+    addVisit,
+    listPromotions,
+    createPromotion,
+    updatePromotion,
+    deletePromotion,
+    togglePromotion,
+    getPromotionById,
+    getActivePromotions,
+    getPromotionsForLevel,
+    isPromotionCurrentlyValid
   };
 })(window);
