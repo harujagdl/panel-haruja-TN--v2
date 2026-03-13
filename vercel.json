@@ -1,17 +1,27 @@
 {
   "rewrites": [
-
     { "source": "/", "destination": "/index.html" },
 
     { "source": "/ventas", "destination": "/app/ventas.html" },
 
+    { "source": "/lealtad", "destination": "/app/lealtad/index.html" },
+    { "source": "/lealtad/:path+", "destination": "/app/lealtad/:path+" },
+
     { "source": "/tarjeta-lealtad", "destination": "/app/tarjeta-lealtad.html" },
 
-    { "source": "/lealtad", "destination": "/app/lealtad/index.html" },
-
     { "source": "/apartados", "destination": "/app/apartados/index.html" },
+    { "source": "/apartados/:path+", "destination": "/app/apartados/:path+" },
 
-    { "source": "/apartados-historial", "destination": "/app/apartados-historial/index.html" }
+    { "source": "/apartados-historial", "destination": "/app/apartados-historial/index.html" },
+    { "source": "/apartados-historial/:path+", "destination": "/app/apartados-historial/:path+" },
 
+    { "source": "/ticket/:folio", "destination": "/ticket" },
+    { "source": "/apartado/:folio", "destination": "/apartados" }
+  ],
+  "crons": [
+    {
+      "path": "/api/core?action=ventas-sync",
+      "schedule": "0 9 * * *"
+    }
   ]
 }
