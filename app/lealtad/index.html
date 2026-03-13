@@ -100,7 +100,12 @@
           <button class="btn full" id="addPurchaseBtn" type="button">Agregar compra</button>
         </div>
         <div class="grid2 top-8">
-          <select id="rewardPts"><option value="150">150</option><option value="300">300</option><option value="500">500</option><option value="800">800</option></select>
+          <select id="rewardPts">
+            <option value="150">150</option>
+            <option value="300">300</option>
+            <option value="500">500</option>
+            <option value="800">800</option>
+          </select>
           <input id="redeemNotes" placeholder="Notas canje" />
         </div>
         <div class="row top-8">
@@ -123,8 +128,61 @@
   </div>
 
   <div id="toast"></div>
+
   <script src="/lealtad/vendor/qrcode-generator.min.js"></script>
   <script src="/shared/loyaltyService.js"></script>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      serverTimestamp,
+      doc,
+      getDoc,
+      getDocs,
+      setDoc,
+      updateDoc,
+      query,
+      where,
+      orderBy,
+      limit
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB6vH_TI5Wh-hYHXE64coVobuI3vzn9D1Q",
+      authDomain: "haruja-loyalty.firebaseapp.com",
+      projectId: "haruja-loyalty",
+      storageBucket: "haruja-loyalty.firebasestorage.app",
+      messagingSenderId: "229949615835",
+      appId: "1:229949615835:web:dfcd3e81e52c916a2aa6fe",
+      measurementId: "G-LKVRFX04CL"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    window.loyaltyFirebase = {
+      app,
+      db,
+      collection,
+      addDoc,
+      serverTimestamp,
+      doc,
+      getDoc,
+      getDocs,
+      setDoc,
+      updateDoc,
+      query,
+      where,
+      orderBy,
+      limit
+    };
+
+    console.log("[loyalty] Firebase conectado:", firebaseConfig.projectId);
+  </script>
+
   <script>
     const PWA_PUBLIC_BASE_URL = 'https://haruja-panel.vercel.app';
 
@@ -144,12 +202,14 @@
     let selectedClient = null;
     let saveClientInFlight = false;
 
-    const toast = (msg, ok=true) => {
+    const toast = (msg, ok = true) => {
       const el = document.getElementById('toast');
       el.textContent = msg;
       el.style.display = 'block';
       el.style.background = ok ? '#2563EB' : '#DC2626';
-      setTimeout(() => { el.style.display = 'none'; }, 2200);
+      setTimeout(() => {
+        el.style.display = 'none';
+      }, 2200);
     };
 
     const setView = async (viewName) => {
@@ -159,7 +219,6 @@
         await loadClientsRegistered();
       }
     };
-
 
     const buildPwaQrLink = (client) => {
       const token = String(client?.token || '').trim();
@@ -188,12 +247,16 @@
       const summary = document.getElementById('clientSummary');
       const card = document.getElementById('card-selected');
       card.style.display = 'block';
+
       const rawQr = String(client?.qrLink || '').trim();
-      const qrLink = (!rawQr || rawQr.toLowerCase().includes('run.app')) ? buildPwaQrLink(client) : rawQr;
+      const qrLink = (!rawQr || rawQr.toLowerCase().includes('run.app'))
+        ? buildPwaQrLink(client)
+        : rawQr;
+
       summary.innerHTML = `
         <div><b>${client.name}</b> <span class="pill">${client.clientId}</span></div>
-        <div class="muted">Puntos: <b>${client.points}</b> · Nivel: <b>${client.level}</b> · Compras: <b>$${Number(client.totalPurchases||0).toFixed(2)}</b></div>
-        <div class="notice mono">Token: <code>${client.token||'-'}</code></div>
+        <div class="muted">Puntos: <b>${client.points}</b> · Nivel: <b>${client.level}</b> · Compras: <b>$${Number(client.totalPurchases || 0).toFixed(2)}</b></div>
+        <div class="notice mono">Token: <code>${client.token || '-'}</code></div>
         <div class="notice mono">QR: <a href="${qrLink}" target="_blank" rel="noopener">${qrLink}</a></div>
         <div class="qr-section top-8">
           <div class="qr-wrap"><div id="qrPreview" class="qr" aria-label="QR"></div></div>
@@ -202,8 +265,10 @@
           </div>
         </div>
       `;
+
       renderQrInto(document.getElementById('qrPreview'), qrLink);
       fillEditForm(client);
+
       const copyBtn = document.getElementById('copyQrBtn');
       copyBtn.onclick = async () => {
         try {
@@ -231,6 +296,7 @@
     const renderSearchItems = (items, targetId, openClientLabel = 'Seleccionar') => {
       const box = document.getElementById(targetId);
       box.innerHTML = items.length ? '' : '<p class="muted">Sin resultados</p>';
+
       items.forEach((item) => {
         const row = document.createElement('div');
         row.className = 'result-item';
@@ -251,7 +317,7 @@
 
     const loadClientsRegistered = async () => {
       try {
-        const {items} = await window.loyaltyService.listClients(80);
+        const { items } = await window.loyaltyService.listClients(80);
         dbLoaded = true;
         renderSearchItems(items, 'dbResults', 'Abrir');
       } catch (e) {
@@ -262,7 +328,7 @@
     const runClientSearch = async (inputId, targetId) => {
       try {
         const q = document.getElementById(inputId).value.trim();
-        const {items} = await window.loyaltyService.searchClients(q);
+        const { items } = await window.loyaltyService.searchClients(q);
         renderSearchItems(items, targetId);
       } catch (e) {
         toast(e.message, false);
@@ -277,15 +343,18 @@
           instagram: document.getElementById('instagram').value,
           email: document.getElementById('email').value
         };
-        const {client} = await window.loyaltyService.registerClient(payload);
+        const { client } = await window.loyaltyService.registerClient(payload);
         toast('Cliente registrado');
         renderClient(client);
-      } catch (e) { toast(e.message, false); }
+      } catch (e) {
+        toast(e.message, false);
+      }
     };
 
     document.getElementById('searchBtn').onclick = () => runClientSearch('searchInput', 'results');
     document.getElementById('dbSearchBtn').onclick = () => runClientSearch('dbSearchInput', 'dbResults');
     document.getElementById('dbReloadBtn').onclick = () => loadClientsRegistered();
+
     document.getElementById('btnEditClient').onclick = () => {
       if (!selectedClient) return toast('Selecciona cliente', false);
       const form = document.getElementById('editClientForm');
@@ -293,19 +362,24 @@
       if (shouldShow) fillEditForm(selectedClient);
       toggleEditForm(shouldShow);
     };
+
     document.getElementById('btnCancelEditClient').onclick = () => toggleEditForm(false);
+
     document.getElementById('btnSaveClient').onclick = async () => {
       if (!selectedClient) return toast('Selecciona cliente', false);
       if (saveClientInFlight) return;
+
       const editMsg = document.getElementById('editClientMsg');
       const name = document.getElementById('editName').value.trim();
       const phone = document.getElementById('editPhone').value.trim();
       const instagram = document.getElementById('editIg').value.trim();
       const email = document.getElementById('editEmail').value.trim();
+
       if (!name) {
         editMsg.textContent = 'El nombre es obligatorio.';
         return;
       }
+
       if (email && !/^\S+@\S+\.\S+$/.test(email)) {
         editMsg.textContent = 'Email inválido.';
         return;
@@ -315,18 +389,22 @@
       saveClientInFlight = true;
       saveBtn.disabled = true;
       editMsg.textContent = 'Guardando...';
+
       try {
-        const {client} = await window.loyaltyService.updateClientPublic({
-            clientId: selectedClient.clientId || selectedClient.id,
-            name,
-            phone,
-            instagram,
-            email
-          });
-        selectedClient = {...selectedClient, ...client};
+        const { client } = await window.loyaltyService.updateClientPublic({
+          clientId: selectedClient.clientId || selectedClient.id,
+          name,
+          phone,
+          instagram,
+          email
+        });
+
+        selectedClient = { ...selectedClient, ...client };
         renderClient(selectedClient);
         toggleEditForm(false);
+
         if (dbLoaded) await loadClientsRegistered();
+
         editMsg.textContent = 'Guardado ✅';
         toast('Cliente actualizado');
       } catch (e) {
@@ -346,10 +424,12 @@
           amount: Number(document.getElementById('purchaseAmount').value),
           notes: document.getElementById('purchaseNotes').value
         };
-        const {client} = await window.loyaltyService.addPurchase(payload);
+        const { client } = await window.loyaltyService.addPurchase(payload);
         toast('Compra registrada');
-        renderClient({...selectedClient, ...client});
-      } catch (e) { toast(e.message, false); }
+        renderClient({ ...selectedClient, ...client });
+      } catch (e) {
+        toast(e.message, false);
+      }
     };
 
     document.getElementById('redeemBtn').onclick = async () => {
@@ -360,10 +440,12 @@
           rewardPts: Number(document.getElementById('rewardPts').value),
           notes: document.getElementById('redeemNotes').value
         };
-        const {client} = await window.loyaltyService.redeemReward(payload);
+        const { client } = await window.loyaltyService.redeemReward(payload);
         toast('Canje aplicado');
-        renderClient({...selectedClient, ...client});
-      } catch (e) { toast(e.message, false); }
+        renderClient({ ...selectedClient, ...client });
+      } catch (e) {
+        toast(e.message, false);
+      }
     };
 
     segButtons.forEach((btn) => {
