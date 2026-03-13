@@ -23,6 +23,7 @@
       <button data-view="panel" class="seg active" type="button">Panel</button>
       <button data-view="db" class="seg" type="button">Clientes registrados</button>
       <button data-view="promotions" class="seg" type="button">Promociones</button>
+      <button data-view="levels" class="seg" type="button">Niveles</button>
     </div>
 
     <main id="view-panel" class="view active">
@@ -158,11 +159,8 @@
         </div>
         <div class="top-8">
           <div class="label">Niveles aplicables</div>
-          <div class="levels-group">
-            <label><input type="checkbox" name="promoLevels" value="bronce" /> Bronce</label>
-            <label><input type="checkbox" name="promoLevels" value="plata" /> Plata</label>
-            <label><input type="checkbox" name="promoLevels" value="oro" /> Oro</label>
-            <label><input type="checkbox" name="promoLevels" value="vip" /> VIP</label>
+          <div class="levels-group" id="promoLevelsContainer">
+            <p class="muted">Cargando niveles...</p>
           </div>
         </div>
         <div class="grid2 top-8">
@@ -184,6 +182,53 @@
       <section class="card">
         <h2>Promociones registradas</h2>
         <div id="promotionsList" class="results top-8"></div>
+      </section>
+    </main>
+
+    <main id="view-levels" class="view">
+      <section class="card">
+        <h2>Niveles</h2>
+        <p class="muted">Configura rangos, prioridad y beneficios de cada nivel.</p>
+        <div id="levelFormMsg" class="muted top-8"></div>
+        <div class="grid2 top-8">
+          <div>
+            <div class="label">Nombre</div>
+            <input id="levelName" placeholder="Bronce" />
+          </div>
+          <div>
+            <div class="label">Color</div>
+            <input id="levelColor" type="color" value="#A67C52" />
+          </div>
+          <div>
+            <div class="label">Puntos mínimos</div>
+            <input id="levelMinPoints" type="number" min="0" step="1" placeholder="0" />
+          </div>
+          <div>
+            <div class="label">Puntos máximos</div>
+            <input id="levelMaxPoints" type="number" min="0" step="1" placeholder="499" />
+          </div>
+          <div>
+            <div class="label">Prioridad</div>
+            <input id="levelPriority" type="number" min="0" step="1" value="1" />
+          </div>
+          <label class="switch-like level-active-toggle">
+            <input id="levelActive" type="checkbox" checked />
+            <span>Activo</span>
+          </label>
+        </div>
+        <div class="top-8">
+          <div class="label">Beneficios (uno por línea)</div>
+          <textarea id="levelBenefits" rows="4" placeholder="Acceso al programa&#10;Promociones exclusivas"></textarea>
+        </div>
+        <div class="row top-12">
+          <button class="btn" id="levelSaveBtn" type="button">Guardar nivel</button>
+          <button class="btn btn-secondary" id="levelCancelBtn" type="button" style="display:none;">Cancelar edición</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Niveles registrados</h2>
+        <div id="levelsList" class="results top-8"></div>
       </section>
     </main>
 
@@ -260,7 +305,8 @@
     const views = {
       panel: document.getElementById('view-panel'),
       db: document.getElementById('view-db'),
-      promotions: document.getElementById('view-promotions')
+      promotions: document.getElementById('view-promotions'),
+      levels: document.getElementById('view-levels')
     };
     const segButtons = Array.from(document.querySelectorAll('.seg'));
     let dbLoaded = false;
@@ -269,6 +315,10 @@
     let promotionsLoaded = false;
     let promotionsInFlight = false;
     let editingPromotionId = null;
+    let levelsLoaded = false;
+    let levelsInFlight = false;
+    let editingLevelId = null;
+    let activeLevelsCache = [];
 
     const toast = (msg, ok = true) => {
       const el = document.getElementById('toast');
@@ -288,6 +338,9 @@
       }
       if (viewName === 'promotions' && !promotionsLoaded) {
         await loadPromotions();
+      }
+      if (viewName === 'levels' && !levelsLoaded) {
+        await loadLevels();
       }
     };
 
@@ -584,6 +637,145 @@
       document.getElementById('promoFormMsg').textContent = 'Editando promoción.';
     };
 
+
+    const parseBenefitsText = (value) => String(value || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const getLevelFormPayload = () => ({
+      name: document.getElementById('levelName').value.trim(),
+      minPoints: Number(document.getElementById('levelMinPoints').value),
+      maxPoints: Number(document.getElementById('levelMaxPoints').value),
+      color: document.getElementById('levelColor').value,
+      active: document.getElementById('levelActive').checked,
+      priority: Number(document.getElementById('levelPriority').value),
+      benefits: parseBenefitsText(document.getElementById('levelBenefits').value)
+    });
+
+    const validateLevelPayload = (payload) => {
+      if (!payload.name) return 'El nombre es obligatorio.';
+      if (Number.isNaN(payload.minPoints)) return 'Puntos mínimos inválidos.';
+      if (Number.isNaN(payload.maxPoints)) return 'Puntos máximos inválidos.';
+      if (payload.maxPoints < payload.minPoints) return 'El máximo no puede ser menor al mínimo.';
+      if (Number.isNaN(payload.priority)) return 'La prioridad debe ser numérica.';
+      return '';
+    };
+
+    const clearLevelForm = () => {
+      editingLevelId = null;
+      document.getElementById('levelName').value = '';
+      document.getElementById('levelColor').value = '#A67C52';
+      document.getElementById('levelMinPoints').value = '';
+      document.getElementById('levelMaxPoints').value = '';
+      document.getElementById('levelPriority').value = '1';
+      document.getElementById('levelActive').checked = true;
+      document.getElementById('levelBenefits').value = '';
+      document.getElementById('levelSaveBtn').textContent = 'Guardar nivel';
+      document.getElementById('levelCancelBtn').style.display = 'none';
+      document.getElementById('levelFormMsg').textContent = '';
+    };
+
+    const fillLevelForm = (level) => {
+      editingLevelId = level.id;
+      document.getElementById('levelName').value = level.name || '';
+      document.getElementById('levelColor').value = level.color || '#A67C52';
+      document.getElementById('levelMinPoints').value = String(Number(level.minPoints || 0));
+      document.getElementById('levelMaxPoints').value = String(Number(level.maxPoints || 0));
+      document.getElementById('levelPriority').value = String(Number(level.priority || 0));
+      document.getElementById('levelActive').checked = level.active === true;
+      document.getElementById('levelBenefits').value = Array.isArray(level.benefits) ? level.benefits.join('\n') : '';
+      document.getElementById('levelSaveBtn').textContent = 'Guardar cambios';
+      document.getElementById('levelCancelBtn').style.display = 'inline-flex';
+      document.getElementById('levelFormMsg').textContent = 'Editando nivel.';
+      setView('levels');
+    };
+
+    const renderPromoLevelOptions = (levels = []) => {
+      const container = document.getElementById('promoLevelsContainer');
+      if (!levels.length) {
+        container.innerHTML = '<p class="muted">No hay niveles activos. Crea uno en la pestaña Niveles.</p>';
+        return;
+      }
+      container.innerHTML = '';
+      levels.forEach((level) => {
+        const label = document.createElement('label');
+        label.innerHTML = `<input type="checkbox" name="promoLevels" value="${level.id}" /> ${level.name}`;
+        container.appendChild(label);
+      });
+    };
+
+    const renderLevels = (items) => {
+      const box = document.getElementById('levelsList');
+      if (!items.length) {
+        box.innerHTML = '<p class="muted">Aún no hay niveles registrados.</p>';
+        return;
+      }
+
+      box.innerHTML = '';
+      items.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'level-item';
+        const benefits = Array.isArray(item.benefits) && item.benefits.length
+          ? item.benefits.map((benefit) => `<li>${benefit}</li>`).join('')
+          : '<li>Sin beneficios registrados</li>';
+        row.innerHTML = `
+          <div class="level-head">
+            <div>
+              <b>${item.name || '(sin nombre)'}</b>
+              <span class="pill">${item.active ? 'Activo' : 'Inactivo'}</span>
+            </div>
+            <div class="muted">Prioridad ${Number(item.priority || 0)}</div>
+          </div>
+          <div class="muted">Rango: ${Number(item.minPoints || 0)} - ${Number(item.maxPoints || 0)} pts</div>
+          <div class="muted">Color: <span class="level-color-dot" style="background:${item.color || '#A67C52'}"></span> ${item.color || '#A67C52'}</div>
+          <ul class="benefits-list">${benefits}</ul>
+          <div class="row top-8">
+            <button class="btn btn-small" data-action="edit">Editar</button>
+            <button class="btn btn-secondary btn-small" data-action="toggle">${item.active ? 'Desactivar' : 'Activar'}</button>
+            <button class="btn btn-small btn-danger" data-action="delete">Eliminar</button>
+          </div>
+        `;
+
+        row.querySelector('[data-action="edit"]').onclick = () => fillLevelForm(item);
+        row.querySelector('[data-action="toggle"]').onclick = async () => {
+          try {
+            await window.loyaltyService.toggleLevel(item.id, !item.active);
+            toast('Estado del nivel actualizado');
+            await loadLevels();
+          } catch (e) {
+            toast(e.message, false);
+          }
+        };
+        row.querySelector('[data-action="delete"]').onclick = async () => {
+          if (!confirm('¿Eliminar este nivel?')) return;
+          try {
+            await window.loyaltyService.deleteLevel(item.id);
+            if (editingLevelId === item.id) clearLevelForm();
+            toast('Nivel eliminado');
+            await loadLevels();
+          } catch (e) {
+            toast(e.message, false);
+          }
+        };
+
+        box.appendChild(row);
+      });
+    };
+
+    const loadLevels = async () => {
+      try {
+        const { items } = await window.loyaltyService.listLevels();
+        const sortedItems = [...items].sort((a, b) => Number(a.priority || 0) - Number(b.priority || 0));
+        levelsLoaded = true;
+        activeLevelsCache = sortedItems.filter((item) => item.active === true);
+        renderLevels(sortedItems);
+        renderPromoLevelOptions(activeLevelsCache);
+      } catch (e) {
+        toast(e.message, false);
+      }
+    };
+
     const renderPromotions = (items) => {
       const box = document.getElementById('promotionsList');
       if (!items.length) {
@@ -640,6 +832,7 @@
 
     const loadPromotions = async () => {
       try {
+        if (!levelsLoaded) await loadLevels();
         const { items } = await window.loyaltyService.listPromotions();
         promotionsLoaded = true;
         renderPromotions(items);
@@ -680,6 +873,39 @@
     };
 
     document.getElementById('promoCancelBtn').onclick = () => clearPromotionForm();
+
+    document.getElementById('levelSaveBtn').onclick = async () => {
+      if (levelsInFlight) return;
+      const payload = getLevelFormPayload();
+      const error = validateLevelPayload(payload);
+      const msg = document.getElementById('levelFormMsg');
+      if (error) {
+        msg.textContent = error;
+        return;
+      }
+
+      levelsInFlight = true;
+      msg.textContent = 'Guardando...';
+
+      try {
+        if (editingLevelId) {
+          await window.loyaltyService.updateLevel({ id: editingLevelId, ...payload });
+          toast('Nivel actualizado');
+        } else {
+          await window.loyaltyService.createLevel(payload);
+          toast('Nivel creado');
+        }
+        clearLevelForm();
+        await loadLevels();
+      } catch (e) {
+        msg.textContent = e.message;
+        toast(e.message, false);
+      } finally {
+        levelsInFlight = false;
+      }
+    };
+
+    document.getElementById('levelCancelBtn').onclick = () => clearLevelForm();
 
     segButtons.forEach((btn) => {
       btn.addEventListener('click', () => setView(btn.dataset.view));
