@@ -3,6 +3,11 @@
   "rewrites": [
     { "source": "/ticket/:folio", "destination": "/ticket" },
     { "source": "/apartado/:folio", "destination": "/apartados" },
+
+    { "source": "/lealtad", "destination": "/app/lealtad/index.html" },
+    { "source": "/lealtad/", "destination": "/app/lealtad/index.html" },
+    { "source": "/lealtad/:path*", "destination": "/app/lealtad/:path*" },
+
     { "source": "/", "destination": "/index.html" }
   ],
   "crons": [
