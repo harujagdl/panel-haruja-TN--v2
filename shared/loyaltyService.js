@@ -223,7 +223,8 @@
     const clientId = await makeClientId();
     const token = makeToken();
     const welcomePoints = Number(config.welcomePoints || 0);
-    const qrLink = `https://paneltn.harujagdl.com/tarjeta-lealtad.html?token=${token}`;
+    const qrBaseUrl = 'https://paneltn.harujagdl.com';
+    const qrLink = `${qrBaseUrl}/tarjeta-lealtad.html?token=${encodeURIComponent(token)}`;
 
     const docRef = await fb.addDoc(fb.collection(fb.db, 'loyalty_customers'), {
       clientId,
