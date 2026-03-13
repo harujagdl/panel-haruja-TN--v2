@@ -16,6 +16,7 @@
     { "source": "/apartados-historial/:path+", "destination": "/app/apartados-historial/:path+" },
 
     { "source": "/tarjeta-lealtad.html", "destination": "/app/tarjeta-lealtad.html" },
+    { "source": "/ventas.html", "destination": "/app/ventas.html" },
 
     { "source": "/", "destination": "/index.html" }
   ],
