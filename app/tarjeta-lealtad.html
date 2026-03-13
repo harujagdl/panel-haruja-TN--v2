@@ -59,8 +59,8 @@
     <div id="content">Cargando...</div>
   </div>
   </div>
+  <script src="/shared/loyaltyService.js"></script>
   <script>
-    const API_BASE = 'https://api-oabqydrhoq-uc.a.run.app';
     const token = new URLSearchParams(location.search).get('token');
     const content = document.getElementById('content');
     const rewardLine = (r) => `<li>${r.label} ${r.available ? '✅' : `(faltan ${r.missingPoints} pts)`}</li>`;
@@ -68,11 +68,9 @@
     const run = async () => {
       if (!token) { content.textContent = 'Falta token.'; return; }
       try {
-        const res = await fetch(`${API_BASE}/api/loyalty/getByToken?token=${encodeURIComponent(token)}`, { credentials: 'omit' });
-        const data = await res.json();
-        if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo cargar');
-        fetch(`${API_BASE}/api/loyalty/addVisit`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({token})}).catch(() => null);
-        const c = data.clientPublic;
+        const data = await window.loyaltyService.getCustomer({ token });
+        window.loyaltyService.addVisit(token).catch(() => null);
+        const c = data.clientPublic || data.client || data.customer || {};
         content.innerHTML = `
           <p><b>${c.name}</b></p>
           <p>Nivel: <span class="pill">${c.level}</span></p>

@@ -124,15 +124,15 @@
 
   <div id="toast"></div>
   <script src="/lealtad/vendor/qrcode-generator.min.js"></script>
+  <script src="/shared/loyaltyService.js"></script>
   <script>
     const PWA_PUBLIC_BASE_URL = 'https://haruja-panel.vercel.app';
 
-    const api = async (url, options={}) => {
-      const authHeaders = options.headers || {};
-      const res = await fetch(url, {headers:{"Content-Type":"application/json", ...authHeaders}, ...options});
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) throw new Error(data.error || "Error en la solicitud");
-      return data;
+    const api = async (action, payload = {}, options = {}) => {
+      const method = options.method || 'GET';
+      const service = window.loyaltyService;
+      if (!service || typeof service[action] !== 'function') throw new Error('loyaltyService no disponible');
+      return service[action](payload, { method });
     };
 
     const views = {
@@ -251,7 +251,7 @@
 
     const loadClientsRegistered = async () => {
       try {
-        const {items} = await api('/api/loyalty/listClients?limit=80');
+        const {items} = await window.loyaltyService.listClients(80);
         dbLoaded = true;
         renderSearchItems(items, 'dbResults', 'Abrir');
       } catch (e) {
@@ -262,7 +262,7 @@
     const runClientSearch = async (inputId, targetId) => {
       try {
         const q = document.getElementById(inputId).value.trim();
-        const {items} = await api(`/api/loyalty/searchClients?q=${encodeURIComponent(q)}`);
+        const {items} = await window.loyaltyService.searchClients(q);
         renderSearchItems(items, targetId);
       } catch (e) {
         toast(e.message, false);
@@ -277,7 +277,7 @@
           instagram: document.getElementById('instagram').value,
           email: document.getElementById('email').value
         };
-        const {client} = await api('/api/loyalty/registerClient', {method:'POST', body: JSON.stringify(payload)});
+        const {client} = await window.loyaltyService.registerClient(payload);
         toast('Cliente registrado');
         renderClient(client);
       } catch (e) { toast(e.message, false); }
@@ -316,16 +316,13 @@
       saveBtn.disabled = true;
       editMsg.textContent = 'Guardando...';
       try {
-        const {client} = await api('/api/loyalty/updateClientPublic', {
-          method:'PATCH',
-          body: JSON.stringify({
+        const {client} = await window.loyaltyService.updateClientPublic({
             clientId: selectedClient.clientId || selectedClient.id,
             name,
             phone,
             instagram,
             email
-          })
-        });
+          });
         selectedClient = {...selectedClient, ...client};
         renderClient(selectedClient);
         toggleEditForm(false);
@@ -349,7 +346,7 @@
           amount: Number(document.getElementById('purchaseAmount').value),
           notes: document.getElementById('purchaseNotes').value
         };
-        const {client} = await api('/api/loyalty/addPurchase', {method:'POST', body: JSON.stringify(payload)});
+        const {client} = await window.loyaltyService.addPurchase(payload);
         toast('Compra registrada');
         renderClient({...selectedClient, ...client});
       } catch (e) { toast(e.message, false); }
@@ -363,7 +360,7 @@
           rewardPts: Number(document.getElementById('rewardPts').value),
           notes: document.getElementById('redeemNotes').value
         };
-        const {client} = await api('/api/loyalty/redeem', {method:'POST', body: JSON.stringify(payload)});
+        const {client} = await window.loyaltyService.redeemReward(payload);
         toast('Canje aplicado');
         renderClient({...selectedClient, ...client});
       } catch (e) { toast(e.message, false); }
