@@ -30,6 +30,7 @@
     .controls { display:flex; gap: 12px; flex-wrap: wrap; align-items: end; }
     .field { display:flex; flex-direction:column; gap: 6px; }
     .field label { font-size: 12px; color:#6b7280; }
+    .field-store-id { display: none; }
     input, select { padding: 10px 12px; border-radius: 10px; border:1px solid #e5e7eb; font-size:14px; background:#fff; }
     button, .btn {
       padding: 10px 14px;
@@ -83,9 +84,9 @@
           <label for="search">Buscar</label>
           <input id="search" type="text" placeholder="Ticket, order_id o cliente" />
         </div>
-        <div class="field">
+        <div class="field field-store-id">
           <label for="storeId">Store ID Tiendanube</label>
-          <input id="storeId" type="text" placeholder="Se carga desde configuración" readonly />
+          <input id="storeId" type="text" value="6432936" readonly />
         </div>
         <button id="btnLoad" class="btn btn-secondary">Ver detalle</button>
         <button id="btnCsv" class="btn btn-secondary">Export CSV</button>
@@ -121,6 +122,7 @@
 
   <script>
     const SELLERS = ["Haru", "Vendedora"];
+    const STORE_ID = "6432936";
     const moneyMx = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 });
 
     const monthInput = document.getElementById("month");
@@ -225,19 +227,20 @@
     };
 
     const loadVentasConfig = async () => {
+      storeIdInput.value = STORE_ID;
       const url = new URL("/api/core", location.origin);
       url.searchParams.set("action", "ventas-config");
       const res = await fetch(url.toString());
       const payload = await safeJson(res, "No se pudo cargar la configuración de ventas");
       if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar la configuración de ventas");
       const data = payload.data || {};
-      storeIdInput.value = data.store_id || "";
-      return data;
+      return { ...data, store_id: STORE_ID };
     };
 
     const loadVentasResumen = async (month) => {
       const url = new URL("/api/core", location.origin);
       url.searchParams.set("action", "ventas-resumen");
+      url.searchParams.set("store_id", STORE_ID);
       if (month) url.searchParams.set("month", month);
       const res = await fetch(url.toString());
       const payload = await safeJson(res, "No se pudo cargar el resumen de ventas");
@@ -248,6 +251,7 @@
     const loadVentasDetalle = async (month, search) => {
       const url = new URL("/api/core", location.origin);
       url.searchParams.set("action", "ventas-detalle");
+      url.searchParams.set("store_id", STORE_ID);
       if (month) url.searchParams.set("month", month);
       if (search) url.searchParams.set("search", search);
       const res = await fetch(url.toString());
@@ -318,7 +322,7 @@
           formatEstado(venta),
           normalizeSeller(venta.seller) || "",
           Number(venta.commission_amount) || 0,
-          storeIdInput.value || "",
+          STORE_ID,
           venta.month_key || month
         ];
         csvRows.push(row.map(toCsvField).join(","));
@@ -374,7 +378,9 @@
 
     const syncVentas = async () => {
       setStatus("Sincronizando con Tiendanube...");
-      const res = await fetch("/api/core?action=ventas-sync", { method: "POST" });
+      const res = await fetch(`/api/core?action=ventas-sync&store_id=${encodeURIComponent(STORE_ID)}`, {
+        method: "POST"
+      });
       const payload = await safeJson(res, "No se pudo sincronizar ventas");
       if (!payload?.ok) throw new Error(payload?.message || "No se pudo sincronizar ventas");
       const data = payload.data || {};
@@ -416,6 +422,7 @@
     });
 
     monthInput.value = new Date().toISOString().slice(0, 7);
+    storeIdInput.value = STORE_ID;
     (async () => {
       try {
         showOAuthMessage();
