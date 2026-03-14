@@ -18,7 +18,18 @@ const MONTH_ALIASES = {
   sep: 9, sept: 9, septiembre: 9,
   oct: 10, octubre: 10,
   nov: 11, noviembre: 11,
-  dic: 12, diciembre: 12
+  dic: 12, diciembre: 12,
+  jan: 1, january: 1,
+  february: 2,
+  march: 3,
+  apr: 4, april: 4,
+  june: 6,
+  july: 7,
+  aug: 8, august: 8,
+  september: 9,
+  october: 10,
+  november: 11,
+  dec: 12, december: 12
 };
 
 const STATUS_CANCELLED = new Set([
@@ -106,12 +117,39 @@ async function readVentasCollection(db, collectionName, year) {
   return out;
 }
 
+const monthToken = (month) => String(Math.max(1, Math.min(12, Number(month) || 1))).padStart(2, "0");
+
+async function readVentasResumenMonth(year, month) {
+  try {
+    const response = await fetch(`/api/core?action=ventas-resumen&month=${year}-${monthToken(month)}`);
+    const payload = await response.json();
+    if (!response.ok || !payload?.ok) return null;
+    return toAmountNumber(payload?.data?.total_mes, null);
+  } catch (_error) {
+    return null;
+  }
+}
+
 export async function getMonthlySalesMap(db, year, { startMonth = 1, endMonth = 12 } = {}) {
   const normalizedYear = toYearNumber(year);
   const start = Math.max(1, Math.min(12, toMonthNumber(startMonth, 1) || 1));
   const end = Math.max(start, Math.min(12, toMonthNumber(endMonth, 12) || 12));
 
   const monthlyTotals = emptyMonths(normalizedYear);
+
+  const monthNumbers = [];
+  for (let month = start; month <= end; month += 1) monthNumbers.push(month);
+
+  const apiTotals = await Promise.all(monthNumbers.map((month) => readVentasResumenMonth(normalizedYear, month)));
+  let hasApiData = false;
+  monthNumbers.forEach((month, index) => {
+    const total = apiTotals[index];
+    if (!Number.isFinite(total)) return;
+    hasApiData = true;
+    monthlyTotals[monthKey(normalizedYear, month)] = total;
+  });
+
+  if (hasApiData) return monthlyTotals;
 
   const ventasRows = [
     ...(await readVentasCollection(db, "ventas", normalizedYear)),
