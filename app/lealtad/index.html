@@ -8,9 +8,9 @@
 </head>
 <body>
   <div class="container page page-header-wrapper">
-    <a href="https://paneltb.harujagdl.com/#/panel" class="panel-back-btn">← Volver al panel</a>
+    <a href="/#/panel" class="panel-back-btn">← Volver al panel</a>
     <div class="topbar" style="align-items:center;">
-      <a class="brandlink" href="https://paneltb.harujagdl.com/#/panel" aria-label="Volver al panel" style="display:flex;align-items:center;text-decoration:none;">
+      <a class="brandlink" href="/#/panel" aria-label="Volver al panel" style="display:flex;align-items:center;text-decoration:none;">
         <img src="../assets/haruja-logo.png" alt="HarujaGdl" style="height:36px;width:auto;display:block;">
       </a>
     </div>
@@ -293,7 +293,7 @@
   </script>
 
   <script>
-    const PWA_PUBLIC_BASE_URL = 'https://haruja-panel.vercel.app';
+    const PWA_PUBLIC_BASE_URL = window.location.origin;
 
     const api = async (action, payload = {}, options = {}) => {
       const method = options.method || 'GET';
@@ -347,7 +347,7 @@
     const buildPwaQrLink = (client) => {
       const token = String(client?.token || '').trim();
       if (!token) return '#';
-      return `${PWA_PUBLIC_BASE_URL}/tarjeta-lealtad.html?token=${encodeURIComponent(token)}`;
+      return `${PWA_PUBLIC_BASE_URL}/tarjeta-lealtad?token=${encodeURIComponent(token)}`;
     };
 
     function renderQrInto(el, text) {
@@ -373,9 +373,9 @@
       card.style.display = 'block';
 
       const rawQr = String(client?.qrLink || '').trim();
-      const qrBaseUrl = 'https://paneltn.harujagdl.com';
+      const qrBaseUrl = window.location.origin;
       const qrLink = (!rawQr || rawQr.includes('.vercel.app') || rawQr.includes('run.app'))
-        ? `${qrBaseUrl}/tarjeta-lealtad.html?token=${encodeURIComponent(client?.token || '')}`
+        ? `${qrBaseUrl}/tarjeta-lealtad?token=${encodeURIComponent(client?.token || '')}`
         : rawQr;
 
       summary.innerHTML = `
