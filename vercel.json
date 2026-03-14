@@ -3,6 +3,8 @@
   "routes": [
     { "handle": "filesystem" },
 
+    { "src": "^/$", "dest": "/index.html" },
+
     { "src": "^/ventas/?$", "dest": "/ventas/index.html" },
     { "src": "^/ventas\\.html$", "dest": "/ventas/index.html" },
 
