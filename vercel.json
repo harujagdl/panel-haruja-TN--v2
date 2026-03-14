@@ -25,11 +25,5 @@
     { "source": "/ticket/:folio", "destination": "/ticket/index.html" },
 
     { "source": "/apartado/:folio", "destination": "/apartados/index.html" }
-  ],
-  "crons": [
-    {
-      "path": "/api/core?action=ventas-sync",
-      "schedule": "0 9 * * *"
-    }
   ]
 }
