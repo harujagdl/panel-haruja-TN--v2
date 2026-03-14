@@ -1,27 +1,25 @@
 {
   "version": 2,
-  "routes": [
-    { "handle": "filesystem" },
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" },
 
-    { "src": "^/$", "dest": "/index.html" },
+    { "source": "/ventas", "destination": "/ventas/index.html" },
+    { "source": "/ventas.html", "destination": "/ventas/index.html" },
 
-    { "src": "^/ventas/?$", "dest": "/ventas/index.html" },
-    { "src": "^/ventas\\.html$", "dest": "/ventas/index.html" },
+    { "source": "/lealtad", "destination": "/app/lealtad/index.html" },
+    { "source": "/lealtad/:path*", "destination": "/app/lealtad/:path*" },
 
-    { "src": "^/lealtad/?$", "dest": "/app/lealtad/index.html" },
-    { "src": "^/lealtad/(.*)$", "dest": "/app/lealtad/$1" },
+    { "source": "/tarjeta-lealtad", "destination": "/app/tarjeta-lealtad.html" },
+    { "source": "/tarjeta-lealtad.html", "destination": "/app/tarjeta-lealtad.html" },
 
-    { "src": "^/tarjeta-lealtad/?$", "dest": "/app/tarjeta-lealtad.html" },
-    { "src": "^/tarjeta-lealtad\\.html$", "dest": "/app/tarjeta-lealtad.html" },
+    { "source": "/assets/:path*", "destination": "/public/assets/:path*" },
 
-    { "src": "^/assets/(.*)$", "dest": "/public/assets/$1" },
+    { "source": "/apartados", "destination": "/apartados/index.html" },
+    { "source": "/apartados-historial", "destination": "/apartados-historial/index.html" },
 
-    { "src": "^/apartados/?$", "dest": "/apartados/index.html" },
-    { "src": "^/apartados-historial/?$", "dest": "/apartados-historial/index.html" },
+    { "source": "/ticket", "destination": "/ticket/index.html" },
+    { "source": "/ticket/:path*", "destination": "/ticket/index.html" },
 
-    { "src": "^/ticket/?$", "dest": "/ticket/index.html" },
-    { "src": "^/ticket/(.*)$", "dest": "/ticket/index.html" },
-
-    { "src": "^/apartado/(.*)$", "dest": "/apartados/index.html" }
+    { "source": "/apartado/:path*", "destination": "/apartados/index.html" }
   ]
 }
