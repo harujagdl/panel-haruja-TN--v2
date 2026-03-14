@@ -295,7 +295,7 @@
       measurementId: "G-LKVRFX04CL"
     };
 
-    const DOMAIN_BASE = "https://paneltn.harujagdl.com";
+    const DOMAIN_BASE = window.location.origin;
 
     function getToken() {
       return new URLSearchParams(location.search).get("token") || "";
@@ -441,7 +441,7 @@
         }
         setLevelExtras(c, promotions);
 
-        const pwaLink = `${DOMAIN_BASE}/tarjeta-lealtad.html?token=${encodeURIComponent(token)}`;
+        const pwaLink = `${DOMAIN_BASE}/tarjeta-lealtad?token=${encodeURIComponent(token)}`;
         setQrFromLink(pwaLink);
 
         setStatus("");

@@ -347,8 +347,8 @@
     const token = makeToken();
     const welcomePoints = Number(config.welcomePoints || 0);
     const levelFields = await resolveLevelFields(welcomePoints, 'Bronce');
-    const qrBaseUrl = 'https://paneltn.harujagdl.com';
-    const qrLink = `${qrBaseUrl}/tarjeta-lealtad.html?token=${encodeURIComponent(token)}`;
+    const qrBaseUrl = window.location.origin;
+    const qrLink = `${qrBaseUrl}/tarjeta-lealtad?token=${encodeURIComponent(token)}`;
 
     const docRef = await fb.addDoc(fb.collection(fb.db, 'loyalty_customers'), {
       clientId,
