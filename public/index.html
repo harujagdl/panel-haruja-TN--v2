@@ -2807,32 +2807,47 @@ Errores: 0</pre>
         getRedirectResult,
         signOut
       } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-      import { ajustarDesdePrecioConIVA } from "/shared/priceRules.js";
+      import { ajustarDesdePrecioConIVA } from "/app/shared/priceRules.js";
       import {
         emptyMonths,
         getMonthlySalesMap
-      } from "/shared/salesTotals.js";
+      } from "/app/shared/salesTotals.js";
       import {
         adminSignIn,
         adminSignOut,
         isAdminUser
-      } from "/shared/adminAuth.js";
+      } from "/app/shared/adminAuth.js";
       import {
         getGoalsSalesState,
         saveAnnualGoal,
         saveMonthlyGoal,
         saveRangeMonthlyGoal
-      } from "/shared/goalsSales.js";
-      import { loadBaseRowsFromSheets } from "/shared/sheets-adapter.js";
+      } from "/app/shared/goalsSales.js";
+      import { loadBaseRowsFromSheets } from "/app/shared/sheets-adapter.js";
       import { loadDictionariesFromSheets } from "/app/shared/dictionaries-adapter.js";
       import { generateHarujaCode, normalizeCodeBase } from "/app/shared/code-generator.js";
       import { generarDescripcionSimple } from "/app/shared/dictionary-utils.js";
-      import { createPrendaInSheets } from "/app/shared/prendas-create-adapter.js";
-      import { deletePrendaInSheets } from "/app/shared/prendas-delete-adapter.js";
-      import { archivePrendaInSheets } from "/app/shared/prendas-archive-adapter.js";
-      import { restorePrendaInSheets } from "/app/shared/prendas-restore-adapter.js";
-      import { loadArchivedPrendas } from "/app/shared/prendas-archived-adapter.js";
       import { processCorrectionsFileRows } from "/app/shared/corrections-adapter.js";
+
+      // Carga dinámica temporalmente desactivada: faltan adaptadores de prendas en /public/app/shared.
+      const missingSharedModuleError = (featureName) => {
+        const message = `${featureName} temporalmente deshabilitado: falta módulo compartido en /public/app/shared.`;
+        console.warn(message);
+        return new Error(message);
+      };
+      const createPrendaInSheets = async () => {
+        throw missingSharedModuleError("Alta de prenda");
+      };
+      const deletePrendaInSheets = async () => {
+        throw missingSharedModuleError("Eliminación de prenda");
+      };
+      const archivePrendaInSheets = async () => {
+        throw missingSharedModuleError("Archivado de prenda");
+      };
+      const restorePrendaInSheets = async () => {
+        throw missingSharedModuleError("Restauración de prenda");
+      };
+      const loadArchivedPrendas = async () => [];
 
       const firebaseConfig = {
         apiKey: "AIzaSyAK5_MuMseQm58AeRZlrPtGyEZ216-Xkno",
