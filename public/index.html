@@ -3577,26 +3577,29 @@ Errores: 0</pre>
 
         const { start, end } = monthRange();
         const rows = [];
-        let annualSalesTotal = 0;
-        let annualGoalTotal = 0;
+        let rangeSalesTotal = 0;
+        let rangeGoalTotal = 0;
         for (let month = 1; month <= 12; month += 1) {
           const key = monthKey(metaState.year, month);
           const sale = Number(metaState.monthlySales[key] || 0);
           const goal = Number(metaState.monthlyGoals[key] ?? metaState.defaultMonthlyGoal ?? 0);
-          annualSalesTotal += sale;
-          annualGoalTotal += goal;
           if (month < start || month > end) continue;
+          rangeSalesTotal += sale;
+          rangeGoalTotal += goal;
           const pct = goal > 0 ? (sale / goal) * 100 : 0;
           rows.push(`<tr><td>${monthLabels[month - 1]}</td><td>${moneyMx.format(sale)}</td><td>${moneyMx.format(goal)}</td><td>${pct.toFixed(1)}%</td><td><div style="height:8px;background:#eee;border-radius:999px;overflow:hidden;"><span style="display:block;height:100%;width:${Math.min(100, Math.max(0, pct)).toFixed(0)}%;background:${pct >= 100 ? "#2f9e44" : "#1e5eff"};"></span></div></td></tr>`);
         }
         metaMonthlyTbody.innerHTML = rows.join("") || '<tr><td colspan="5">Sin datos para el rango seleccionado.</td></tr>';
 
-        const annualGoalValue = Number(metaState.annualGoal || annualGoalTotal);
-        const annualPctValue = annualGoalValue > 0 ? (annualSalesTotal / annualGoalValue) * 100 : 0;
-        if (metaAnnualSales) metaAnnualSales.textContent = moneyMx.format(annualSalesTotal);
+        const selectedMonths = Math.max(1, (end - start) + 1);
+        const annualGoalValue = Number(metaState.annualGoal || 0) > 0
+          ? Number(metaState.annualGoal) * (selectedMonths / 12)
+          : rangeGoalTotal;
+        const annualPctValue = annualGoalValue > 0 ? (rangeSalesTotal / annualGoalValue) * 100 : 0;
+        if (metaAnnualSales) metaAnnualSales.textContent = moneyMx.format(rangeSalesTotal);
         if (metaAnnualGoal) metaAnnualGoal.textContent = moneyMx.format(annualGoalValue);
         if (metaAnnualPct) metaAnnualPct.textContent = `${annualPctValue.toFixed(1)}%`;
-        if (metaAnnualDiff) metaAnnualDiff.textContent = moneyMx.format(annualSalesTotal - annualGoalValue);
+        if (metaAnnualDiff) metaAnnualDiff.textContent = moneyMx.format(rangeSalesTotal - annualGoalValue);
       };
 
       const monthIndex = (year, month) => ((Number(year) || 0) * 12) + (Math.max(1, Math.min(12, Number(month) || 1)) - 1);
