@@ -10,81 +10,81 @@
 
   <style>
     :root{
-      --bg:#f7f7f8;
+      --bg:#f3f5fb;
       --card:#ffffff;
-      --text:#111827;
-      --muted:#6b7280;
-      --line:#e5e7eb;
-      --brand:#5FA18E;
-      --brand-d:#4a8d7a;
-      --chip:#A7B59E;
+      --text:#0f172a;
+      --muted:#64748b;
+      --line:#dbe2ee;
+      --brand:#2563eb;
+      --brand-d:#1d4ed8;
+      --chip:#3b82f6;
+      --surface:#f8faff;
     }
     *{ box-sizing:border-box }
     html,body{ margin:0; padding:0; height:100%; background:var(--bg); color:var(--text); font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif }
 
-    .container{ max-width:980px; margin:28px auto; padding:0 16px }
-    .page-header-wrapper { position: relative; }
-    .panel-back-btn {
-      position: absolute;
-      top: 20px;
-      right: 24px;
-      padding: 8px 16px;
-      background: #f3f4f6;
-      border-radius: 999px;
-      font-size: 14px;
-      font-weight: 600;
-      color: #2563eb;
-      text-decoration: none;
-      border: 1px solid #e5e7eb;
-      transition: all .2s ease;
+    .container{ max-width:1120px; margin:36px auto; padding:0 18px }
+    .header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:18px;
+      flex-wrap:wrap;
     }
-    .panel-back-btn:hover { background: #e5e7eb; }
-    .header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px }
+    .header-main{ display:flex; align-items:center; gap:14px; min-width:220px; }
     .brand{ display:flex; align-items:center; text-decoration:none; }
-    .brand img{ height:36px; width:auto; opacity:.95; cursor:pointer; }
-    .title{ font-size:28px; font-weight:800; letter-spacing:-.01em }
+    .brand img{ height:40px; width:auto; opacity:.95; cursor:pointer; }
+    .title{ font-size:32px; font-weight:800; letter-spacing:-.02em; line-height:1.1 }
+    .top-actions{ display:flex; gap:10px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
 
     .card{
       background:var(--card);
       border:1px solid var(--line);
-      border-radius:14px;
-      box-shadow:0 10px 20px rgba(17,24,39,.05);
+      border-radius:18px;
+      box-shadow:0 18px 36px rgba(15,23,42,.08);
       overflow:hidden;
     }
     .card-hd{
-      background:#fafafa;
+      background:var(--surface);
       border-bottom:1px solid var(--line);
-      padding:14px 18px;
+      padding:18px 24px;
       font-weight:800;
+      font-size:17px;
     }
-    .card-bd{ padding:18px }
+    .card-bd{ padding:24px }
     .grid{ display:grid; grid-template-columns:1fr; gap:14px }
-    @media (min-width: 860px){
+    @media (min-width: 768px){
+      .grid.cols-2,
+      .grid.cols-3{ grid-template-columns:1fr 1fr }
+    }
+    @media (min-width: 1024px){
       .grid.cols-2{ grid-template-columns:1fr 1fr }
       .grid.cols-3{ grid-template-columns:1fr 1fr 1fr }
     }
 
     .row{ display:flex; flex-direction:column; gap:8px }
-    .lab{ font-weight:700; font-size:14px }
+    .lab{ font-weight:600; font-size:14px; color:#1e293b }
     .hint{ color:var(--muted); font-size:12px }
 
     .inpt, textarea, select{
       width:100%; border:1px solid var(--line); background:#fff; color:var(--text);
-      border-radius:10px; padding:12px 12px; font-size:15px; outline:none;
+      border-radius:14px; padding:12px 14px; font-size:15px; outline:none;
+      min-height:48px;
     }
-    .inpt:focus, textarea:focus, select:focus{ border-color:#cfd6dc; box-shadow:0 0 0 3px rgba(95,161,142,.12) }
-    textarea{ min-height:92px; resize:vertical }
+    .inpt:focus, textarea:focus, select:focus{ border-color:#93c5fd; box-shadow:0 0 0 4px rgba(59,130,246,.14) }
+    textarea{ min-height:120px; resize:vertical }
 
     .switch-row{
-      display:flex; align-items:center; gap:10px; margin:2px 0 6px;
+      display:flex; align-items:center; gap:10px; margin:4px 0 8px;
     }
-    .sw{ width:18px; height:18px }
-    .sw-lab{ font-size:14px; color:#374151 }
+    .sw{ width:18px; height:18px; accent-color:var(--brand) }
+    .sw-lab{ font-size:14px; color:#334155 }
 
     .btn{
-      appearance:none; border:0; border-radius:12px; padding:14px 18px; font-weight:800;
+      appearance:none; border:0; border-radius:14px; padding:14px 18px; font-weight:800;
       color:#fff; background:var(--brand); width:100%; cursor:pointer; font-size:16px;
-      box-shadow:0 8px 18px rgba(95,161,142,.25);
+      box-shadow:0 14px 24px rgba(37,99,235,.22);
     }
     .btn:hover{ background:var(--brand-d) }
     .btn:disabled{ background:#a2b7b0; cursor:not-allowed; box-shadow:none }
@@ -119,16 +119,16 @@
     .modal .v{ font-weight:700; text-align:right }
     .modal .btns{ display:flex; gap:10px; margin-top:14px; justify-content:flex-end }
     .modal .btn-mini{
-      border:0; border-radius:10px; padding:10px 14px; cursor:pointer;
+      border:0; border-radius:12px; padding:10px 14px; cursor:pointer;
       background:var(--brand); color:#fff; font-weight:700;
     }
-    .modal .btn-mini.secondary{ background:#eef2f7; color:#111827 }
+    .modal .btn-mini.secondary{ background:#eef2ff; color:#1e293b }
     .link{ color:#2563eb; text-decoration:none }
     .link:hover{ text-decoration:underline }
 
     .desc-tipo{
       display:flex; gap:14px; align-items:center;
-      padding:10px 12px; border:1px solid var(--line); border-radius:10px;
+      padding:10px 12px; border:1px solid var(--line); border-radius:14px;
       background:#fff;
     }
     .desc-tipo label{
@@ -143,13 +143,26 @@
       filter:grayscale(.2);
     }
 
-    .top-actions{
-      display:flex; gap:10px; align-items:center; justify-content:flex-end;
-      margin-top:6px;
-    }
     .btn-ghost{
-      appearance:none; border:1px solid var(--line); background:#fff; color:#111827;
-      border-radius:12px; padding:10px 12px; font-weight:800; cursor:pointer;
+      appearance:none; border:1px solid #bfdbfe; background:#eff6ff; color:#1d4ed8;
+      border-radius:999px; padding:10px 16px; font-weight:700; cursor:pointer;
+      text-decoration:none;
+      transition:all .2s ease;
+    }
+    .btn-ghost:hover{ background:#dbeafe; }
+    .btn-ghost.primary{
+      background:#2563eb;
+      border-color:#2563eb;
+      color:#fff;
+    }
+    .btn-ghost.primary:hover{ background:#1d4ed8; }
+
+    .field-card{
+      background:var(--surface);
+      border:1px solid #e7ecf6;
+      border-radius:16px;
+      padding:16px;
+      margin-bottom:16px;
     }
 
 
@@ -180,12 +193,11 @@
     .public-list{ margin:0; padding-left:18px; color:#383234; }
     .public-list li{ margin:6px 0; }
     @media (max-width: 640px) {
-      .panel-back-btn {
-        top: 14px;
-        right: 16px;
-        font-size: 13px;
-        padding: 6px 12px;
-      }
+      .container{ margin:24px auto; }
+      .title{ font-size:26px; }
+      .card-hd,
+      .card-bd{ padding:16px; }
+      .top-actions{ width:100%; justify-content:flex-start; }
     }
   </style>
 </head>
@@ -193,87 +205,96 @@
 <body>
   <div id="public-apartado-app" style="display:none"></div>
 
-  <div id="admin-apartados-app" class="container page-header-wrapper">
-    <a href="/#/panel" class="panel-back-btn">← Volver al panel</a>
-
+  <div id="admin-apartados-app" class="container">
     <div class="header">
-      <div class="title">Registrar Apartado</div>
-      <a class="brand" href="/#/panel" aria-label="Volver al panel">
-        <img src="/assets/haruja-logo.png" alt="HarujaGdl" onerror="this.style.display='none'">
-      </a>
-    </div>
+      <div class="header-main">
+        <a class="brand" href="/#/panel" aria-label="Volver al panel">
+          <img src="/assets/haruja-logo.png" alt="HarujaGdl" onerror="this.style.display='none'">
+        </a>
+        <div class="title">Registrar Apartado</div>
+      </div>
 
-    <div class="top-actions">
-      <button class="btn-ghost" onclick="window.location.href='/apartados-historial'">Historial</button>
+      <div class="top-actions">
+        <a href="/#/panel" class="btn-ghost">Volver al panel</a>
+        <button class="btn-ghost primary" onclick="window.location.href='/apartados-historial'">Historial</button>
+      </div>
     </div>
 
     <div class="card">
       <div class="card-hd">Datos del apartado</div>
       <div class="card-bd">
 
-        <div class="grid cols-3">
-          <div class="row">
-            <label class="lab">Folio</label>
-            <input id="folio" class="inpt" type="text" placeholder="HARUJA26-001" readonly>
-            <div class="hint">Se genera automático para apartados nuevos.</div>
-          </div>
-          <div class="row">
-            <label class="lab">Fecha</label>
-            <input id="fecha" class="inpt" type="date">
-          </div>
-          <div class="row">
-            <label class="lab">Modo</label>
-            <div class="switch-row" style="margin-top:2px">
-              <input id="usarFolioExistente" class="sw" type="checkbox">
-              <label class="sw-lab" for="usarFolioExistente">Usar folio existente (abono)</label>
+        <div class="field-card">
+          <div class="grid cols-3">
+            <div class="row">
+              <label class="lab">Folio</label>
+              <input id="folio" class="inpt" type="text" placeholder="HARUJA26-001" readonly>
+              <div class="hint">Se genera automático para apartados nuevos.</div>
             </div>
-            <div class="hint">Actívalo solo para abonar a un folio ya creado.</div>
+            <div class="row">
+              <label class="lab">Fecha</label>
+              <input id="fecha" class="inpt" type="date">
+            </div>
+            <div class="row">
+              <label class="lab">Modo</label>
+              <div class="switch-row" style="margin-top:2px">
+                <input id="usarFolioExistente" class="sw" type="checkbox">
+                <label class="sw-lab" for="usarFolioExistente">Usar folio existente (abono)</label>
+              </div>
+              <div class="hint">Actívalo solo para abonar a un folio ya creado.</div>
+            </div>
           </div>
         </div>
 
-        <div class="grid cols-2">
-          <div class="row">
-            <label class="lab">Nombre del cliente</label>
-            <input id="cliente" class="inpt" type="text" placeholder="Ej. Fernanda García">
-          </div>
-          <div class="row">
-            <label class="lab">N° de contacto</label>
-            <input id="contacto" class="inpt" type="text" placeholder="Ej. 3312345678">
-          </div>
-        </div>
-
-        <div class="grid">
-          <div class="row">
-            <label class="lab">Código(s) de prenda(s) <span class="hint">(separados por coma)</span></label>
-            <textarea id="codigos" placeholder="Ej. HA24008/NG-M, HA8L001/NG-S"></textarea>
-            <div class="hint">En abonos no es necesario volver a capturar códigos.</div>
+        <div class="field-card">
+          <div class="grid cols-2">
+            <div class="row">
+              <label class="lab">Nombre del cliente</label>
+              <input id="cliente" class="inpt" type="text" placeholder="Ej. Fernanda García">
+            </div>
+            <div class="row">
+              <label class="lab">N° de contacto</label>
+              <input id="contacto" class="inpt" type="text" placeholder="Ej. 3312345678">
+            </div>
           </div>
         </div>
 
-        <div class="grid cols-2">
-          <div class="row">
-            <label class="lab">Anticipo</label>
-            <input id="anticipo" class="inpt" type="text" value="0">
+        <div class="field-card">
+          <div class="grid">
+            <div class="row">
+              <label class="lab">Código(s) de prenda(s) <span class="hint">(separados por coma)</span></label>
+              <textarea id="codigos" placeholder="Ej. HA24008/NG-M, HA8L001/NG-S"></textarea>
+              <div class="hint">En abonos no es necesario volver a capturar códigos.</div>
+            </div>
           </div>
+        </div>
 
-          <div class="row" id="wrapDesc">
-            <label class="lab">Descuento</label>
-
-            <div class="desc-tipo" id="descTipoBox">
-              <label>
-                <input type="radio" name="descuentoTipo" id="descTipoPct" value="PCT" checked>
-                %
-              </label>
-              <label>
-                <input type="radio" name="descuentoTipo" id="descTipoAmt" value="AMT">
-                $
-              </label>
-              <span class="hint" id="descHelp" style="margin-left:auto">%</span>
+        <div class="field-card">
+          <div class="grid cols-2">
+            <div class="row">
+              <label class="lab">Anticipo</label>
+              <input id="anticipo" class="inpt" type="text" value="0">
             </div>
 
-            <input id="descValor" class="inpt" type="number" step="0.01" min="0" value="0">
+            <div class="row" id="wrapDesc">
+              <label class="lab">Descuento</label>
 
-            <div class="hint">Para abonos se respeta el descuento guardado originalmente.</div>
+              <div class="desc-tipo" id="descTipoBox">
+                <label>
+                  <input type="radio" name="descuentoTipo" id="descTipoPct" value="PCT" checked>
+                  %
+                </label>
+                <label>
+                  <input type="radio" name="descuentoTipo" id="descTipoAmt" value="AMT">
+                  $
+                </label>
+                <span class="hint" id="descHelp" style="margin-left:auto">%</span>
+              </div>
+
+              <input id="descValor" class="inpt" type="number" step="0.01" min="0" value="0">
+
+              <div class="hint">Para abonos se respeta el descuento guardado originalmente.</div>
+            </div>
           </div>
         </div>
 
@@ -286,7 +307,7 @@
           <button id="btn" class="btn" onclick="enviar()">Registrar</button>
           <div id="estado" class="status"></div>
         </div>
-      </div>
+    </div>
     </div>
   </div>
 
