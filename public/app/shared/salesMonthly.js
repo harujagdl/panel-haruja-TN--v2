@@ -83,7 +83,7 @@ const resolveYearMonth = (row = {}, fallbackYear) => {
     return { year: explicitYear, month: explicitMonth };
   }
 
-  const monthKeyValue = String(row.month_key || row.monthKey || "").trim();
+  const monthKeyValue = String(row.month_key || row.monthKey || row.id || "").trim();
   if (/^\d{4}-\d{2}$/.test(monthKeyValue)) {
     const [yearRaw, monthRaw] = monthKeyValue.split("-");
     return { year: toYearNumber(yearRaw, fallbackYear), month: toMonthNumber(monthRaw, null) };
@@ -94,6 +94,18 @@ const resolveYearMonth = (row = {}, fallbackYear) => {
 
   return { year: fallbackYear, month: explicitMonth || null };
 };
+
+const resolveRowTotal = (row = {}) => toAmountNumber(
+  row.total
+  ?? row.amount
+  ?? row.monto
+  ?? row.total_mes
+  ?? row.totalMes
+  ?? row.total_month
+  ?? row.subtotal
+  ?? 0,
+  0
+);
 
 export const emptyMonths = (year = new Date().getFullYear()) => {
   const out = {};
@@ -117,39 +129,12 @@ async function readVentasCollection(db, collectionName, year) {
   return out;
 }
 
-const monthToken = (month) => String(Math.max(1, Math.min(12, Number(month) || 1))).padStart(2, "0");
-
-async function readVentasResumenMonth(year, month) {
-  try {
-    const response = await fetch(`/api/core?action=ventas-resumen&month=${year}-${monthToken(month)}`);
-    const payload = await response.json();
-    if (!response.ok || !payload?.ok) return null;
-    return toAmountNumber(payload?.data?.total_mes, null);
-  } catch (_error) {
-    return null;
-  }
-}
-
 export async function getMonthlySalesMap(db, year, { startMonth = 1, endMonth = 12 } = {}) {
   const normalizedYear = toYearNumber(year);
   const start = Math.max(1, Math.min(12, toMonthNumber(startMonth, 1) || 1));
   const end = Math.max(start, Math.min(12, toMonthNumber(endMonth, 12) || 12));
 
   const monthlyTotals = emptyMonths(normalizedYear);
-
-  const monthNumbers = [];
-  for (let month = start; month <= end; month += 1) monthNumbers.push(month);
-
-  const apiTotals = await Promise.all(monthNumbers.map((month) => readVentasResumenMonth(normalizedYear, month)));
-  let hasApiData = false;
-  monthNumbers.forEach((month, index) => {
-    const total = apiTotals[index];
-    if (!Number.isFinite(total)) return;
-    hasApiData = true;
-    monthlyTotals[monthKey(normalizedYear, month)] = total;
-  });
-
-  if (hasApiData) return monthlyTotals;
 
   const ventasRows = [
     ...(await readVentasCollection(db, "ventas", normalizedYear)),
@@ -162,7 +147,7 @@ export async function getMonthlySalesMap(db, year, { startMonth = 1, endMonth = 
     if (rowYear !== normalizedYear || !month || month < start || month > end) continue;
 
     const key = monthKey(rowYear, month);
-    const total = toAmountNumber(row.total ?? row.amount ?? row.monto ?? row.total_mes ?? row.totalMes, 0);
+    const total = resolveRowTotal(row);
     monthlyTotals[key] = toAmountNumber(monthlyTotals[key], 0) + total;
   }
 
