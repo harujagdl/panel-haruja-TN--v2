@@ -90,7 +90,7 @@
         </div>
         <button id="btnLoad" class="btn btn-secondary">Ver detalle</button>
         <button id="btnCsv" class="btn btn-secondary">Export CSV</button>
-        <a href="/api/tiendanube/start" class="btn btn-secondary">Conectar Tiendanube</a>
+        <a href="/api/tiendanube?action=connect" class="btn btn-secondary">Conectar Tiendanube</a>
         <button id="btnSync" class="btn btn-primary">Forzar sincronización</button>
       </div>
       <div id="status" class="status"></div>
@@ -409,7 +409,7 @@
 
     const syncVentas = async () => {
       setStatus("Sincronizando con Tiendanube...");
-      const res = await fetch(`/api/core?action=ventas-sync&store_id=${encodeURIComponent(STORE_ID)}`, {
+      const res = await fetch(`/api/tiendanube?action=sync&store_id=${encodeURIComponent(STORE_ID)}`, {
         method: "POST"
       });
       const payload = await safeJson(res, "No se pudo sincronizar ventas");

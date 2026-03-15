@@ -208,7 +208,7 @@
 
     const syncVentas = async () => {
       setStatus("Sincronizando con Tiendanube...");
-      const res = await fetch("/api/core?action=ventas-sync", { method: "POST" });
+      const res = await fetch("/api/tiendanube?action=sync", { method: "POST" });
       const payload = await safeJson(res, "No se pudo sincronizar ventas");
       if (!payload?.ok) throw new Error(payload?.message || "No se pudo sincronizar ventas");
       const data = payload.data || {};
