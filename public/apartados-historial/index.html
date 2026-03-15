@@ -4,145 +4,72 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Historial de Apartados - HarujaGdl</title>
-
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧷</text></svg>">
-
   <style>
-    :root{
-      --bg:#f7f7f8;
-      --card:#ffffff;
-      --text:#111827;
-      --muted:#6b7280;
-      --line:#e5e7eb;
-      --brand:#5FA18E;
-      --brand-d:#4a8d7a;
-    }
-    *{ box-sizing:border-box }
-    html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif }
-
-    .container{ max-width:1200px; margin:28px auto; padding:0 16px }
-    .page-header-wrapper{ position:relative }
-    .panel-back-btn{
-      position:absolute;
-      top:20px;
-      right:24px;
-      padding:8px 16px;
-      background:#f3f4f6;
-      border-radius:999px;
-      font-size:14px;
-      font-weight:600;
-      color:#2563eb;
-      text-decoration:none;
-      border:1px solid #e5e7eb;
-      transition:all .2s ease;
-    }
-    .panel-back-btn:hover{ background:#e5e7eb }
-
-    .header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px }
-    .title{ font-size:28px; font-weight:800; letter-spacing:-.01em }
-    .brand img{ height:36px; width:auto; opacity:.95 }
-
-    .top-actions{ display:flex; gap:10px; justify-content:flex-end; margin-bottom:12px }
-    .btn-ghost, .btn-brand{
-      appearance:none; border-radius:12px; padding:10px 14px;
-      font-weight:800; cursor:pointer; text-decoration:none; font-size:14px;
-    }
-    .btn-ghost{ border:1px solid var(--line); background:#fff; color:#111827 }
-    .btn-brand{ border:0; background:var(--brand); color:#fff }
-    .btn-brand:hover{ background:var(--brand-d) }
-
-    .card{
-      background:var(--card);
-      border:1px solid var(--line);
-      border-radius:14px;
-      box-shadow:0 10px 20px rgba(17,24,39,.05);
-      overflow:hidden;
-    }
-    .card-hd{
-      background:#fafafa;
-      border-bottom:1px solid var(--line);
-      padding:14px 18px;
-      font-weight:800;
-    }
-    .card-bd{ padding:18px }
-
-    .search-wrap{ margin-bottom:14px }
-    .search{
-      width:100%;
-      border:1px solid var(--line);
-      border-radius:10px;
-      padding:12px;
-      font-size:15px;
-    }
-
-    .status{ min-height:22px; font-size:14px; margin-bottom:10px }
-    .err{ color:#b91c1c; font-weight:700 }
-    .muted{ color:var(--muted) }
-
-    .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:10px }
-    table{ width:100%; border-collapse:collapse; min-width:900px; background:#fff }
-    th, td{ text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); font-size:14px }
-    th{ background:#fafafa; font-weight:800 }
-    tr:last-child td{ border-bottom:0 }
-
-    .estado{ font-weight:800; font-size:12px; padding:4px 8px; border-radius:999px; display:inline-block }
-    .estado.activo{ background:#fef3c7; color:#92400e }
-    .estado.liquidado{ background:#dcfce7; color:#166534 }
-
-    .actions{ display:flex; gap:8px; flex-wrap:wrap }
-    .action-link{
-      display:inline-block; text-decoration:none; font-size:12px; font-weight:700;
-      border-radius:8px; padding:6px 10px;
-    }
-    .abonar{ background:#dbeafe; color:#1d4ed8 }
-    .pdf{ background:#f3f4f6; color:#111827 }
-    .regen{ background:#ecfeff; color:#155e75 }
-    .copy{ background:#eef2ff; color:#3730a3; border:0; cursor:pointer }
-
-    @media (max-width: 640px) {
-      .panel-back-btn { top:14px; right:16px; font-size:13px; padding:6px 12px }
-      .title{ font-size:24px }
-    }
+    :root{--bg:#f3f5f9;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#dbe2ee;--brand:#1d4ed8;--brandDark:#1e3a8a;--ok:#15803d}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
+    .container{max-width:1220px;margin:28px auto;padding:0 16px}
+    .header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:14px}
+    .title{font-size:30px;font-weight:800;letter-spacing:-.02em;color:#0b1f5e}
+    .brand img{height:36px;width:auto}
+    .top-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-bottom:14px}
+    .btn{appearance:none;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:700;cursor:pointer;text-decoration:none;border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;min-height:40px}
+    .btn-back{background:#fff;border-color:var(--line);color:var(--brand)}
+    .btn-primary{background:var(--brand);color:#fff}
+    .btn-primary:hover{background:var(--brandDark)}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 20px rgba(15,23,42,.05)}
+    .card-hd{padding:16px 18px;border-bottom:1px solid var(--line);font-size:17px;font-weight:800;color:#0b1f5e}
+    .card-bd{padding:18px}
+    .filters{display:grid;grid-template-columns:minmax(240px,1fr) 220px auto;gap:10px;margin-bottom:14px}
+    .search,.select{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 12px;font-size:14px;background:#fff}
+    .status{min-height:22px;font-size:14px;margin-bottom:10px}
+    .muted{color:var(--muted)}.err{color:#b91c1c;font-weight:700}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff}
+    table{width:100%;border-collapse:collapse;min-width:980px}
+    th,td{padding:12px 10px;border-bottom:1px solid #e8edf5;font-size:13px;vertical-align:middle}
+    th{background:#f8fbff;color:#1e3a8a;font-weight:800}
+    tr:last-child td{border-bottom:0}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .action{border:1px solid transparent;border-radius:10px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;white-space:nowrap;min-height:32px;display:inline-flex;align-items:center}
+    .abonar{background:#e0ecff;color:#1d4ed8}.ticket{background:#dbeafe;color:#1d4ed8}.pdf{background:#eef2ff;color:#3730a3}
+    .regen{background:#dcfce7;color:#166534}.copy{background:#f8fafc;color:#334155;border-color:#dbe2ee}
+    .estado{font-size:11px;font-weight:800;border-radius:999px;padding:4px 8px;display:inline-block}
+    .estado.activo{background:#dbeafe;color:#1d4ed8}.estado.liquidado{background:#dcfce7;color:#166534}.estado.cancelado{background:#fee2e2;color:#991b1b}
+    @media (max-width:880px){.filters{grid-template-columns:1fr}.title{font-size:24px}}
   </style>
 </head>
 <body>
-  <div class="container page-header-wrapper">
-    <a href="/#/panel" class="panel-back-btn">← Volver al panel</a>
-
+  <div class="container">
     <div class="header">
       <div class="title">Historial de Apartados</div>
-      <a class="brand" href="/#/panel" aria-label="Volver al panel">
-        <img src="/assets/haruja-logo.png" alt="HarujaGdl" onerror="this.style.display='none'">
-      </a>
+      <a class="brand" href="/#/panel" aria-label="Volver al panel"><img src="/assets/haruja-logo.png" alt="HarujaGdl" onerror="this.style.display='none'"></a>
     </div>
 
     <div class="top-actions">
-      <a class="btn-ghost" href="/#/panel">Panel</a>
-      <a class="btn-brand" href="/apartados">+ Registrar apartado</a>
+      <a href="/#/panel" class="btn btn-back">← Volver al panel</a>
+      <a href="/apartados" class="btn btn-primary">+ Registrar apartado</a>
     </div>
 
     <div class="card">
       <div class="card-hd">Listado de apartados</div>
       <div class="card-bd">
-        <div class="search-wrap">
-          <input id="search" class="search" type="search" placeholder="Buscar por folio, cliente o contacto...">
+        <div class="filters">
+          <input id="search" class="search" type="search" placeholder="Buscar por folio, cliente o teléfono...">
+          <select id="estado" class="select">
+            <option value="">Todos los estatus</option>
+            <option value="ACTIVO">Activo</option>
+            <option value="LIQUIDADO">Liquidado</option>
+            <option value="CANCELADO">Cancelado</option>
+          </select>
+          <button id="btn-filtrar" class="btn btn-primary" type="button">Filtrar</button>
         </div>
         <div id="status" class="status muted">Cargando apartados...</div>
-
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Folio</th>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Contacto</th>
-                <th>Total</th>
-                <th>Anticipo</th>
-                <th>Saldo</th>
-                <th>Estado</th>
-                <th>Acciones</th>
+                <th>Folio</th><th>Fecha</th><th>Cliente</th><th>Contacto</th><th>Total</th><th>Anticipo</th><th>Saldo</th><th>Estatus</th><th>Acciones</th>
               </tr>
             </thead>
             <tbody id="rows"></tbody>
@@ -153,55 +80,62 @@
   </div>
 
   <script>
-    const state = {
-      apartados: [],
-      filtered: [],
-      missingPdf: new Set(),
-    };
-
+    const state = { apartados: [], filtered: [], missingPdf: new Set() };
     const statusEl = document.getElementById('status');
     const rowsEl = document.getElementById('rows');
     const searchEl = document.getElementById('search');
+    const estadoEl = document.getElementById('estado');
 
-    function formatMoney(value) {
-      const num = Number(value || 0);
-      return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(num);
-    }
-
+    const formatMoney = (value) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(value || 0));
     function formatDate(value) {
       if (!value) return '-';
       const d = new Date(value);
       if (Number.isNaN(d.getTime())) return value;
       return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(d);
     }
-
     function estadoClass(estado) {
-      return String(estado || '').toLowerCase() === 'liquidado' ? 'liquidado' : 'activo';
+      const normalized = String(estado || '').toLowerCase();
+      if (normalized === 'liquidado') return 'liquidado';
+      if (normalized === 'cancelado') return 'cancelado';
+      return 'activo';
+    }
+    function ticketUrlFor(item) {
+      const folio = String(item?.folio || '').trim();
+      if (!folio) return '';
+      return item.ticketUrl || `/ticket/${encodeURIComponent(folio)}`;
     }
 
     function renderRows() {
-      if (state.filtered.length === 0) {
+      if (!state.filtered.length) {
         rowsEl.innerHTML = '<tr><td colspan="9" class="muted">No se encontraron apartados.</td></tr>';
         return;
       }
 
       rowsEl.innerHTML = state.filtered.map((item) => {
-        const abonoUrl = `/apartados?abono=1&folio=${encodeURIComponent(item.folio)}`;
-        const hasPdf = Boolean(item.pdfUrl);
-        const needsRegen = state.missingPdf.has(String(item.folio || '').toUpperCase()) || !hasPdf;
+        const folio = String(item.folio || '').trim();
+        const ticketUrl = ticketUrlFor(item);
+        const pdfUrl = String(item.pdfDriveUrl || item.pdfUrlPersistido || item.pdfUrl || '').trim();
+        const hasPdf = Boolean(pdfUrl);
+        const needsRegen = state.missingPdf.has(folio.toUpperCase()) || !hasPdf;
+        const copyTarget = pdfUrl || ticketUrl;
+        const abonoUrl = `/apartados?abono=1&folio=${encodeURIComponent(folio)}`;
+
+        const ticketButton = ticketUrl
+          ? `<a class="action ticket" href="${ticketUrl}" target="_blank" rel="noopener noreferrer">Ticket</a>`
+          : '';
         const pdfButton = hasPdf
-          ? `<a class="action-link pdf" href="${item.pdfUrl}" target="_blank" rel="noopener noreferrer">Ticket</a>`
+          ? `<a class="action pdf" href="${pdfUrl}" target="_blank" rel="noopener noreferrer">Abrir PDF</a>`
           : '';
         const regenButton = needsRegen
-          ? `<button class="action-link regen" data-folio="${item.folio || ''}" onclick="regeneratePdf(this)">Regenerar PDF</button>`
+          ? `<button class="action regen" data-folio="${folio}" onclick="regeneratePdf(this)">Regenerar PDF</button>`
           : '';
-        const copyButton = hasPdf
-          ? `<button class="action-link copy" data-url="${item.pdfUrl}" onclick="copyPdfLink(this)">Copiar link</button>`
+        const copyButton = copyTarget
+          ? `<button class="action copy" data-url="${copyTarget}" onclick="copyLink(this)">Copiar link</button>`
           : '';
 
         return `
           <tr>
-            <td>${item.folio || '-'}</td>
+            <td>${folio || '-'}</td>
             <td>${formatDate(item.ultimoMovimiento || item.fecha)}</td>
             <td>${item.cliente || '-'}</td>
             <td>${item.contacto || '-'}</td>
@@ -209,14 +143,7 @@
             <td>${formatMoney(item.anticipo)}</td>
             <td>${formatMoney(item.saldo)}</td>
             <td><span class="estado ${estadoClass(item.estado)}">${item.estado || 'ACTIVO'}</span></td>
-            <td>
-              <div class="actions">
-                <a class="action-link abonar" href="${abonoUrl}">Abonar</a>
-                ${pdfButton}
-                ${regenButton}
-                ${copyButton}
-              </div>
-            </td>
+            <td><div class="actions"><a class="action abonar" href="${abonoUrl}">Abonar</a>${ticketButton}${pdfButton}${regenButton}${copyButton}</div></td>
           </tr>
         `;
       }).join('');
@@ -224,26 +151,24 @@
 
     function applyFilter() {
       const term = searchEl.value.trim().toLowerCase();
-      if (!term) {
-        state.filtered = [...state.apartados];
-      } else {
-        state.filtered = state.apartados.filter((item) => {
-          return [item.folio, item.cliente, item.contacto]
-            .some((value) => String(value || '').toLowerCase().includes(term));
-        });
-      }
+      const estado = String(estadoEl.value || '').toUpperCase();
+      state.filtered = state.apartados.filter((item) => {
+        const byText = !term || [item.folio, item.cliente, item.contacto].some((value) => String(value || '').toLowerCase().includes(term));
+        const byEstado = !estado || String(item.estado || '').toUpperCase() === estado;
+        return byText && byEstado;
+      });
       renderRows();
       statusEl.textContent = `${state.filtered.length} apartado(s) mostrado(s).`;
       statusEl.className = 'status muted';
     }
 
-
-    async function copyPdfLink(btn) {
+    async function copyLink(btn) {
       const url = String(btn?.dataset?.url || '').trim();
       if (!url) return;
       try {
-        await navigator.clipboard.writeText(url);
-        statusEl.textContent = 'Link de PDF copiado.';
+        const absolute = new URL(url, window.location.origin).toString();
+        await navigator.clipboard.writeText(absolute);
+        statusEl.textContent = 'Link copiado correctamente.';
         statusEl.className = 'status muted';
       } catch (_) {
         statusEl.textContent = 'No se pudo copiar automáticamente el link.';
@@ -258,13 +183,15 @@
       btn.disabled = true;
       btn.textContent = 'Regenerando...';
       try {
-        const resp = await fetch(`/api/core?action=apartados&op=pdf-refresh&folio=${encodeURIComponent(folio)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'historial_manual_regen' }) });
+        const resp = await fetch(`/api/core?action=apartados&op=pdf-refresh&folio=${encodeURIComponent(folio)}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'historial_manual_regen' })
+        });
         const data = await resp.json();
         if (!resp.ok || !data.ok) throw new Error(data.message || 'No se pudo regenerar PDF.');
         const payload = data.data || {};
         const pdfUrl = String(payload.pdfUrl || '').trim();
         if (pdfUrl) {
-          state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase() ? { ...item, pdfUrl } : item);
+          state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase() ? { ...item, pdfDriveUrl: pdfUrl } : item);
           state.missingPdf.delete(folio.toUpperCase());
           applyFilter();
         }
@@ -292,16 +219,18 @@
         await loadMissingPdf();
         const resp = await fetch('/api/core?action=apartados&op=list');
         const data = await resp.json();
-
-        if (!resp.ok || !data.ok) {
-          throw new Error(data.message || 'No se pudo cargar el historial.');
-        }
+        if (!resp.ok || !data.ok) throw new Error(data.message || 'No se pudo cargar el historial.');
 
         const body = data.data || {};
-        state.apartados = (Array.isArray(body.apartados) ? body.apartados : []).map((item) => ({ ...item, contacto: item.telefono || item.contacto || '', estado: item.status || item.estado || 'ACTIVO', saldo: item.saldoPendiente ?? item.saldo ?? 0, pdfUrl: item.pdfDriveUrl || item.pdfUrl || '' }));
-        state.filtered = [...state.apartados];
-        renderRows();
-        statusEl.textContent = `${state.filtered.length} apartado(s) mostrado(s).`;
+        state.apartados = (Array.isArray(body.apartados) ? body.apartados : []).map((item) => ({
+          ...item,
+          contacto: item.telefono || item.contacto || '',
+          estado: (item.status || item.estado || 'ACTIVO').toUpperCase(),
+          saldo: item.saldoPendiente ?? item.saldo ?? 0,
+          ticketUrl: item.ticketUrl || `/ticket/${encodeURIComponent(item.folio || '')}`,
+          pdfDriveUrl: item.pdfDriveUrl || item.pdfUrlPersistido || '',
+        }));
+        applyFilter();
       } catch (error) {
         statusEl.textContent = error.message || 'Error cargando historial.';
         statusEl.className = 'status err';
@@ -310,6 +239,8 @@
     }
 
     searchEl.addEventListener('input', applyFilter);
+    estadoEl.addEventListener('change', applyFilter);
+    document.getElementById('btn-filtrar').addEventListener('click', applyFilter);
     loadHistorial();
   </script>
 </body>
