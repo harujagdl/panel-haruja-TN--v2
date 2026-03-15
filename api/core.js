@@ -32,6 +32,7 @@ import {
   searchApartados,
   updateApartadoStatus,
 } from '../lib/api/apartados.js';
+import { runApartadoPdfDriveWriteTest } from '../lib/apartados/pdf-sync.js';
 
 const sendOk = (res, data) => res.status(200).json({ ok: true, data });
 const sendErr = (res, status, message, error) => res.status(status).json({ ok: false, message, ...(error ? { error: String(error?.message || error) } : {}) });
@@ -98,6 +99,11 @@ async function handleApartados(req, res) {
     if (!folio) return sendErr(res, 400, 'folio es obligatorio.');
     const result = await regenerateApartadoPdf(folio, req.body || {});
     if (result?.status) return res.status(result.status).json(result.body);
+    return sendOk(res, result);
+  }
+  if (req.method === 'POST' && op === 'pdf-drive-test') {
+    const result = await runApartadoPdfDriveWriteTest();
+    if (!result?.ok) return sendErr(res, 502, result?.error || 'No se pudo guardar el PDF en Drive.');
     return sendOk(res, result);
   }
   if (req.method === 'POST' && op === 'cancel') {
