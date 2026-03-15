@@ -6,7 +6,7 @@ Esta integración deja preparado el backend para persistir y reemplazar el PDF d
 
 - Folio habilitado por ahora: `HARUJA0001`.
 - Carpeta destino Drive: `1y3l0r-4XnSsicnuSeVaATSh3rC89j-If`.
-- Nombre esperado del archivo: `tickets_apartados_HARUJA0001.pdf`.
+- Nombre esperado del archivo: `${folio}.pdf` (ej. `HARUJA26-002.pdf`).
 - Estrategia de reemplazo: si existe un archivo previo con el mismo nombre, se elimina y se crea la versión nueva.
 
 ## Variables de entorno en Vercel
@@ -37,7 +37,7 @@ Request `POST` JSON:
   "reason": "create|abono|status_lookup|manual_refresh",
   "apartado": { "...": "datos del apartado" },
   "driveFolderId": "1y3l0r-4XnSsicnuSeVaATSh3rC89j-If",
-  "fileName": "tickets_apartados_HARUJA0001.pdf",
+  "fileName": "HARUJA0001.pdf",
   "replaceExisting": true,
   "source": "panel-haruja",
   "timestamp": "2026-01-01T00:00:00.000Z"
@@ -53,7 +53,8 @@ Response esperada:
   "exists": true,
   "pdfUrl": "https://drive.google.com/file/d/.../view",
   "fileId": "...",
-  "fileName": "tickets_apartados_HARUJA0001.pdf",
+  "fileName": "HARUJA0001.pdf",
+  "folderId": "1y3l0r-4XnSsicnuSeVaATSh3rC89j-If",
   "replaced": true,
   "updatedAt": "2026-01-01T00:00:00.000Z"
 }
