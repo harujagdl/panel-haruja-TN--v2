@@ -2807,31 +2807,31 @@ Errores: 0</pre>
         getRedirectResult,
         signOut
       } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-      import { ajustarDesdePrecioConIVA } from "/app/shared/priceRules.js";
+      import { ajustarDesdePrecioConIVA } from "/shared/priceRules.js";
       import {
         emptyMonths,
         getMonthlySalesMap
-      } from "/app/shared/salesTotals.js";
+      } from "/shared/salesTotals.js";
       import {
         adminSignIn,
         adminSignOut,
         isAdminUser
-      } from "/app/shared/adminAuth.js";
+      } from "/shared/adminAuth.js";
       import {
         getGoalsSalesState,
         saveAnnualGoal,
         saveMonthlyGoal,
         saveRangeMonthlyGoal
-      } from "/app/shared/goalsSales.js";
-      import { loadBaseRowsFromSheets } from "/app/shared/sheets-adapter.js";
-      import { loadDictionariesFromSheets } from "/app/shared/dictionaries-adapter.js";
-      import { generateHarujaCode, normalizeCodeBase } from "/app/shared/code-generator.js";
-      import { generarDescripcionSimple } from "/app/shared/dictionary-utils.js";
-      import { processCorrectionsFileRows } from "/app/shared/corrections-adapter.js";
+      } from "/shared/goalsSales.js";
+      import { loadBaseRowsFromSheets } from "/shared/sheets-adapter.js";
+      import { loadDictionariesFromSheets } from "/shared/dictionaries-adapter.js";
+      import { generateHarujaCode, normalizeCodeBase } from "/shared/code-generator.js";
+      import { generarDescripcionSimple } from "/shared/dictionary-utils.js";
+      import { processCorrectionsFileRows } from "/shared/corrections-adapter.js";
 
-      // Carga dinámica temporalmente desactivada: faltan adaptadores de prendas en /public/app/shared.
+      // Carga dinámica temporalmente desactivada: faltan adaptadores de prendas en /public/shared.
       const missingSharedModuleError = (featureName) => {
-        const message = `${featureName} temporalmente deshabilitado: falta módulo compartido en /public/app/shared.`;
+        const message = `${featureName} temporalmente deshabilitado: falta módulo compartido en /public/shared.`;
         console.warn(message);
         return new Error(message);
       };
