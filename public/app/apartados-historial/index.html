@@ -86,6 +86,21 @@
     const searchEl = document.getElementById('search');
     const estadoEl = document.getElementById('estado');
 
+    const OFFICIAL_DRIVE_FOLDER_ID = '1y3l0r-4XnSsicnuSeVaATSh3rC89j-If';
+
+    function validateOfficialPdfPayload(payload = {}) {
+      const ok = payload?.ok === true || payload?.ok === undefined;
+      const pdfUrl = String(payload?.pdfUrl || '').trim();
+      const fileId = String(payload?.fileId || '').trim();
+      const folderId = String(payload?.folderId || payload?.driveFolderId || '').trim();
+      if (!ok) throw new Error('No se pudo guardar el PDF en Drive.');
+      if (!pdfUrl) throw new Error('No se pudo generar el PDF');
+      if (!fileId) throw new Error('No se recibió fileId real desde el backend.');
+      if (!folderId) throw new Error('No se recibió folderId del PDF oficial.');
+      if (folderId !== OFFICIAL_DRIVE_FOLDER_ID) throw new Error('El PDF se guardó en una carpeta distinta a la oficial.');
+      return { pdfUrl, fileId, folderId };
+    }
+
     const formatMoney = (value) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(value || 0));
     function formatDate(value) {
       if (!value) return '-';
@@ -194,13 +209,13 @@
         const data = await resp.json();
         if (!resp.ok || !data.ok) throw new Error(data.message || 'No se pudo regenerar PDF.');
         const payload = data.data || {};
-        const pdfUrl = String(payload.pdfUrl || '').trim();
-        if (pdfUrl) {
-          state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase() ? { ...item, pdfDriveUrl: pdfUrl } : item);
-          state.missingPdf.delete(folio.toUpperCase());
-          applyFilter();
-        }
-        statusEl.textContent = `PDF oficial generado para ${folio}.`;
+        const validated = validateOfficialPdfPayload(payload);
+        state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase()
+          ? { ...item, pdfDriveUrl: validated.pdfUrl, pdfFileId: validated.fileId, pdfFolderId: validated.folderId }
+          : item);
+        state.missingPdf.delete(folio.toUpperCase());
+        applyFilter();
+        statusEl.textContent = 'PDF oficial generado correctamente';
         await loadMissingPdf();
         statusEl.className = 'status muted';
       } catch (error) {
