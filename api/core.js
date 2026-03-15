@@ -1,4 +1,3 @@
-import { getLatestWebhookEvent } from '../lib/ventas/dedupeWebhookEvent.js';
 import {
   archivePrenda,
   assignVentaSeller,
@@ -7,8 +6,6 @@ import {
   getCatalogos,
   getVentasComisiones,
   getVentasConfig,
-  getVentasDetalle,
-  getVentasResumen,
   getVentasSinAsignar,
   importCorrections,
   listArchivedPrendas,
@@ -21,16 +18,20 @@ import {
   updateVentasComisiones,
 } from '../lib/api/core.js';
 
+import { getResumenMensual } from '../lib/ventas/getResumenMensual.js';
+import { getDetalleVentas } from '../lib/ventas/getDetalleVentas.js';
+import { getWebhookStatus } from '../lib/tiendanube/getWebhookStatus.js';
 const GET_ACTIONS = new Set([
   'catalogos',
   'prendas-list',
   'prendas-archived-list',
   'ventas-comisiones',
   'ventas-config',
-  'ventas-resumen',
-  'ventas-detalle',
   'ventas-sin-asignar',
   'ventas-webhook-status',
+  'ventas-resumen',
+  'ventas-detalle',
+  'vent_936',
 ]);
 const POST_ACTIONS = new Set([
   'prendas-create',
@@ -121,14 +122,14 @@ export default async function handler(req, res) {
         return success(res, await saveVentasConfig(payload));
       }
 
-      if (action === 'ventas-resumen') {
+      if (action === 'ventas-resumen' || action === 'vent_936') {
         if (req.method !== 'GET') return error(res, 405, 'Method not allowed para esta action.');
-        return success(res, await getVentasResumen(req.query?.month));
+        return res.status(200).json(await getResumenMensual(req.query?.month));
       }
 
       if (action === 'ventas-detalle') {
         if (req.method !== 'GET') return error(res, 405, 'Method not allowed para esta action.');
-        return success(res, await getVentasDetalle(req.query?.month, req.query?.search));
+        return res.status(200).json(await getDetalleVentas({ month: req.query?.month, q: req.query?.search || req.query?.q }));
       }
 
       if (action === 'ventas-sin-asignar') {
@@ -138,7 +139,7 @@ export default async function handler(req, res) {
 
       if (action === 'ventas-webhook-status') {
         if (req.method !== 'GET') return error(res, 405, 'Method not allowed para esta action.');
-        return success(res, await getLatestWebhookEvent());
+        return res.status(200).json(await getWebhookStatus());
       }
 
       if (action === 'ventas-sync') {

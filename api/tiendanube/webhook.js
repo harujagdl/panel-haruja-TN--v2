@@ -6,6 +6,7 @@ import { mapOrderToVenta } from '../../lib/ventas/mapOrderToVenta.js';
 import { recalculateCommission } from '../../lib/ventas/recalculateCommission.js';
 import { recalculateMetaVsVenta } from '../../lib/ventas/recalculateMetaVsVenta.js';
 import { recalculateResumenMensual } from '../../lib/ventas/recalculateResumenMensual.js';
+import { saveWebhookStatus } from '../../lib/tiendanube/getWebhookStatus.js';
 import { upsertVenta } from '../../lib/ventas/upsertVenta.js';
 
 const FIXED_STORE_ID = '6432936';
@@ -94,6 +95,13 @@ export default async function handler(req, res) {
     }
 
     console.log('[tiendanube:webhook] recalculo exitoso', { event: parsed.event, orderId: parsed.orderId, action: upsertResult.action });
+
+    await saveWebhookStatus({
+      mode: 'automatico',
+      lastEvent: parsed.event,
+      lastOrder: parsed.orderId,
+      lastSyncAt: null,
+    });
 
     return res.status(200).json({
       ok: true,
