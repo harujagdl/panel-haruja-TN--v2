@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/tarjeta-lealtad.html",
+      "destination": "/app/tarjeta-lealtad.html"
+    },
+    {
+      "source": "/tarjeta-lealtad",
+      "destination": "/app/tarjeta-lealtad.html"
+    },
+    {
+      "source": "/",
+      "destination": "/index.html"
+    }
+  ]
+}
