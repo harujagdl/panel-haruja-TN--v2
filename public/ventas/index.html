@@ -167,6 +167,16 @@
       return payload;
     };
 
+    const withTimeout = async (url, options = {}, timeoutMs = 8000) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(url, { ...options, signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
     const formatMoney = (value) => moneyMx.format(Number(value) || 0);
     const formatDate = (value) => value ? new Date(value).toLocaleDateString("es-MX") : "—";
     const formatMonth = (value) => String(value || "").slice(0, 7);
@@ -234,66 +244,55 @@
 
     const loadVentasConfig = async () => {
       storeIdInput.value = STORE_ID;
-      const url = new URL("/api/core", location.origin);
-      url.searchParams.set("action", "ventas-config");
-      const res = await fetch(url.toString());
-      const payload = await safeJson(res, "No se pudo cargar la configuración de ventas");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar la configuración de ventas");
-      const data = payload.data || {};
-      return { ...data, store_id: STORE_ID };
+      return { store_id: STORE_ID };
     };
 
     const loadVentasResumen = async (month) => {
-      const url = new URL("/api/core", location.origin);
-      url.searchParams.set("action", "ventas-resumen");
-      url.searchParams.set("store_id", STORE_ID);
-      if (month) url.searchParams.set("month", month);
-      const res = await fetch(url.toString());
-      const payload = await safeJson(res, "No se pudo cargar el resumen de ventas");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar el resumen de ventas");
-      return payload.data || {};
+      const url = new URL('/api/ventas/resumen', location.origin);
+      if (month) url.searchParams.set('month', month);
+      const res = await withTimeout(url.toString(), {}, 8000);
+      const payload = await safeJson(res, 'No se pudo cargar el resumen de ventas');
+      if (!payload?.ok) throw new Error(payload?.message || 'No se pudo cargar el resumen de ventas');
+      return payload || {};
     };
 
     const loadVentasDetalle = async (month, search) => {
-      const url = new URL("/api/core", location.origin);
-      url.searchParams.set("action", "ventas-detalle");
-      url.searchParams.set("store_id", STORE_ID);
-      if (month) url.searchParams.set("month", month);
-      if (search) url.searchParams.set("search", search);
-      const res = await fetch(url.toString());
-      const payload = await safeJson(res, "No se pudo cargar el detalle de ventas");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar el detalle de ventas");
-      return Array.isArray(payload.data) ? payload.data : [];
+      const url = new URL('/api/ventas/detalle', location.origin);
+      if (month) url.searchParams.set('month', month);
+      if (search) url.searchParams.set('q', search);
+      const res = await withTimeout(url.toString(), {}, 10000);
+      const payload = await safeJson(res, 'No se pudo cargar el detalle de ventas');
+      if (!payload?.ok) throw new Error(payload?.message || 'No se pudo cargar el detalle de ventas');
+      return Array.isArray(payload.rows) ? payload.rows : [];
     };
 
-
     const loadWebhookStatus = async () => {
-      const url = new URL("/api/core", location.origin);
-      url.searchParams.set("action", "ventas-webhook-status");
-      const res = await fetch(url.toString());
-      const payload = await safeJson(res, "No se pudo cargar el estado del webhook");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar el estado del webhook");
-      return payload.data || null;
+      const url = new URL('/api/tiendanube/status', location.origin);
+      const res = await withTimeout(url.toString(), {}, 5000);
+      const payload = await safeJson(res, 'No se pudo cargar el estado del webhook');
+      if (!payload?.ok) throw new Error(payload?.message || 'No se pudo cargar el estado del webhook');
+      return payload || null;
     };
 
     const renderWebhookStatus = (data) => {
       webhookModeEl.textContent = "Modo: Automático";
       if (!data) {
-        lastWebhookEventEl.textContent = "Último evento recibido: —";
-        lastWebhookOrderEl.textContent = "Última orden procesada: —";
+        lastWebhookEventEl.textContent = 'Último evento recibido: No disponible';
+        lastWebhookOrderEl.textContent = 'Última orden procesada: No disponible';
         return;
       }
-      const event = data.event || "—";
-      const processedAt = data.processedAt ? ` (${new Date(data.processedAt).toLocaleString("es-MX")})` : "";
-      lastWebhookEventEl.textContent = `Último evento recibido: ${event}${processedAt}`;
-      lastWebhookOrderEl.textContent = `Última orden procesada: ${data.orderId || "—"}`;
+      const event = data.lastEvent || 'No disponible';
+      lastWebhookEventEl.textContent = `Último evento recibido: ${event}`;
+      lastWebhookOrderEl.textContent = `Última orden procesada: ${data.lastOrder || 'No disponible'}`;
     };
 
     const renderResumen = (resumen) => {
-      const ticketPromedio = Number(resumen?.ticket_promedio ?? 0);
-      totalMesEl.textContent = formatMoney(resumen.total_mes);
-      totalsBySellerEl.textContent = `Haru ${formatMoney(resumen.total_haru)} · Vendedora ${formatMoney(resumen.total_vendedora)}`;
-      sinAsignarEl.textContent = String(Number(resumen.sin_asignar) || 0);
+      const ticketPromedio = Number(resumen?.ticketPromedio ?? 0);
+      totalMesEl.textContent = formatMoney(resumen.totalMes);
+      const haru = Number((resumen?.porVendedora || []).find((r) => r.nombre === 'Haru')?.monto || 0);
+      const vendedora = Number((resumen?.porVendedora || []).find((r) => r.nombre === 'Vendedora')?.monto || 0);
+      totalsBySellerEl.textContent = `Haru ${formatMoney(haru)} · Vendedora ${formatMoney(vendedora)}`;
+      sinAsignarEl.textContent = String(Number(resumen.sinAsignar) || 0);
       ticketPromedioEl.textContent = formatMoney(ticketPromedio);
     };
 
@@ -391,26 +390,43 @@
     };
 
     const loadData = async () => {
-      setStatus("Cargando ventas...");
+      setStatus('Cargando ventas...');
       const month = formatMonth(monthInput.value);
-      const search = String(searchInput.value || "").trim();
-      const [resumen, detalle, webhookStatus] = await Promise.all([
-        loadVentasResumen(month),
-        loadVentasDetalle(month, search),
-        loadWebhookStatus().catch(() => null)
-      ]);
+      const search = String(searchInput.value || '').trim();
 
-      ventasActuales = detalle;
-      renderResumen(resumen);
-      renderTabla(detalle);
-      renderWebhookStatus(webhookStatus);
+      const resumenPromise = loadVentasResumen(month)
+        .then((resumen) => { renderResumen(resumen); return resumen; })
+        .catch((err) => {
+          console.warn('Fallo endpoint resumen', err);
+          renderResumen({ totalMes: 0, sinAsignar: 0, porVendedora: [], ticketPromedio: 0 });
+          return null;
+        });
+
+      const detallePromise = loadVentasDetalle(month, search)
+        .then((detalle) => { ventasActuales = detalle; renderTabla(detalle); return detalle; })
+        .catch((err) => {
+          console.warn('Fallo endpoint detalle', err);
+          ventasActuales = [];
+          renderTabla([]);
+          return [];
+        });
+
+      const statusPromise = loadWebhookStatus()
+        .then((status) => { renderWebhookStatus(status); return status; })
+        .catch((err) => {
+          console.warn('Fallo endpoint status', err);
+          renderWebhookStatus(null);
+          return null;
+        });
+
+      const [, detalle] = await Promise.all([resumenPromise, detallePromise, statusPromise]);
       setStatus(`Listo. ${detalle.length} ventas.`);
     };
 
     const syncVentas = async () => {
       setStatus("Sincronizando con Tiendanube...");
-      const res = await fetch(`/api/core?action=ventas-sync&store_id=${encodeURIComponent(STORE_ID)}`, {
-        method: "POST"
+      const res = await fetch('/api/tiendanube/sync', {
+        method: 'POST'
       });
       const payload = await safeJson(res, "No se pudo sincronizar ventas");
       if (!payload?.ok) throw new Error(payload?.message || "No se pudo sincronizar ventas");
@@ -422,7 +438,7 @@
     const asignarVendedora = async (orderId, seller) => {
       const normalized = normalizeSeller(seller);
       if (!normalized) throw new Error("Selecciona una vendedora válida (Haru o Vendedora)");
-      const res = await fetch("/api/core?action=assign-seller", {
+      const res = await fetch("/api/ventas/assign-seller", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order_id: orderId, seller: normalized })
