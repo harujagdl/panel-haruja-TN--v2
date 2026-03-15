@@ -288,8 +288,11 @@ grid-template-columns:1fr 126px;
 <script>
 
 function getFolioFromPath(){
+const params=new URLSearchParams(window.location.search)
+const queryFolio=String(params.get('folio')||'').trim()
+if(queryFolio) return queryFolio
 const parts=window.location.pathname.split('/').filter(Boolean)
-if(parts[0]==='ticket' && parts[1]) return decodeURIComponent(parts[1])
+if(parts[0]==='ticket' && parts[1]) return decodeURIComponent(parts[1]).trim()
 return''
 }
 
@@ -314,7 +317,7 @@ document.getElementById('app').innerHTML="Folio inválido"
 return
 }
 
-const res=await fetch(`/api/core?action=apartados&op=detail&folio=${folio}`)
+const res=await fetch(`/api/core?action=apartados&op=detail&folio=${encodeURIComponent(folio)}`)
 const payload=await res.json()
 const data=payload?.data||payload
 
@@ -397,7 +400,7 @@ document.getElementById('app').innerHTML=`
 <div class="card">
 
 <div class="logo-wrap">
-<img class="logo" src="/public/assets/haruja-logo.png" alt="HarujaGdl">
+<img class="logo" src="/assets/haruja-logo.png" alt="HarujaGdl">
 </div>
 
 <hr class="top-line">

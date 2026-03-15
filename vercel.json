@@ -10,6 +10,14 @@
       "destination": "/app/tarjeta-lealtad.html"
     },
     {
+      "source": "/ticket/:folio",
+      "destination": "/ticket/index.html?folio=:folio"
+    },
+    {
+      "source": "/apartado/:folio",
+      "destination": "/apartados/index.html?folio=:folio"
+    },
+    {
       "source": "/",
       "destination": "/index.html"
     }

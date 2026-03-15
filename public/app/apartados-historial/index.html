@@ -1,17 +1,247 @@
 <!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Historial de Apartados - HarujaGDL</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>:root{--bg:#f7f7f8;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--brand:#5FA18E}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}.container{max-width:1080px;margin:24px auto;padding:0 16px}.page-header-wrapper{position:relative}.panel-back-btn{position:absolute;top:20px;right:24px;padding:8px 16px;background:#f3f4f6;border-radius:999px;font-size:14px;font-weight:600;color:#2563eb;text-decoration:none;border:1px solid #e5e7eb;transition:all .2s ease}.panel-back-btn:hover{background:#e5e7eb}.header{display:flex;align-items:center;justify-content:space-between}.title{font-size:28px;font-weight:800}.brand{display:flex;align-items:center;text-decoration:none}.brand img{height:36px;width:auto;opacity:.95;cursor:pointer}.top-actions{display:flex;gap:10px;justify-content:flex-end;margin:10px 0 14px}.btn-ghost,.btn{appearance:none;border:1px solid var(--line);background:#fff;color:#111827;border-radius:12px;padding:10px 12px;font-weight:800;cursor:pointer;text-decoration:none}.btn{background:var(--brand);color:#fff;border:none}.card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}.card-bd{padding:14px}.tools{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:14px}.inpt,select{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:14px}table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}th{background:#fafafa}.actions{display:flex;gap:6px;flex-wrap:wrap}.mini{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 8px;font-size:12px;cursor:pointer}.muted{color:var(--muted);font-size:13px}.cards{display:grid;gap:10px}.item{border:1px solid var(--line);border-radius:12px;background:#fff;padding:12px}.row{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin:4px 0}@media (min-width:860px){.tools{grid-template-columns:2fr 1fr auto}.mobile-only{display:none}}@media (max-width:859px){.desktop-only{display:none}}@media (max-width:640px){.panel-back-btn{top:14px;right:16px;font-size:13px;padding:6px 12px}}</style>
-</head><body><div class="container page-header-wrapper"><a href="/#/panel" class="panel-back-btn">← Volver al panel</a><div class="header"><div class="title">Historial de Apartados</div><a class="brand" href="/#/panel" aria-label="Volver al panel"><img src="../assets/haruja-logo.png" alt="HarujaGdl"></a></div><div class="top-actions"><a class="btn-ghost" href="/apartados">Registrar apartado</a></div><div class="card"><div class="card-bd"><div class="tools"><input id="q" class="inpt" type="text" placeholder="Buscar folio o cliente…"><select id="status"><option value="">Todos</option><option value="activo">Activo</option><option value="liquidado">Liquidado</option></select><button class="btn" onclick="onSearch()">Buscar</button></div><div id="msg" class="muted"></div><div class="desktop-only"><table><thead><tr><th>Folio</th><th>Fecha</th><th>Cliente</th><th>Anticipo</th><th>Total</th><th>Acciones</th></tr></thead><tbody id="tbody"></tbody></table></div><div id="cards" class="cards mobile-only"></div><div style="margin-top:12px"><button id="more" class="btn-ghost" onclick="loadNextPage()" style="display:none">Cargar más</button></div></div></div></div>
-<script>
-const $=(id)=>document.getElementById(id);let nextCursor=null;let searching=false;const fmtMX=(n)=>(Number(n)||0).toLocaleString('es-MX',{style:'currency',currency:'MXN'});const fmtDate=(v)=>v?new Date(v).toLocaleString('es-MX'):'';
-async function apiFetch(path,opts={}){const res=await fetch(path,{method:opts.method||'GET',headers:{'Content-Type':'application/json',...(opts.headers||{})},body:opts.body||undefined});const data=await res.json().catch(()=>({}));if(!res.ok||data?.ok===false)throw new Error(data?.error||`HTTP ${res.status}`);return data?.data||data;}
-function actionButtons(item){const open=item.pdfUrl?`<button class="mini" onclick="openPdf('${item.pdfUrl}')">Abrir PDF</button>`:'';const copy=item.pdfUrl?`<button class="mini" onclick="copyLink('${item.pdfUrl}')">Copiar link</button>`:'';const abonar=`<button class="mini" onclick="goAbono('${item.folio}')">Abonar</button>`;return `${open}${copy}${abonar}`;}
-function render(items,append=false){const tbody=$('tbody');const cards=$('cards');if(!append){tbody.innerHTML='';cards.innerHTML='';}for(const item of items){const tr=document.createElement('tr');tr.innerHTML=`<td>${item.folio||''}</td><td>${item.fecha||fmtDate(item.createdAt)}</td><td>${item.cliente||''}</td><td>${fmtMX(item.anticipo)}</td><td>${fmtMX(item.total)}</td><td>${actionButtons(item)}</td>`;tbody.appendChild(tr);const card=document.createElement('div');card.className='item';card.innerHTML=`<div class="row"><b>${item.folio||''}</b><span>${item.fecha||fmtDate(item.createdAt)}</span></div><div class="row"><span>Cliente</span><span>${item.cliente||''}</span></div><div class="row"><span>Anticipo</span><span>${fmtMX(item.anticipo)}</span></div><div class="row"><span>Total</span><span>${fmtMX(item.total)}</span></div><div class="actions">${actionButtons(item)}</div>`;cards.appendChild(card);}}
-function openPdf(url){window.open(url,'_blank','noopener');}async function copyLink(url){try{await navigator.clipboard.writeText(url);$('msg').textContent='Link copiado.';}catch(_){$('msg').textContent='No se pudo copiar.';}}function goAbono(folio){window.location.href=`/apartados?folio=${encodeURIComponent(folio)}&abono=1`;}
-async function loadFirstPage(){searching=false;const data=await apiFetch('/api/core?action=apartados&op=list');render(data.apartados||[]);nextCursor=null;$('more').style.display='none';$('msg').textContent=(data.apartados||[]).length?'':'Sin resultados';}
-async function loadNextPage(){return;}
-async function onSearch(){const q=$('q').value.trim().toUpperCase();if(!q)return loadFirstPage();searching=true;$('more').style.display='none';if(q.startsWith('HARUJA')){try{const data=await apiFetch(`/api/core?action=apartados&op=detail&folio=${encodeURIComponent(q)}`);render(data.apartado?[data.apartado]:[]);$('msg').textContent=data.apartado?'':'No encontrado';}catch(err){render([]);$('msg').textContent=err.message||'No encontrado';}return;}const data=await apiFetch('/api/core?action=apartados&op=list');const all=data.apartados||[];const filtered=all.filter((item)=>String(item.folio||'').toUpperCase().includes(q)||String(item.cliente||'').toUpperCase().includes(q));render(filtered);$('msg').textContent=filtered.length?'':'Sin resultados';}
-loadFirstPage().catch((e)=>{$('msg').textContent=`Error: ${e.message}`;});
-</script></body></html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Historial de Apartados - HarujaGdl</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#f3f5f9;--card:#fff;--text:#0f172a;--muted:#64748b;--line:#dbe2ee;--brand:#1d4ed8;--brandDark:#1e3a8a;--ok:#15803d}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
+    .container{max-width:1220px;margin:28px auto;padding:0 16px}
+    .header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:14px}
+    .title{font-size:30px;font-weight:800;letter-spacing:-.02em;color:#0b1f5e}
+    .brand img{height:36px;width:auto}
+    .top-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-bottom:14px}
+    .btn{appearance:none;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:700;cursor:pointer;text-decoration:none;border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;min-height:40px}
+    .btn-back{background:#fff;border-color:var(--line);color:var(--brand)}
+    .btn-primary{background:var(--brand);color:#fff}
+    .btn-primary:hover{background:var(--brandDark)}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 20px rgba(15,23,42,.05)}
+    .card-hd{padding:16px 18px;border-bottom:1px solid var(--line);font-size:17px;font-weight:800;color:#0b1f5e}
+    .card-bd{padding:18px}
+    .filters{display:grid;grid-template-columns:minmax(240px,1fr) 220px auto;gap:10px;margin-bottom:14px}
+    .search,.select{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 12px;font-size:14px;background:#fff}
+    .status{min-height:22px;font-size:14px;margin-bottom:10px}
+    .muted{color:var(--muted)}.err{color:#b91c1c;font-weight:700}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff}
+    table{width:100%;border-collapse:collapse;min-width:980px}
+    th,td{padding:12px 10px;border-bottom:1px solid #e8edf5;font-size:13px;vertical-align:middle}
+    th{background:#f8fbff;color:#1e3a8a;font-weight:800}
+    tr:last-child td{border-bottom:0}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .action{border:1px solid transparent;border-radius:10px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;white-space:nowrap;min-height:32px;display:inline-flex;align-items:center}
+    .abonar{background:#e0ecff;color:#1d4ed8}.ticket{background:#dbeafe;color:#1d4ed8}.pdf{background:#eef2ff;color:#3730a3}
+    .regen{background:#dcfce7;color:#166534}.copy{background:#f8fafc;color:#334155;border-color:#dbe2ee}
+    .estado{font-size:11px;font-weight:800;border-radius:999px;padding:4px 8px;display:inline-block}
+    .estado.activo{background:#dbeafe;color:#1d4ed8}.estado.liquidado{background:#dcfce7;color:#166534}.estado.cancelado{background:#fee2e2;color:#991b1b}
+    @media (max-width:880px){.filters{grid-template-columns:1fr}.title{font-size:24px}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">Historial de Apartados</div>
+      <a class="brand" href="/#/panel" aria-label="Volver al panel"><img src="/assets/haruja-logo.png" alt="HarujaGdl" onerror="this.style.display='none'"></a>
+    </div>
+
+    <div class="top-actions">
+      <a href="/#/panel" class="btn btn-back">← Volver al panel</a>
+      <a href="/apartados" class="btn btn-primary">+ Registrar apartado</a>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">Listado de apartados</div>
+      <div class="card-bd">
+        <div class="filters">
+          <input id="search" class="search" type="search" placeholder="Buscar por folio, cliente o teléfono...">
+          <select id="estado" class="select">
+            <option value="">Todos los estatus</option>
+            <option value="ACTIVO">Activo</option>
+            <option value="LIQUIDADO">Liquidado</option>
+            <option value="CANCELADO">Cancelado</option>
+          </select>
+          <button id="btn-filtrar" class="btn btn-primary" type="button">Filtrar</button>
+        </div>
+        <div id="status" class="status muted">Cargando apartados...</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Folio</th><th>Fecha</th><th>Cliente</th><th>Contacto</th><th>Total</th><th>Anticipo</th><th>Saldo</th><th>Estatus</th><th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = { apartados: [], filtered: [], missingPdf: new Set() };
+    const statusEl = document.getElementById('status');
+    const rowsEl = document.getElementById('rows');
+    const searchEl = document.getElementById('search');
+    const estadoEl = document.getElementById('estado');
+
+    const formatMoney = (value) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(value || 0));
+    function formatDate(value) {
+      if (!value) return '-';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return value;
+      return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(d);
+    }
+    function estadoClass(estado) {
+      const normalized = String(estado || '').toLowerCase();
+      if (normalized === 'liquidado') return 'liquidado';
+      if (normalized === 'cancelado') return 'cancelado';
+      return 'activo';
+    }
+    function ticketUrlFor(item) {
+      const folio = String(item?.folio || '').trim();
+      if (!folio) return '';
+      return item.ticketUrl || `/ticket/${encodeURIComponent(folio)}`;
+    }
+
+    function renderRows() {
+      if (!state.filtered.length) {
+        rowsEl.innerHTML = '<tr><td colspan="9" class="muted">No se encontraron apartados.</td></tr>';
+        return;
+      }
+
+      rowsEl.innerHTML = state.filtered.map((item) => {
+        const folio = String(item.folio || '').trim();
+        const ticketUrl = ticketUrlFor(item);
+        const pdfUrl = String(item.pdfDriveUrl || item.pdfUrlPersistido || item.pdfUrl || '').trim();
+        const hasPdf = Boolean(pdfUrl);
+        const needsRegen = state.missingPdf.has(folio.toUpperCase()) || !hasPdf;
+        const copyTarget = pdfUrl || ticketUrl;
+        const abonoUrl = `/apartados?abono=1&folio=${encodeURIComponent(folio)}`;
+
+        const ticketButton = ticketUrl
+          ? `<a class="action ticket" href="${ticketUrl}" target="_blank" rel="noopener noreferrer">Ticket</a>`
+          : '';
+        const pdfButton = hasPdf
+          ? `<a class="action pdf" href="${pdfUrl}" target="_blank" rel="noopener noreferrer">Abrir PDF</a>`
+          : '';
+        const regenButton = needsRegen
+          ? `<button class="action regen" data-folio="${folio}" onclick="regeneratePdf(this)">Regenerar PDF</button>`
+          : '';
+        const copyButton = copyTarget
+          ? `<button class="action copy" data-url="${copyTarget}" onclick="copyLink(this)">Copiar link</button>`
+          : '';
+
+        return `
+          <tr>
+            <td>${folio || '-'}</td>
+            <td>${formatDate(item.ultimoMovimiento || item.fecha)}</td>
+            <td>${item.cliente || '-'}</td>
+            <td>${item.contacto || '-'}</td>
+            <td>${formatMoney(item.total)}</td>
+            <td>${formatMoney(item.anticipo)}</td>
+            <td>${formatMoney(item.saldo)}</td>
+            <td><span class="estado ${estadoClass(item.estado)}">${item.estado || 'ACTIVO'}</span></td>
+            <td><div class="actions"><a class="action abonar" href="${abonoUrl}">Abonar</a>${ticketButton}${pdfButton}${regenButton}${copyButton}</div></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function applyFilter() {
+      const term = searchEl.value.trim().toLowerCase();
+      const estado = String(estadoEl.value || '').toUpperCase();
+      state.filtered = state.apartados.filter((item) => {
+        const byText = !term || [item.folio, item.cliente, item.contacto].some((value) => String(value || '').toLowerCase().includes(term));
+        const byEstado = !estado || String(item.estado || '').toUpperCase() === estado;
+        return byText && byEstado;
+      });
+      renderRows();
+      statusEl.textContent = `${state.filtered.length} apartado(s) mostrado(s).`;
+      statusEl.className = 'status muted';
+    }
+
+    async function copyLink(btn) {
+      const url = String(btn?.dataset?.url || '').trim();
+      if (!url) return;
+      try {
+        const absolute = new URL(url, window.location.origin).toString();
+        await navigator.clipboard.writeText(absolute);
+        statusEl.textContent = 'Link copiado correctamente.';
+        statusEl.className = 'status muted';
+      } catch (_) {
+        statusEl.textContent = 'No se pudo copiar automáticamente el link.';
+        statusEl.className = 'status err';
+      }
+    }
+
+    async function regeneratePdf(btn) {
+      const folio = String(btn?.dataset?.folio || '').trim();
+      if (!folio) return;
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Regenerando...';
+      try {
+        const resp = await fetch(`/api/core?action=apartados&op=pdf-refresh&folio=${encodeURIComponent(folio)}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'historial_manual_regen' })
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error(data.message || 'No se pudo regenerar PDF.');
+        const payload = data.data || {};
+        const pdfUrl = String(payload.pdfUrl || '').trim();
+        if (pdfUrl) {
+          state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase() ? { ...item, pdfDriveUrl: pdfUrl } : item);
+          state.missingPdf.delete(folio.toUpperCase());
+          applyFilter();
+        }
+        statusEl.textContent = `PDF regenerado para ${folio}.`;
+        statusEl.className = 'status muted';
+      } catch (error) {
+        statusEl.textContent = error.message || 'Error al regenerar PDF.';
+        statusEl.className = 'status err';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    }
+
+    async function loadMissingPdf() {
+      const resp = await fetch('/api/core?action=apartados&op=missing-pdf');
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.ok) return;
+      const rows = Array.isArray(data?.data?.apartados) ? data.data.apartados : [];
+      state.missingPdf = new Set(rows.map((row) => String(row.folio || '').toUpperCase()));
+    }
+
+    async function loadHistorial() {
+      try {
+        await loadMissingPdf();
+        const resp = await fetch('/api/core?action=apartados&op=list');
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error(data.message || 'No se pudo cargar el historial.');
+
+        const body = data.data || {};
+        state.apartados = (Array.isArray(body.apartados) ? body.apartados : []).map((item) => ({
+          ...item,
+          contacto: item.telefono || item.contacto || '',
+          estado: (item.status || item.estado || 'ACTIVO').toUpperCase(),
+          saldo: item.saldoPendiente ?? item.saldo ?? 0,
+          ticketUrl: item.ticketUrl || `/ticket/${encodeURIComponent(item.folio || '')}`,
+          pdfDriveUrl: item.pdfDriveUrl || item.pdfUrlPersistido || '',
+        }));
+        applyFilter();
+      } catch (error) {
+        statusEl.textContent = error.message || 'Error cargando historial.';
+        statusEl.className = 'status err';
+        rowsEl.innerHTML = '<tr><td colspan="9" class="muted">Sin datos.</td></tr>';
+      }
+    }
+
+    searchEl.addEventListener('input', applyFilter);
+    estadoEl.addEventListener('change', applyFilter);
+    document.getElementById('btn-filtrar').addEventListener('click', applyFilter);
+    loadHistorial();
+  </script>
+</body>
+</html>
