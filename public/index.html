@@ -3591,18 +3591,13 @@ Errores: 0</pre>
         }
         metaMonthlyTbody.innerHTML = rows.join("") || '<tr><td colspan="5">Sin datos para el rango seleccionado.</td></tr>';
 
-        const selectedMonths = Math.max(1, (end - start) + 1);
-        const annualGoalValue = Number(metaState.annualGoal || 0) > 0
-          ? Number(metaState.annualGoal) * (selectedMonths / 12)
-          : rangeGoalTotal;
+        const annualGoalValue = rangeGoalTotal;
         const annualPctValue = annualGoalValue > 0 ? (rangeSalesTotal / annualGoalValue) * 100 : 0;
         if (metaAnnualSales) metaAnnualSales.textContent = moneyMx.format(rangeSalesTotal);
         if (metaAnnualGoal) metaAnnualGoal.textContent = moneyMx.format(annualGoalValue);
         if (metaAnnualPct) metaAnnualPct.textContent = `${annualPctValue.toFixed(1)}%`;
         if (metaAnnualDiff) metaAnnualDiff.textContent = moneyMx.format(rangeSalesTotal - annualGoalValue);
       };
-
-      const monthIndex = (year, month) => ((Number(year) || 0) * 12) + (Math.max(1, Math.min(12, Number(month) || 1)) - 1);
 
       const loadMetaVsVenta = async ({ force = false } = {}) => {
         if (metaState.loading) return;
@@ -3615,13 +3610,10 @@ Errores: 0</pre>
 
           const startMonth = Math.max(1, Math.min(12, Number(metaState.fromMonth) || 1));
           const endMonth = Math.max(startMonth, Math.min(12, Number(metaState.toMonth) || startMonth));
-          const startIndex = monthIndex(metaState.year, startMonth);
-          const endIndex = monthIndex(metaState.year, endMonth);
-
           const [salesMap, goals] = await Promise.all([
             getMonthlySalesMap(db, metaState.year, {
-              startMonth: (startIndex % 12) + 1,
-              endMonth: (endIndex % 12) + 1
+              startMonth,
+              endMonth
             }),
             getGoalsSalesState(db, { year: metaState.year, auth })
           ]);
