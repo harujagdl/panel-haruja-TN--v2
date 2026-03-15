@@ -12,6 +12,7 @@ import {
   updateApartadoStatus,
 } from '../lib/api/apartados.js';
 import { getPdfStatus, getPreviewData, getPrintData, getTicketByFolio, refreshPdf } from '../lib/api/documentos.js';
+import { runApartadoPdfDriveWriteTest } from '../lib/apartados/pdf-sync.js';
 
 const jsonOk = (res, data) => res.status(200).json({ ok: true, data });
 const jsonErr = (res, status, message) => res.status(status).json({ ok: false, message });
@@ -83,6 +84,11 @@ export default async function handler(req, res) {
     if (action === 'ticket-preview') {
       const result = await getPreviewData(folio);
       if (result?.status) return res.status(result.status).json(result.body);
+      return jsonOk(res, result);
+    }
+    if (action === 'apartados-pdf-drive-test') {
+      const result = await runApartadoPdfDriveWriteTest();
+      if (!result?.ok) return jsonErr(res, 502, result?.error || 'No se pudo guardar el PDF en Drive.');
       return jsonOk(res, result);
     }
     if (action === 'ticket-pdf-refresh') {
