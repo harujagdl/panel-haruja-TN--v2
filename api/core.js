@@ -1,3 +1,4 @@
+import { getLatestWebhookEvent } from '../lib/ventas/dedupeWebhookEvent.js';
 import {
   archivePrenda,
   assignVentaSeller,
@@ -29,6 +30,7 @@ const GET_ACTIONS = new Set([
   'ventas-resumen',
   'ventas-detalle',
   'ventas-sin-asignar',
+  'ventas-webhook-status',
 ]);
 const POST_ACTIONS = new Set([
   'prendas-create',
@@ -132,6 +134,11 @@ export default async function handler(req, res) {
       if (action === 'ventas-sin-asignar') {
         if (req.method !== 'GET') return error(res, 405, 'Method not allowed para esta action.');
         return success(res, await getVentasSinAsignar(req.query?.month));
+      }
+
+      if (action === 'ventas-webhook-status') {
+        if (req.method !== 'GET') return error(res, 405, 'Method not allowed para esta action.');
+        return success(res, await getLatestWebhookEvent());
       }
 
       if (action === 'ventas-sync') {
