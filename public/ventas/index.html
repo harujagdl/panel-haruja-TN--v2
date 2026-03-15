@@ -91,10 +91,13 @@
         <button id="btnLoad" class="btn btn-secondary">Ver detalle</button>
         <button id="btnCsv" class="btn btn-secondary">Export CSV</button>
         <a href="/api/tiendanube/start" class="btn btn-secondary">Conectar Tiendanube</a>
-        <button id="btnSync" class="btn btn-primary">Sincronizar</button>
+        <button id="btnSync" class="btn btn-primary">Forzar sincronización</button>
       </div>
       <div id="status" class="status"></div>
       <div class="status">Actualización automática por Tiendanube + refresh cada 60 s.</div>
+      <div class="status" id="webhookMode">Modo: Automático</div>
+      <div class="status" id="lastWebhookEvent">Último evento recibido: —</div>
+      <div class="status" id="lastWebhookOrder">Última orden procesada: —</div>
     </div>
 
     <div class="stats">
@@ -134,6 +137,9 @@
     const totalsBySellerEl = document.getElementById("totalsBySeller");
     const sinAsignarEl = document.getElementById("sinAsignar");
     const ticketPromedioEl = document.getElementById("ticketPromedio");
+    const webhookModeEl = document.getElementById("webhookMode");
+    const lastWebhookEventEl = document.getElementById("lastWebhookEvent");
+    const lastWebhookOrderEl = document.getElementById("lastWebhookOrder");
     let ventasActuales = [];
 
     const setStatus = (txt = "", type = "info") => {
@@ -260,6 +266,29 @@
       return Array.isArray(payload.data) ? payload.data : [];
     };
 
+
+    const loadWebhookStatus = async () => {
+      const url = new URL("/api/core", location.origin);
+      url.searchParams.set("action", "ventas-webhook-status");
+      const res = await fetch(url.toString());
+      const payload = await safeJson(res, "No se pudo cargar el estado del webhook");
+      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar el estado del webhook");
+      return payload.data || null;
+    };
+
+    const renderWebhookStatus = (data) => {
+      webhookModeEl.textContent = "Modo: Automático";
+      if (!data) {
+        lastWebhookEventEl.textContent = "Último evento recibido: —";
+        lastWebhookOrderEl.textContent = "Última orden procesada: —";
+        return;
+      }
+      const event = data.event || "—";
+      const processedAt = data.processedAt ? ` (${new Date(data.processedAt).toLocaleString("es-MX")})` : "";
+      lastWebhookEventEl.textContent = `Último evento recibido: ${event}${processedAt}`;
+      lastWebhookOrderEl.textContent = `Última orden procesada: ${data.orderId || "—"}`;
+    };
+
     const renderResumen = (resumen) => {
       const ticketPromedio = Number(resumen?.ticket_promedio ?? 0);
       totalMesEl.textContent = formatMoney(resumen.total_mes);
@@ -365,14 +394,16 @@
       setStatus("Cargando ventas...");
       const month = formatMonth(monthInput.value);
       const search = String(searchInput.value || "").trim();
-      const [resumen, detalle] = await Promise.all([
+      const [resumen, detalle, webhookStatus] = await Promise.all([
         loadVentasResumen(month),
-        loadVentasDetalle(month, search)
+        loadVentasDetalle(month, search),
+        loadWebhookStatus().catch(() => null)
       ]);
 
       ventasActuales = detalle;
       renderResumen(resumen);
       renderTabla(detalle);
+      renderWebhookStatus(webhookStatus);
       setStatus(`Listo. ${detalle.length} ventas.`);
     };
 
