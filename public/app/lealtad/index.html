@@ -347,7 +347,7 @@
     const buildPwaQrLink = (client) => {
       const token = String(client?.token || '').trim();
       if (!token) return '#';
-      return `${PWA_PUBLIC_BASE_URL}/app/tarjeta-lealtad.html?token=${encodeURIComponent(token)}`;
+      return `${PWA_PUBLIC_BASE_URL}/tarjeta-lealtad?token=${encodeURIComponent(token)}`;
     };
 
     function renderQrInto(el, text) {
@@ -381,7 +381,7 @@
       const rawQr = String(client?.qrLink || '').trim();
       const qrBaseUrl = window.location.origin;
       const qrLink = (!rawQr || rawQr.includes('.vercel.app') || rawQr.includes('run.app'))
-        ? `${qrBaseUrl}/app/tarjeta-lealtad.html?token=${encodeURIComponent(client?.token || '')}`
+        ? `${qrBaseUrl}/tarjeta-lealtad?token=${encodeURIComponent(client?.token || '')}`
         : rawQr;
 
       summary.innerHTML = `

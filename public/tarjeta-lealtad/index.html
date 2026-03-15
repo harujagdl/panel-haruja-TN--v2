@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Tarjeta de Lealtad | HarujaGdl</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+
+  <style>
+    :root{
+      --bg: #f6efe7;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --shadow: 0 14px 30px rgba(15, 23, 42, .10);
+      --radius: 18px;
+      --olive: #A7B59E;
+      --olive-dark: #8f9f86;
+      --danger: #c2410c;
+      --border: rgba(15, 23, 42, .10);
+    }
+
+    *{ box-sizing: border-box; }
+
+    body{
+      margin:0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .wrap{
+      min-height: 100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 28px 14px;
+    }
+
+    .card{
+      width: 100%;
+      max-width: 420px;
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px 22px 18px;
+      border: 1px solid var(--border);
+      text-align:center;
+    }
+
+    .logo{
+      display:flex;
+      justify-content:center;
+      margin-top: 2px;
+      margin-bottom: 16px;
+    }
+
+    .logo img{
+      width: 160px;
+      height:auto;
+      display:block;
+      opacity:.95;
+    }
+
+    .subtitle{
+      letter-spacing: .16em;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+      text-transform: uppercase;
+    }
+
+    h1{
+      font-size: 18px;
+      margin: 4px 0 8px;
+      font-weight: 800;
+    }
+
+    .points{
+      margin: 12px 0 10px;
+      font-size: 44px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .points span{
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--muted);
+      margin-left: 6px;
+    }
+
+    .hint{
+      font-size: 14px;
+      color: var(--muted);
+      margin: 10px 0 14px;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 14px;
+      margin: 12px 0 14px;
+      text-align:left;
+      font-size: 14px;
+    }
+
+    .label{ color: var(--muted); }
+
+    .value{
+      font-weight: 800;
+      text-align:right;
+      word-break: break-word;
+    }
+
+    .qrbox{
+      display:flex;
+      justify-content:center;
+      margin: 10px 0 8px;
+    }
+
+    #qrSvg svg{
+      width: 210px;
+      height: 210px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background:#fff;
+      display:block;
+    }
+
+    .qrtext{
+      font-size: 13px;
+      color: var(--muted);
+      margin: 8px 0 14px;
+    }
+
+    .btn{
+      width: 100%;
+      border: none;
+      border-radius: 999px;
+      padding: 14px 14px;
+      font-weight: 900;
+      font-size: 16px;
+      cursor: pointer;
+      background: var(--olive);
+      color: #fff;
+      transition: transform .05s ease, background .15s ease;
+    }
+
+    .btn:active{ transform: translateY(1px); }
+    .btn:hover{ background: var(--olive-dark); }
+
+    .status{
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .status.error{
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    .small{
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 10px;
+      line-height: 1.45;
+    }
+
+    .info-box{
+      margin-top: 12px;
+      text-align: left;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(167,181,158,.1);
+    }
+
+    .info-box h3{
+      margin: 0 0 8px;
+      font-size: 13px;
+      color: #383234;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .info-box ul{
+      margin: 0;
+      padding-left: 18px;
+      color: var(--text);
+      font-size: 13px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 10px;
+      background: rgba(15,23,42,.02);
+      word-break: break-all;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="logo">
+        <img
+          src="/app/assets/haruja-logo.png"
+          alt="HarujaGdl"
+          onerror="this.onerror=null;this.src='/public/assets/haruja-logo.png';"
+        >
+      </div>
+
+      <div class="subtitle">Tarjeta de lealtad</div>
+      <h1 id="nombreCliente">Cargando…</h1>
+
+      <div class="points" id="puntosCliente">-- <span>pts</span></div>
+
+      <div class="hint">Presenta esta tarjeta en cada visita 💚</div>
+
+      <div class="grid">
+        <div class="label">Visitas</div>
+        <div class="value" id="visitasCliente">--</div>
+
+        <div class="label">Nivel</div>
+        <div class="value" id="nivelCliente">--</div>
+
+        <div class="label">Total compras</div>
+        <div class="value" id="comprasCliente">$0.00</div>
+      </div>
+
+      <div class="qrbox" id="qrBox" style="display:none;">
+        <div id="qrSvg"></div>
+      </div>
+
+      <div class="qrtext" id="qrTexto" style="display:none;">
+        Escanéame en caja para buscar tu cuenta rápidamente en el sistema de lealtad 🔎
+      </div>
+
+      <div class="info-box" id="beneficiosBox" style="display:none;">
+        <h3>Beneficios del nivel</h3>
+        <ul id="beneficiosNivel"></ul>
+      </div>
+
+      <div class="info-box" id="promosBox" style="display:none;">
+        <h3>Promociones activas</h3>
+        <ul id="promosNivel"></ul>
+      </div>
+
+      <button class="btn" id="btnRefresh" type="button">Actualizar datos</button>
+
+      <div class="status" id="estado"></div>
+      <div class="small">Consejo: agrégala a tu pantalla de inicio para tenerla siempre a la mano ✨</div>
+
+      <div class="badge" id="tokenBadge" style="display:none;"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      serverTimestamp,
+      doc,
+      getDoc,
+      getDocs,
+      setDoc,
+      updateDoc,
+      query,
+      where,
+      orderBy,
+      limit
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB6vH_TI5Wh-hYHXE64coVobuI3vzn9D1Q",
+      authDomain: "haruja-loyalty.firebaseapp.com",
+      projectId: "haruja-loyalty",
+      storageBucket: "haruja-loyalty.firebasestorage.app",
+      messagingSenderId: "229949615835",
+      appId: "1:229949615835:web:dfcd3e81e52c916a2aa6fe",
+      measurementId: "G-LKVRFX04CL"
+    };
+
+    const DOMAIN_BASE = window.location.origin;
+
+    function getToken() {
+      return new URLSearchParams(location.search).get("token") || "";
+    }
+
+    function money(n) {
+      const v = Number(n || 0);
+      return v.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+    }
+
+    function setStatus(msg, isError = false) {
+      const estado = document.getElementById("estado");
+      estado.textContent = msg || "";
+      estado.classList.toggle("error", !!isError);
+    }
+
+    function setQrFromLink(link) {
+      const box = document.getElementById("qrSvg");
+      box.innerHTML = "";
+
+      try {
+        if (typeof window.qrcode !== "function") {
+          throw new Error("qrcode-generator no cargó");
+        }
+
+        const qr = window.qrcode(0, "M");
+        qr.addData(link);
+        qr.make();
+
+        box.innerHTML = qr.createSvgTag({ scalable: true, margin: 2 });
+
+        const svg = box.querySelector("svg");
+        if (svg) {
+          svg.style.width = "210px";
+          svg.style.height = "210px";
+          svg.style.borderRadius = "14px";
+          svg.style.border = "1px solid rgba(15,23,42,.10)";
+          svg.style.background = "#fff";
+          svg.style.display = "block";
+        }
+
+        document.getElementById("qrBox").style.display = "flex";
+        document.getElementById("qrTexto").style.display = "block";
+      } catch (e) {
+        console.error(e);
+        setStatus("No se pudo generar el QR.", true);
+        document.getElementById("qrBox").style.display = "none";
+        document.getElementById("qrTexto").style.display = "none";
+      }
+    }
+
+    function setNotFound(msg) {
+      document.getElementById("nombreCliente").textContent = "Cliente no encontrado";
+      document.getElementById("puntosCliente").innerHTML = '-- <span>pts</span>';
+      document.getElementById("visitasCliente").textContent = "--";
+      document.getElementById("nivelCliente").textContent = "--";
+      document.getElementById("comprasCliente").textContent = money(0);
+
+      document.getElementById("qrBox").style.display = "none";
+      document.getElementById("qrTexto").style.display = "none";
+      document.getElementById("tokenBadge").style.display = "none";
+      document.getElementById('beneficiosBox').style.display = 'none';
+      document.getElementById('promosBox').style.display = 'none';
+
+      setStatus(msg || "No encontramos tu tarjeta, revisa el link con Haruja.", true);
+    }
+
+
+    function fillList(listId, values = []) {
+      const ul = document.getElementById(listId);
+      ul.innerHTML = values.map((value) => `<li>${value}</li>`).join('');
+    }
+
+    function setLevelExtras(client, promotions = []) {
+      const benefits = Array.isArray(client?.levelBenefits) ? client.levelBenefits : [];
+      const promoLabels = promotions.map((item) => item.title).filter(Boolean);
+
+      const beneficiosBox = document.getElementById('beneficiosBox');
+      const promosBox = document.getElementById('promosBox');
+
+      if (benefits.length) {
+        fillList('beneficiosNivel', benefits);
+        beneficiosBox.style.display = 'block';
+      } else {
+        beneficiosBox.style.display = 'none';
+      }
+
+      if (promoLabels.length) {
+        fillList('promosNivel', promoLabels);
+        promosBox.style.display = 'block';
+      } else {
+        promosBox.style.display = 'none';
+      }
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`No se pudo cargar ${src}`));
+        document.body.appendChild(script);
+      });
+    }
+
+    async function cargarTarjeta() {
+      const token = getToken();
+
+      if (!token) {
+        setNotFound("Falta el token en el link.");
+        return;
+      }
+
+      const badge = document.getElementById("tokenBadge");
+      badge.style.display = "inline-flex";
+      badge.textContent = "Token: " + token;
+
+      try {
+        const data = await window.loyaltyService.getCustomer({ token });
+        window.loyaltyService.addVisit(token).catch(() => null);
+
+        const c = data.clientPublic || data.client || data.customer || null;
+
+        if (!c) {
+          setNotFound("No encontramos tu tarjeta, revisa el link con Haruja.");
+          return;
+        }
+
+        document.getElementById("nombreCliente").textContent = c.name || "Cliente Haruja";
+        document.getElementById("puntosCliente").innerHTML = `${Number(c.points || 0)} <span>pts</span>`;
+        document.getElementById("visitasCliente").textContent = Number(c.visits || 0);
+        document.getElementById("nivelCliente").textContent = c.level || "Nuevo";
+        document.getElementById("comprasCliente").textContent = money(c.totalPurchases || 0);
+
+        let promotions = [];
+        if (c.levelId) {
+          try {
+            const promoResponse = await window.loyaltyService.getPromotionsForLevel(c.levelId);
+            promotions = promoResponse.items || [];
+          } catch (_err) {
+            promotions = [];
+          }
+        }
+        setLevelExtras(c, promotions);
+
+        const pwaLink = `${DOMAIN_BASE}/tarjeta-lealtad?token=${encodeURIComponent(token)}`;
+        setQrFromLink(pwaLink);
+
+        setStatus("");
+      } catch (e) {
+        console.error(e);
+        setNotFound("No pudimos cargar tu tarjeta. Intenta de nuevo.");
+      }
+    }
+
+    try {
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+
+      window.loyaltyFirebase = {
+        app,
+        db,
+        collection,
+        addDoc,
+        serverTimestamp,
+        doc,
+        getDoc,
+        getDocs,
+        setDoc,
+        updateDoc,
+        query,
+        where,
+        orderBy,
+        limit
+      };
+
+      console.log("[tarjeta-lealtad] Firebase conectado:", firebaseConfig.projectId);
+
+      await loadScript("/shared/loyaltyService.js");
+
+      document.getElementById("btnRefresh").addEventListener("click", cargarTarjeta);
+
+      await cargarTarjeta();
+    } catch (e) {
+      console.error(e);
+      setStatus(e?.message || "No se pudo inicializar la tarjeta.", true);
+    }
+  </script>
+</body>
+</html>
