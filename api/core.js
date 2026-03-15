@@ -26,7 +26,9 @@ import {
   getApartadoDetail,
   getHistorialApartado,
   getNextFolio,
+  getApartadosMissingPdf,
   listApartados,
+  regenerateApartadoPdf,
   searchApartados,
   updateApartadoStatus,
 } from '../lib/api/apartados.js';
@@ -70,8 +72,9 @@ async function handleApartados(req, res) {
   const op = String(req.query?.op || req.body?.op || '').trim();
   const folio = String(req.query?.folio || req.body?.folio || '').trim();
   if (req.method === 'GET' && (!op || op === 'list')) return sendOk(res, await listApartados());
-  if (req.method === 'GET' && op === 'next') return sendOk(res, await getNextFolio());
+  if (req.method === 'GET' && op === 'next') return sendOk(res, await getNextFolio(req.query?.fecha || req.body?.fecha || ''));
   if (req.method === 'GET' && op === 'search') return sendOk(res, await searchApartados(req.query || {}));
+  if (req.method === 'GET' && op === 'missing-pdf') return sendOk(res, await getApartadosMissingPdf());
   if (req.method === 'GET' && op === 'detail') {
     if (!folio) return sendErr(res, 400, 'folio es obligatorio.');
     const result = await getApartadoDetail(folio);
@@ -88,6 +91,12 @@ async function handleApartados(req, res) {
   if (req.method === 'POST' && op === 'abono') return sendOk(res, await addAbono(req.body || {}));
   if (req.method === 'POST' && op === 'update-status') {
     const result = await updateApartadoStatus(req.body || {});
+    if (result?.status) return res.status(result.status).json(result.body);
+    return sendOk(res, result);
+  }
+  if (req.method === 'POST' && op === 'pdf-refresh') {
+    if (!folio) return sendErr(res, 400, 'folio es obligatorio.');
+    const result = await regenerateApartadoPdf(folio, req.body || {});
     if (result?.status) return res.status(result.status).json(result.body);
     return sendOk(res, result);
   }
