@@ -458,7 +458,8 @@
     }
 
     async function fetchNextFolio(){
-      const r = await apiFetch('/api/core?action=apartados&op=next', { method: 'GET' });
+      const fecha = $('fecha')?.value || '';
+      const r = await apiFetch(`/api/core?action=apartados&op=next&fecha=${encodeURIComponent(fecha)}`, { method: 'GET' });
       return r.folio;
     }
 
@@ -698,6 +699,11 @@ Si tienes dudas o quieres liquidarlo, escríbenos por aquí 💛`);
       const m = String(today.getMonth() + 1).padStart(2,'0');
       const d = String(today.getDate()).padStart(2,'0');
       $('fecha').value = `${y}-${m}-${d}`;
+
+      $('fecha').addEventListener('change', async () => {
+        if ($('usarFolioExistente').checked) return;
+        try { $('folio').value = await fetchNextFolio(); } catch (_) {}
+      });
 
       $('descTipoPct').addEventListener('change', updateDescuentoUI);
       $('descTipoAmt').addEventListener('change', updateDescuentoUI);

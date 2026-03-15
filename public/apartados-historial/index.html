@@ -97,6 +97,8 @@
     }
     .abonar{ background:#dbeafe; color:#1d4ed8 }
     .pdf{ background:#f3f4f6; color:#111827 }
+    .regen{ background:#ecfeff; color:#155e75 }
+    .copy{ background:#eef2ff; color:#3730a3; border:0; cursor:pointer }
 
     @media (max-width: 640px) {
       .panel-back-btn { top:14px; right:16px; font-size:13px; padding:6px 12px }
@@ -154,6 +156,7 @@
     const state = {
       apartados: [],
       filtered: [],
+      missingPdf: new Set(),
     };
 
     const statusEl = document.getElementById('status');
@@ -184,8 +187,16 @@
 
       rowsEl.innerHTML = state.filtered.map((item) => {
         const abonoUrl = `/apartados?abono=1&folio=${encodeURIComponent(item.folio)}`;
-        const pdfButton = item.pdfUrl
+        const hasPdf = Boolean(item.pdfUrl);
+        const needsRegen = state.missingPdf.has(String(item.folio || '').toUpperCase()) || !hasPdf;
+        const pdfButton = hasPdf
           ? `<a class="action-link pdf" href="${item.pdfUrl}" target="_blank" rel="noopener noreferrer">Ticket</a>`
+          : '';
+        const regenButton = needsRegen
+          ? `<button class="action-link regen" data-folio="${item.folio || ''}" onclick="regeneratePdf(this)">Regenerar PDF</button>`
+          : '';
+        const copyButton = hasPdf
+          ? `<button class="action-link copy" data-url="${item.pdfUrl}" onclick="copyPdfLink(this)">Copiar link</button>`
           : '';
 
         return `
@@ -202,6 +213,8 @@
               <div class="actions">
                 <a class="action-link abonar" href="${abonoUrl}">Abonar</a>
                 ${pdfButton}
+                ${regenButton}
+                ${copyButton}
               </div>
             </td>
           </tr>
@@ -224,8 +237,59 @@
       statusEl.className = 'status muted';
     }
 
+
+    async function copyPdfLink(btn) {
+      const url = String(btn?.dataset?.url || '').trim();
+      if (!url) return;
+      try {
+        await navigator.clipboard.writeText(url);
+        statusEl.textContent = 'Link de PDF copiado.';
+        statusEl.className = 'status muted';
+      } catch (_) {
+        statusEl.textContent = 'No se pudo copiar automáticamente el link.';
+        statusEl.className = 'status err';
+      }
+    }
+
+    async function regeneratePdf(btn) {
+      const folio = String(btn?.dataset?.folio || '').trim();
+      if (!folio) return;
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Regenerando...';
+      try {
+        const resp = await fetch(`/api/core?action=apartados&op=pdf-refresh&folio=${encodeURIComponent(folio)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'historial_manual_regen' }) });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error(data.message || 'No se pudo regenerar PDF.');
+        const payload = data.data || {};
+        const pdfUrl = String(payload.pdfUrl || '').trim();
+        if (pdfUrl) {
+          state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase() ? { ...item, pdfUrl } : item);
+          state.missingPdf.delete(folio.toUpperCase());
+          applyFilter();
+        }
+        statusEl.textContent = `PDF regenerado para ${folio}.`;
+        statusEl.className = 'status muted';
+      } catch (error) {
+        statusEl.textContent = error.message || 'Error al regenerar PDF.';
+        statusEl.className = 'status err';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    }
+
+    async function loadMissingPdf() {
+      const resp = await fetch('/api/core?action=apartados&op=missing-pdf');
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.ok) return;
+      const rows = Array.isArray(data?.data?.apartados) ? data.data.apartados : [];
+      state.missingPdf = new Set(rows.map((row) => String(row.folio || '').toUpperCase()));
+    }
+
     async function loadHistorial() {
       try {
+        await loadMissingPdf();
         const resp = await fetch('/api/core?action=apartados&op=list');
         const data = await resp.json();
 
@@ -234,7 +298,7 @@
         }
 
         const body = data.data || {};
-        state.apartados = (Array.isArray(body.apartados) ? body.apartados : []).map((item) => ({ ...item, contacto: item.telefono || item.contacto || '', estado: item.status || item.estado || 'ACTIVO', saldo: item.saldoPendiente ?? item.saldo ?? 0, pdfUrl: item.pdfUrl || `/ticket/${encodeURIComponent(item.folio || '')}` }));
+        state.apartados = (Array.isArray(body.apartados) ? body.apartados : []).map((item) => ({ ...item, contacto: item.telefono || item.contacto || '', estado: item.status || item.estado || 'ACTIVO', saldo: item.saldoPendiente ?? item.saldo ?? 0, pdfUrl: item.pdfDriveUrl || item.pdfUrl || '' }));
         state.filtered = [...state.apartados];
         renderRows();
         statusEl.textContent = `${state.filtered.length} apartado(s) mostrado(s).`;

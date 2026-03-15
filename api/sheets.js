@@ -5,7 +5,9 @@ import {
   getApartadoDetail,
   getHistorialApartado,
   getNextFolio,
+  getApartadosMissingPdf,
   listApartados,
+  regenerateApartadoPdf,
   searchApartados,
   updateApartadoStatus,
 } from '../lib/api/apartados.js';
@@ -21,9 +23,10 @@ export default async function handler(req, res) {
   if (!action) return jsonErr(res, 400, 'action es obligatorio.');
 
   try {
-    if (action === 'apartados-next') return jsonOk(res, await getNextFolio());
+    if (action === 'apartados-next') return jsonOk(res, await getNextFolio(req.query?.fecha || req.body?.fecha || ''));
     if (action === 'apartados-list') return jsonOk(res, await listApartados());
     if (action === 'apartados-search') return jsonOk(res, await searchApartados(req.query || {}));
+    if (action === 'apartados-missing-pdf') return jsonOk(res, await getApartadosMissingPdf());
     if (action === 'apartados-create') return jsonOk(res, await createApartado(req.body || {}));
     if (action === 'apartados-abono') return jsonOk(res, await addAbono(req.body || {}));
 
@@ -43,6 +46,13 @@ export default async function handler(req, res) {
 
     if (action === 'apartados-update-status') {
       const result = await updateApartadoStatus(req.body || {});
+      if (result?.status) return res.status(result.status).json(result.body);
+      return jsonOk(res, result);
+    }
+
+    if (action === 'apartados-pdf-refresh') {
+      if (!folio) return jsonErr(res, 400, 'folio es obligatorio.');
+      const result = await regenerateApartadoPdf(folio, req.body || {});
       if (result?.status) return res.status(result.status).json(result.body);
       return jsonOk(res, result);
     }
