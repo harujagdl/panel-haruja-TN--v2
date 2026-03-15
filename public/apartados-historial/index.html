@@ -117,21 +117,21 @@
         const pdfUrl = String(item.pdfDriveUrl || item.pdfUrlPersistido || item.pdfUrl || '').trim();
         const hasPdf = Boolean(pdfUrl);
         const needsRegen = state.missingPdf.has(folio.toUpperCase()) || !hasPdf;
-        const copyTarget = pdfUrl || ticketUrl;
+        const copyTarget = hasPdf ? pdfUrl : '';
         const abonoUrl = `/apartados?abono=1&folio=${encodeURIComponent(folio)}`;
 
         const ticketButton = ticketUrl
-          ? `<a class="action ticket" href="${ticketUrl}" target="_blank" rel="noopener noreferrer">Ticket</a>`
+          ? `<a class="action ticket" href="${ticketUrl}" target="_blank" rel="noopener noreferrer">Ver ticket</a>`
           : '';
         const pdfButton = hasPdf
           ? `<a class="action pdf" href="${pdfUrl}" target="_blank" rel="noopener noreferrer">Abrir PDF</a>`
           : '';
         const regenButton = needsRegen
-          ? `<button class="action regen" data-folio="${folio}" onclick="regeneratePdf(this)">Regenerar PDF</button>`
+          ? `<button class="action regen" data-folio="${folio}" onclick="regeneratePdf(this)">Generar PDF oficial</button>`
           : '';
         const copyButton = copyTarget
-          ? `<button class="action copy" data-url="${copyTarget}" onclick="copyLink(this)">Copiar link</button>`
-          : '';
+          ? `<button class="action copy" data-url="${copyTarget}" onclick="copyLink(this)">Copiar link PDF</button>`
+          : `<button class="action copy" type="button" onclick="showGeneratePdfHint('${folio}')">Copiar link PDF</button>`;
 
         return `
           <tr>
@@ -168,7 +168,7 @@
       try {
         const absolute = new URL(url, window.location.origin).toString();
         await navigator.clipboard.writeText(absolute);
-        statusEl.textContent = 'Link copiado correctamente.';
+        statusEl.textContent = 'Link del PDF oficial copiado correctamente.';
         statusEl.className = 'status muted';
       } catch (_) {
         statusEl.textContent = 'No se pudo copiar automáticamente el link.';
@@ -176,18 +176,23 @@
       }
     }
 
+    function showGeneratePdfHint(folio) {
+      statusEl.textContent = `El apartado ${folio} aún no tiene PDF oficial. Genera el PDF oficial antes de compartir.`;
+      statusEl.className = 'status err';
+    }
+
     async function regeneratePdf(btn) {
       const folio = String(btn?.dataset?.folio || '').trim();
       if (!folio) return;
       const original = btn.textContent;
       btn.disabled = true;
-      btn.textContent = 'Regenerando...';
+      btn.textContent = 'Generando PDF...';
       try {
         const resp = await fetch(`/api/core?action=apartados&op=pdf-refresh&folio=${encodeURIComponent(folio)}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'historial_manual_regen' })
         });
         const data = await resp.json();
-        if (!resp.ok || !data.ok) throw new Error(data.message || 'No se pudo regenerar PDF.');
+        if (!resp.ok || !data.ok) throw new Error(data.message || 'No se pudo generar PDF oficial.');
         const payload = data.data || {};
         const pdfUrl = String(payload.pdfUrl || '').trim();
         if (pdfUrl) {
@@ -195,10 +200,11 @@
           state.missingPdf.delete(folio.toUpperCase());
           applyFilter();
         }
-        statusEl.textContent = `PDF regenerado para ${folio}.`;
+        statusEl.textContent = `PDF oficial generado para ${folio}.`;
+        await loadMissingPdf();
         statusEl.className = 'status muted';
       } catch (error) {
-        statusEl.textContent = error.message || 'Error al regenerar PDF.';
+        statusEl.textContent = error.message || 'Error al generar PDF oficial.';
         statusEl.className = 'status err';
       } finally {
         btn.disabled = false;
@@ -228,7 +234,7 @@
           estado: (item.status || item.estado || 'ACTIVO').toUpperCase(),
           saldo: item.saldoPendiente ?? item.saldo ?? 0,
           ticketUrl: item.ticketUrl || `/ticket/${encodeURIComponent(item.folio || '')}`,
-          pdfDriveUrl: item.pdfDriveUrl || item.pdfUrlPersistido || '',
+          pdfDriveUrl: item.pdfDriveUrl || item.pdfUrlPersistido || item.pdfUrl || '',
         }));
         applyFilter();
       } catch (error) {
