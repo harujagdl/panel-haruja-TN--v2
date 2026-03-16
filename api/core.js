@@ -33,7 +33,7 @@ import {
   updateApartadoStatus,
 } from '../lib/api/apartados.js';
 import { runApartadoPdfDriveWriteTest } from '../lib/apartados/pdf-sync.js';
-import { APARTADOS_PDF_FOLDER_ID } from '../lib/apartados/pdf-config.js';
+import { APARTADOS_PDF_DRIVE_ID, APARTADOS_PDF_FOLDER_ID } from '../lib/apartados/pdf-config.js';
 
 const sendOk = (res, data) => res.status(200).json({ ok: true, data });
 const sendErr = (res, status, message, error) => res.status(status).json({ ok: false, message, ...(error ? { error: String(error?.message || error) } : {}) });
@@ -109,6 +109,7 @@ async function handleApartados(req, res) {
           details: body?.details || body?.error || body?.message || 'Error desconocido',
           folio,
           folderId: APARTADOS_PDF_FOLDER_ID,
+          driveId: APARTADOS_PDF_DRIVE_ID,
         });
       }
 
@@ -118,6 +119,7 @@ async function handleApartados(req, res) {
         fileId: String(result?.fileId || '').trim(),
         pdfUrl: String(result?.pdfUrl || '').trim(),
         folderId: String(result?.folderId || APARTADOS_PDF_FOLDER_ID).trim(),
+        driveId: String(result?.driveId || APARTADOS_PDF_DRIVE_ID).trim(),
       });
     } catch (err) {
       console.error('PDF OFICIAL ERROR', {
