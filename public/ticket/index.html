@@ -312,8 +312,26 @@ const fileId=String(payload?.fileId||'').trim()
 const folderId=String(payload?.folderId||payload?.driveFolderId||'').trim()
 if(!pdfUrl) throw new Error('No se recibió pdfUrl real.')
 if(!fileId) throw new Error('No se recibió fileId real.')
-if(!folderId) throw new Error('No se recibió folderId del backend.')
+if(!folderId) throw new Error('No se recibió folderId del PDF oficial.')
 return{pdfUrl,fileId,folderId}
+}
+
+
+function getPdfWebAppUrl(){
+const fromWindow=String(window.HARUJA_APARTADOS_PDF_WEBAPP_URL||'').trim()
+const fromStorage=String(window.localStorage?.getItem('HARUJA_APARTADOS_PDF_WEBAPP_URL')||'').trim()
+return fromWindow||fromStorage
+}
+
+async function generateOfficialPdfViaAppsScript(folio){
+const webAppUrl=getPdfWebAppUrl()
+if(!webAppUrl) throw new Error('Falta configurar HARUJA_APARTADOS_PDF_WEBAPP_URL para generar el PDF oficial.')
+const res=await fetch(webAppUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'generar_pdf_apartado',folio})})
+const raw=await res.text()
+let data=null
+try{data=raw?JSON.parse(raw):null}catch(_){throw new Error(`Apps Script devolvió una respuesta no JSON: ${raw||'vacía'}`)}
+if(!res.ok||!data?.ok) throw new Error(data?.details||data?.message||data?.error||`HTTP ${res.status}`)
+return data
 }
 
 function money(v){
@@ -373,10 +391,7 @@ refreshBtn.onclick=async()=>{
 refreshBtn.disabled=true
 statusEl.textContent='Generando PDF oficial…'
 try{
-const res=await fetch(`/api/sheets?action=ticket-pdf-refresh&folio=${encodeURIComponent(folio)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:'manual_refresh'})})
-const payload=await res.json()
-const data=payload?.data||payload
-if(!res.ok||payload?.ok===false) throw new Error(payload?.message||`HTTP ${res.status}`)
+const data=await generateOfficialPdfViaAppsScript(folio)
 const validated=validateOfficialPdfPayload(data)
 applyPdf(validated.pdfUrl,data.updatedAt||'')
 statusEl.textContent='PDF oficial guardado correctamente en Drive.'
