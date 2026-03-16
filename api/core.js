@@ -33,6 +33,7 @@ import {
   updateApartadoStatus,
 } from '../lib/api/apartados.js';
 import { runApartadoPdfDriveWriteTest } from '../lib/apartados/pdf-sync.js';
+import { APARTADOS_PDF_FOLDER_ID } from '../lib/apartados/pdf-config.js';
 
 const sendOk = (res, data) => res.status(200).json({ ok: true, data });
 const sendErr = (res, status, message, error) => res.status(status).json({ ok: false, message, ...(error ? { error: String(error?.message || error) } : {}) });
@@ -72,6 +73,7 @@ async function handlePrendas(req, res) {
 async function handleApartados(req, res) {
   const op = String(req.query?.op || req.body?.op || '').trim();
   const folio = String(req.query?.folio || req.body?.folio || '').trim();
+  const action = String(req.query?.action || '').trim();
   if (req.method === 'GET' && (!op || op === 'list')) return sendOk(res, await listApartados());
   if (req.method === 'GET' && op === 'next') return sendOk(res, await getNextFolio(req.query?.fecha || req.body?.fecha || ''));
   if (req.method === 'GET' && op === 'search') return sendOk(res, await searchApartados(req.query || {}));
@@ -97,9 +99,43 @@ async function handleApartados(req, res) {
   }
   if (req.method === 'POST' && op === 'pdf-refresh') {
     if (!folio) return sendErr(res, 400, 'folio es obligatorio.');
-    const result = await regenerateApartadoPdf(folio, req.body || {});
-    if (result?.status) return res.status(result.status).json(result.body);
-    return sendOk(res, result);
+    try {
+      const result = await regenerateApartadoPdf(folio, req.body || {});
+      if (result?.status) {
+        const body = result.body || {};
+        return res.status(result.status).json({
+          ok: false,
+          error: body?.message || 'No se pudo generar el PDF oficial',
+          details: body?.details || body?.error || body?.message || 'Error desconocido',
+          folio,
+          folderId: APARTADOS_PDF_FOLDER_ID,
+        });
+      }
+
+      return res.status(200).json({
+        ok: true,
+        folio,
+        fileId: String(result?.fileId || '').trim(),
+        pdfUrl: String(result?.pdfUrl || '').trim(),
+        folderId: String(result?.folderId || APARTADOS_PDF_FOLDER_ID).trim(),
+      });
+    } catch (err) {
+      console.error('PDF OFICIAL ERROR', {
+        point: 'handleApartados:pdf-refresh',
+        action,
+        folio,
+        folderId: APARTADOS_PDF_FOLDER_ID,
+        message: err?.message,
+        stack: err?.stack,
+      });
+      return res.status(500).json({
+        ok: false,
+        error: 'No se pudo generar el PDF oficial',
+        details: err?.message || 'Error interno al generar PDF oficial',
+        folio,
+        folderId: APARTADOS_PDF_FOLDER_ID,
+      });
+    }
   }
   if (req.method === 'POST' && op === 'pdf-drive-test') {
     const result = await runApartadoPdfDriveWriteTest();
@@ -144,13 +180,13 @@ export default async function handler(req, res) {
     }
     if (action === 'prendas-import-corrections') return sendOk(res, await importCorrections(req.body || {}));
 
-    if (action === 'prendas') return handlePrendas(req, res);
+    if (action === 'prendas') return await handlePrendas(req, res);
     if (action === 'prendas-admin') {
       if (req.method === 'GET') return sendOk(res, await listArchivedPrendas());
       return sendOk(res, await importCorrections(req.body || {}));
     }
 
-    if (action === 'apartados') return handleApartados(req, res);
+    if (action === 'apartados') return await handleApartados(req, res);
 
     if (action === 'ventas-comisiones') {
       if (req.method === 'GET') return sendOk(res, await getVentasComisiones(req.query || {}, req));

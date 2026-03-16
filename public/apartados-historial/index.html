@@ -206,10 +206,18 @@
         const resp = await fetch(`/api/core?action=apartados&op=pdf-refresh&folio=${encodeURIComponent(folio)}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'historial_manual_regen' })
         });
-        const data = await resp.json();
-        if (!resp.ok || !data.ok) throw new Error(data.message || 'No se pudo generar PDF oficial.');
-        const payload = data.data || {};
-        const validated = validateOfficialPdfPayload(payload);
+        const raw = await resp.text();
+        let data = null;
+        try {
+          data = raw ? JSON.parse(raw) : null;
+        } catch (_) {
+          throw new Error(`El servidor devolvió una respuesta no JSON: ${raw || 'vacía'}`);
+        }
+
+        const backendMessage = data?.details || data?.error || data?.message || '';
+        if (!resp.ok || !data?.ok) throw new Error(backendMessage || 'No se pudo generar PDF oficial.');
+
+        const validated = validateOfficialPdfPayload(data);
         state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase()
           ? { ...item, pdfDriveUrl: validated.pdfUrl, pdfFileId: validated.fileId, pdfFolderId: validated.folderId }
           : item);
