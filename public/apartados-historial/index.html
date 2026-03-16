@@ -87,14 +87,42 @@
     const estadoEl = document.getElementById('estado');
 
 
+    function getPdfWebAppUrl() {
+      const fromWindow = String(window.HARUJA_APARTADOS_PDF_WEBAPP_URL || '').trim();
+      const fromStorage = String(window.localStorage?.getItem('HARUJA_APARTADOS_PDF_WEBAPP_URL') || '').trim();
+      return fromWindow || fromStorage;
+    }
+
+    async function generateOfficialPdfViaAppsScript(folio) {
+      const webAppUrl = getPdfWebAppUrl();
+      if (!webAppUrl) {
+        throw new Error('Falta configurar HARUJA_APARTADOS_PDF_WEBAPP_URL para generar el PDF oficial.');
+      }
+      const resp = await fetch(webAppUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'generar_pdf_apartado', folio }),
+      });
+      const raw = await resp.text();
+      let data = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch (_) {
+        throw new Error(`Apps Script devolvió una respuesta no JSON: ${raw || 'vacía'}`);
+      }
+      if (!resp.ok || !data?.ok) {
+        const message = data?.details || data?.message || data?.error || `HTTP ${resp.status}`;
+        throw new Error(message || 'No se pudo generar PDF oficial.');
+      }
+      return data;
+    }
+
     function validateOfficialPdfPayload(payload = {}) {
-      const ok = payload?.ok === true || payload?.ok === undefined;
       const pdfUrl = String(payload?.pdfUrl || '').trim();
       const fileId = String(payload?.fileId || '').trim();
       const folderId = String(payload?.folderId || payload?.driveFolderId || '').trim();
-      if (!ok) throw new Error('No se pudo guardar el PDF en Drive.');
-      if (!pdfUrl) throw new Error('No se recibió pdfUrl real desde el backend.');
-      if (!fileId) throw new Error('No se recibió fileId real desde el backend.');
+      if (!pdfUrl) throw new Error('No se recibió pdfUrl real desde Apps Script.');
+      if (!fileId) throw new Error('No se recibió fileId real desde Apps Script.');
       if (!folderId) throw new Error('No se recibió folderId del PDF oficial.');
       return { pdfUrl, fileId, folderId };
     }
@@ -201,20 +229,7 @@
       btn.disabled = true;
       btn.textContent = 'Generando PDF...';
       try {
-        const resp = await fetch(`/api/core?action=apartados&op=pdf-refresh&folio=${encodeURIComponent(folio)}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'historial_manual_regen' })
-        });
-        const raw = await resp.text();
-        let data = null;
-        try {
-          data = raw ? JSON.parse(raw) : null;
-        } catch (_) {
-          throw new Error(`El servidor devolvió una respuesta no JSON: ${raw || 'vacía'}`);
-        }
-
-        const backendMessage = data?.details || data?.error || data?.message || '';
-        if (!resp.ok || !data?.ok) throw new Error(backendMessage || 'No se pudo generar PDF oficial.');
-
+        const data = await generateOfficialPdfViaAppsScript(folio);
         const validated = validateOfficialPdfPayload(data);
         state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase()
           ? { ...item, pdfDriveUrl: validated.pdfUrl, pdfFileId: validated.fileId, pdfFolderId: validated.folderId }
