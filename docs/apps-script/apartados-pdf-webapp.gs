@@ -161,8 +161,7 @@ function formatMoney_(value) {
 }
 
 function generateAndStorePdf_(folio, apartado) {
-  const html = buildTicketHtml_(apartado);
-  const blob = Utilities.newBlob(html, 'text/html', `${folio}.html`).getAs('application/pdf').setName(`${folio}.pdf`);
+  const blob = generarPdfDesdeDoc_(apartado).setName(`${folio}.pdf`);
   const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
 
   const existing = folder.getFilesByName(`${folio}.pdf`);
@@ -171,6 +170,152 @@ function generateAndStorePdf_(folio, apartado) {
   }
 
   return folder.createFile(blob);
+}
+
+function generarPdfDesdeDoc_(apartado) {
+  const doc = DocumentApp.create(`TMP_${apartado.folio}_${Date.now()}`);
+  const docId = doc.getId();
+
+  try {
+    const body = doc.getBody();
+    body.clear();
+    body.setMarginTop(24);
+    body.setMarginBottom(24);
+    body.setMarginLeft(28);
+    body.setMarginRight(28);
+
+    appendLogo_(body);
+
+    const title = body.appendParagraph('TICKET DE APARTADO');
+    title.setBold(true).setFontSize(16).setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+
+    const folioBadge = body.appendParagraph(`FOLIO: ${apartado.folio}`);
+    folioBadge
+      .setBold(true)
+      .setFontSize(11)
+      .setAlignment(DocumentApp.HorizontalAlignment.CENTER)
+      .setBackgroundColor('#f1ece4');
+
+    body.appendParagraph('');
+    appendMetaRow_(body, 'Fecha', apartado.fecha);
+    appendMetaRow_(body, 'Cliente', apartado.cliente);
+    appendMetaRow_(body, 'Contacto', apartado.contacto);
+    appendMetaRow_(body, 'Estatus', apartado.estatus);
+
+    body.appendParagraph('');
+    const detailHeading = body.appendParagraph('DETALLE');
+    detailHeading.setBold(true).setFontSize(12);
+    appendItemsTable_(body, apartado.items || []);
+
+    body.appendParagraph('');
+    appendTotalsTable_(body, apartado);
+
+    body.appendParagraph('');
+    appendLegalCopy_(body, apartado.abonos || []);
+
+    body.appendParagraph('');
+    appendQr_(body, apartado.folio);
+
+    doc.saveAndClose();
+    return DriveApp.getFileById(docId).getAs(MimeType.PDF).setName(`${apartado.folio}.pdf`);
+  } finally {
+    DriveApp.getFileById(docId).setTrashed(true);
+  }
+}
+
+function appendLogo_(body) {
+  const logoBlob = fetchImageBlob_('https://paneltn.harujagdl.com/assets/haruja-logo.png', 'haruja-logo.png');
+  const logoImage = body.appendImage(logoBlob);
+  const originalWidth = logoImage.getWidth();
+  const originalHeight = logoImage.getHeight();
+  const targetWidth = 140;
+  const targetHeight = originalWidth ? Math.round((originalHeight / originalWidth) * targetWidth) : 46;
+  logoImage.setWidth(targetWidth);
+  logoImage.setHeight(targetHeight);
+  logoImage.getParent().asParagraph().setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+}
+
+function appendQr_(body, folio) {
+  const destino = `https://paneltn.harujagdl.com/apartado/${encodeURIComponent(folio || '')}`;
+  const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(destino)}&size=220&format=png`;
+  const qrBlob = fetchImageBlob_(qrUrl, `qr-${folio}.png`);
+  const title = body.appendParagraph('Escanea para ver tu apartado');
+  title.setAlignment(DocumentApp.HorizontalAlignment.CENTER).setFontSize(10);
+  const qrImage = body.appendImage(qrBlob);
+  qrImage.setWidth(100);
+  qrImage.setHeight(100);
+  qrImage.getParent().asParagraph().setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+}
+
+function appendMetaRow_(body, label, value) {
+  const p = body.appendParagraph(`${label}: ${String(value || '').trim() || '-'}`);
+  p.setFontSize(10);
+}
+
+function appendItemsTable_(body, items) {
+  const rows = [['Código', 'Descripción', 'Cantidad', 'P.U.', 'Importe']];
+  if (items.length) {
+    items.forEach((item) => {
+      rows.push([
+        String(item.codigo || ''),
+        String(item.descripcion || 'Prenda'),
+        String(item.cantidad || 1),
+        formatMoney_(item.precioUnitario),
+        formatMoney_(item.importe),
+      ]);
+    });
+  } else {
+    rows.push(['-', 'No hay productos registrados para este apartado.', '-', '-', '-']);
+  }
+
+  const table = body.appendTable(rows);
+  table.getRow(0).editAsText().setBold(true);
+}
+
+function appendTotalsTable_(body, apartado) {
+  const rows = [
+    ['Subtotal', formatMoney_(apartado.subtotal)],
+    ['Anticipo', formatMoney_(apartado.anticipo)],
+    ['Descuento', formatMoney_(apartado.descuento)],
+    ['Total', formatMoney_(apartado.total)],
+  ];
+  const table = body.appendTable(rows);
+  table.getRow(rows.length - 1).editAsText().setBold(true);
+}
+
+function appendLegalCopy_(body, abonos) {
+  const gracias = body.appendParagraph('Gracias por tu compra en HarujaGdl');
+  gracias.setBold(true).setFontSize(11);
+
+  body
+    .appendParagraph('Todos nuestros productos pasan por inspección para garantizar calidad, talla solicitada y que estén libres de defectos.')
+    .setFontSize(10);
+
+  body.appendParagraph('CAMBIOS').setBold(true).setFontSize(10);
+  body
+    .appendParagraph('Solicítalo dentro de 7 días naturales de recibir tu compra. La prenda debe estar nueva, sin uso, sin lavar y con etiquetas originales.')
+    .setFontSize(10);
+
+  body.appendParagraph('APARTADOS').setBold(true).setFontSize(10);
+  body.appendParagraph('Puedes apartar con 25% de anticipo y cuentas con un plazo máximo de 30 días para recoger.').setFontSize(10);
+  body.appendParagraph('Gracias por elegirnos').setBold(true).setFontSize(10);
+
+  if (!abonos.length) return;
+  body.appendParagraph('ÚLTIMOS ABONOS').setBold(true).setFontSize(10);
+  abonos.slice(0, 4).forEach((abono) => {
+    body
+      .appendListItem(`${abono.fecha || 'Sin fecha'} · ${formatMoney_(abono.monto)}${abono.metodo ? ` · ${abono.metodo}` : ''}`)
+      .setFontSize(9);
+  });
+}
+
+function fetchImageBlob_(url, fileName) {
+  const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  const code = response.getResponseCode();
+  if (code < 200 || code >= 300) {
+    throw new Error(`No se pudo descargar la imagen: ${url} (HTTP ${code})`);
+  }
+  return response.getBlob().setName(fileName || 'image.png');
 }
 
 function buildTicketHtml_(apartado) {
@@ -301,9 +446,13 @@ function updateApartadoPdfMetadata_(rowIndex, metadata) {
   const headers = values[0].map((h) => String(h || '').trim());
 
   setCellByHeader_(sheet, headers, rowIndex, 'PdfFileId', metadata.pdfFileId);
+  setCellByHeader_(sheet, headers, rowIndex, 'pdfFileId', metadata.pdfFileId);
   setCellByHeader_(sheet, headers, rowIndex, 'PdfUrl', metadata.pdfUrl);
+  setCellByHeader_(sheet, headers, rowIndex, 'pdfUrl', metadata.pdfUrl);
   setCellByHeader_(sheet, headers, rowIndex, 'PdfUpdatedAt', metadata.pdfUpdatedAt);
+  setCellByHeader_(sheet, headers, rowIndex, 'pdfUpdatedAt', metadata.pdfUpdatedAt);
   setCellByHeader_(sheet, headers, rowIndex, 'HasOfficialPdf', metadata.hasOfficialPdf ? 'true' : 'false');
+  setCellByHeader_(sheet, headers, rowIndex, 'hasOfficialPdf', metadata.hasOfficialPdf ? 'true' : 'false');
 }
 
 function setCellByHeader_(sheet, headers, rowIndex, headerName, value) {
