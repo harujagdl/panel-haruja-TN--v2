@@ -306,8 +306,6 @@ return''
 }
 
 
-const OFFICIAL_DRIVE_FOLDER_ID='1y3l0r-4XnSsicnuSeVaATSh3rC89j-If'
-
 function validateOfficialPdfPayload(payload={}){
 const pdfUrl=String(payload?.pdfUrl||'').trim()
 const fileId=String(payload?.fileId||'').trim()
@@ -315,7 +313,6 @@ const folderId=String(payload?.folderId||payload?.driveFolderId||'').trim()
 if(!pdfUrl) throw new Error('No se recibió pdfUrl real.')
 if(!fileId) throw new Error('No se recibió fileId real.')
 if(!folderId) throw new Error('No se recibió folderId del backend.')
-if(folderId!==OFFICIAL_DRIVE_FOLDER_ID) throw new Error('El PDF no se guardó en la carpeta oficial de Drive.')
 return{pdfUrl,fileId,folderId}
 }
 
