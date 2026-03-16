@@ -33,7 +33,6 @@ import {
   updateApartadoStatus,
 } from '../lib/api/apartados.js';
 import { runApartadoPdfDriveWriteTest } from '../lib/apartados/pdf-sync.js';
-import { APARTADOS_PDF_DRIVE_ID, APARTADOS_PDF_FOLDER_ID } from '../lib/apartados/pdf-config.js';
 
 const sendOk = (res, data) => res.status(200).json({ ok: true, data });
 const sendErr = (res, status, message, error) => res.status(status).json({ ok: false, message, ...(error ? { error: String(error?.message || error) } : {}) });
@@ -101,41 +100,19 @@ async function handleApartados(req, res) {
     if (!folio) return sendErr(res, 400, 'folio es obligatorio.');
     try {
       const result = await regenerateApartadoPdf(folio, req.body || {});
-      if (result?.status) {
-        const body = result.body || {};
-        return res.status(result.status).json({
-          ok: false,
-          error: body?.message || 'No se pudo generar el PDF oficial',
-          details: body?.details || body?.error || body?.message || 'Error desconocido',
-          folio,
-          folderId: APARTADOS_PDF_FOLDER_ID,
-          driveId: APARTADOS_PDF_DRIVE_ID,
-        });
-      }
-
-      return res.status(200).json({
-        ok: true,
-        folio,
-        fileId: String(result?.fileId || '').trim(),
-        pdfUrl: String(result?.pdfUrl || '').trim(),
-        folderId: String(result?.folderId || APARTADOS_PDF_FOLDER_ID).trim(),
-        driveId: String(result?.driveId || APARTADOS_PDF_DRIVE_ID).trim(),
-      });
+      if (result?.status) return res.status(result.status).json(result.body || { ok: false, message: 'No se pudo generar el PDF oficial.' });
+      return res.status(200).json(result);
     } catch (err) {
       console.error('PDF OFICIAL ERROR', {
         point: 'handleApartados:pdf-refresh',
         action,
         folio,
-        folderId: APARTADOS_PDF_FOLDER_ID,
         message: err?.message,
         stack: err?.stack,
       });
       return res.status(500).json({
         ok: false,
-        error: 'No se pudo generar el PDF oficial',
-        details: err?.message || 'Error interno al generar PDF oficial',
-        folio,
-        folderId: APARTADOS_PDF_FOLDER_ID,
+        message: err?.message || 'Error interno al generar PDF oficial',
       });
     }
   }
