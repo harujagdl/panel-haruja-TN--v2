@@ -86,7 +86,6 @@
     const searchEl = document.getElementById('search');
     const estadoEl = document.getElementById('estado');
 
-    const OFFICIAL_DRIVE_FOLDER_ID = '1y3l0r-4XnSsicnuSeVaATSh3rC89j-If';
 
     function validateOfficialPdfPayload(payload = {}) {
       const ok = payload?.ok === true || payload?.ok === undefined;
@@ -97,7 +96,6 @@
       if (!pdfUrl) throw new Error('No se pudo generar el PDF');
       if (!fileId) throw new Error('No se recibió fileId real desde el backend.');
       if (!folderId) throw new Error('No se recibió folderId del PDF oficial.');
-      if (folderId !== OFFICIAL_DRIVE_FOLDER_ID) throw new Error('El PDF se guardó en una carpeta distinta a la oficial.');
       return { pdfUrl, fileId, folderId };
     }
 
