@@ -7,6 +7,7 @@
  */
 const APARTADOS_SHEET_NAME = 'apartados';
 const APARTADOS_ITEMS_SHEET_NAME = 'apartados_items';
+const APARTADOS_ABONOS_SHEET_NAME = 'apartados_abonos';
 const DRIVE_FOLDER_ID = '1y3l0r-4XnSsicnuSeVaATSh3rC89j-If';
 
 function doPost(e) {
@@ -63,13 +64,51 @@ function getApartadoByFolio_(folio) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const apartadosSheet = ss.getSheetByName(APARTADOS_SHEET_NAME);
   const itemsSheet = ss.getSheetByName(APARTADOS_ITEMS_SHEET_NAME);
+  const abonosSheet = ss.getSheetByName(APARTADOS_ABONOS_SHEET_NAME);
   if (!apartadosSheet || !itemsSheet) throw new Error('No se encontraron hojas de apartados.');
 
   const apartados = readRows_(apartadosSheet);
   const items = readRows_(itemsSheet);
+  const abonos = abonosSheet ? readRows_(abonosSheet) : [];
 
   const match = apartados.find((row) => normalize_(row.Folio) === folio);
   if (!match) return null;
+
+  const itemsByFolio = items.filter((item) => normalize_(item.Folio) === folio);
+  const abonosByFolio = abonos
+    .filter((abono) => normalize_(abono.Folio) === folio)
+    .map((abono) => ({
+      fecha: String(abono.Fecha || abono.fecha || '').trim(),
+      monto: toMoney_(abono.Monto || abono.monto || 0),
+      metodo: String(abono.Metodo || abono.metodo || '').trim(),
+      comentario: String(abono.Comentario || abono.comentario || '').trim(),
+    }));
+
+  const parsedSubtotal = toMoney_(match.Subtotal || match.subtotal);
+  const parsedDescuento = toMoney_(match.DescuentoMXN || match.descuento || match.Descuento || 0);
+  const parsedAnticipo = toMoney_(match.Anticipo || match.anticipo);
+  const parsedTotal = toMoney_(match.Total || match.total);
+  const parsedSaldo = toMoney_(match.Saldo || match.saldoPendiente || match.saldo);
+
+  const mappedItems = itemsByFolio.map((item) => {
+    const cantidad = Number(item.Cantidad || item.cantidad || 1);
+    const precioUnitario = toMoney_(item.Precio || item.precio);
+    const importe = toMoney_(item.Importe || item.importe || cantidad * precioUnitario);
+    return {
+      codigo: item.Codigo || item.codigo || '',
+      descripcion: item.Descripcion || item.descripcion || 'Prenda',
+      cantidad: Number.isFinite(cantidad) && cantidad > 0 ? cantidad : 1,
+      precioUnitario,
+      importe,
+    };
+  });
+
+  const subtotalFromItems = mappedItems.reduce((acc, item) => acc + toMoney_(item.importe), 0);
+  const subtotal = mappedItems.length ? subtotalFromItems : parsedSubtotal;
+  const total = parsedTotal || toMoney_(subtotal - parsedDescuento);
+  const saldo = parsedSaldo || toMoney_(total - parsedAnticipo);
+
+  const hasRealItems = mappedItems.length > 0;
 
   return {
     rowIndex: match.__rowIndex,
@@ -77,20 +116,15 @@ function getApartadoByFolio_(folio) {
     fecha: match.Fecha || match.fecha || '',
     cliente: match.Cliente || match.cliente || '',
     contacto: match.Contacto || match.contacto || match.Telefono || match.telefono || '',
-    subtotal: toMoney_(match.Subtotal || match.subtotal),
-    descuento: toMoney_(match.DescuentoMXN || match.descuento || match.Descuento || 0),
-    anticipo: toMoney_(match.Anticipo || match.anticipo),
-    total: toMoney_(match.Total || match.total),
-    saldo: toMoney_(match.Saldo || match.saldoPendiente || match.saldo),
+    subtotal,
+    descuento: parsedDescuento,
+    anticipo: parsedAnticipo,
+    total,
+    saldo,
     estatus: String(match.Estado || match.status || match.estatus || 'ACTIVO').toUpperCase(),
-    items: items
-      .filter((item) => normalize_(item.Folio) === folio)
-      .map((item) => ({
-        codigo: item.Codigo || item.codigo || '',
-        descripcion: item.Descripcion || item.descripcion || 'Prenda',
-        cantidad: Number(item.Cantidad || item.cantidad || 1),
-        precio: toMoney_(item.Precio || item.precio),
-      })),
+    hasRealItems,
+    items: mappedItems,
+    abonos: abonosByFolio,
   };
 }
 
@@ -112,6 +146,20 @@ function toMoney_(value) {
   return Number.isFinite(n) ? Number(n.toFixed(2)) : 0;
 }
 
+function formatMoney_(value) {
+  const amount = toMoney_(value);
+  try {
+    return amount.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  } catch (_) {
+    const sign = amount < 0 ? '-' : '';
+    const abs = Math.abs(amount);
+    const fixed = abs.toFixed(2);
+    const parts = fixed.split('.');
+    const whole = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return `${sign}$${whole}.${parts[1]}`;
+  }
+}
+
 function generateAndStorePdf_(folio, apartado) {
   const html = buildTicketHtml_(apartado);
   const blob = Utilities.newBlob(html, 'text/html', `${folio}.html`).getAs('application/pdf').setName(`${folio}.pdf`);
@@ -126,8 +174,17 @@ function generateAndStorePdf_(folio, apartado) {
 }
 
 function buildTicketHtml_(apartado) {
+  const qrValue = `https://harujagdl.com/apartado/${encodeURIComponent(apartado.folio || '')}`;
+  const qrSrc = `https://chart.googleapis.com/chart?cht=qr&chs=220x220&chld=M|1&chl=${encodeURIComponent(qrValue)}`;
   const itemsHtml = (apartado.items || [])
-    .map((item) => `<tr><td>${escape_(item.codigo)}</td><td>${escape_(item.descripcion)}</td><td style="text-align:center">${item.cantidad}</td><td style="text-align:right">$${item.precio.toFixed(2)}</td></tr>`)
+    .map((item) => `<tr><td>${escape_(item.codigo)}</td><td>${escape_(item.descripcion)}</td><td class="ta-center">${item.cantidad}</td><td class="ta-right">${formatMoney_(item.precioUnitario)}</td><td class="ta-right">${formatMoney_(item.importe)}</td></tr>`)
+    .join('');
+
+  const fallbackItemsHtml = '<tr><td colspan="5" class="ta-center">No hay productos registrados para este apartado.</td></tr>';
+
+  const abonosHtml = (apartado.abonos || [])
+    .slice(0, 4)
+    .map((abono) => `<li>${escape_(abono.fecha || 'Sin fecha')} · ${formatMoney_(abono.monto)}${abono.metodo ? ` · ${escape_(abono.metodo)}` : ''}</li>`)
     .join('');
 
   return `
@@ -135,30 +192,103 @@ function buildTicketHtml_(apartado) {
     <head>
       <meta charset="utf-8" />
       <style>
-        @page { size: letter; margin: 16mm; }
-        body { font-family: Arial, sans-serif; color: #0f172a; font-size: 12px; }
-        h1 { font-size: 18px; margin: 0 0 10px; }
-        .meta { margin-bottom: 12px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #dbe2ee; padding: 6px; font-size: 11px; }
-        th { background: #f8fbff; text-align: left; }
-        .totals { margin-top: 12px; width: 260px; margin-left: auto; }
-        .totals-row { display: flex; justify-content: space-between; padding: 2px 0; }
+        :root{
+          --olive:#a7b59e;
+          --coffee:#383234;
+          --paper:#fffdfa;
+          --line-soft:#d8d3cc;
+          --sand:#f1ece4;
+        }
+        *{box-sizing:border-box}
+        @page{ size: letter; margin: 12mm; }
+        body{ font-family: "Segoe UI", Arial, sans-serif; color: var(--coffee); font-size: 12px; background: #fff; margin:0; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+        .card{ width:186mm; max-width:186mm; margin:0 auto; background:var(--paper); }
+        .logo-wrap{text-align:center; margin-bottom:8px;}
+        .logo{width:200px; max-width:100%; height:auto;}
+        .top-line{border:0; border-top:3px solid var(--coffee); margin:8px 0 14px;}
+        .top-row{display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;}
+        .title{font-size:18px; font-weight:700; text-transform:uppercase;}
+        .folio{font-weight:700; background:var(--sand); padding:5px 10px; border-radius:999px; font-size:13px;}
+        .meta{display:grid; grid-template-columns:88px 1fr; gap:6px 12px; font-size:12px; margin-bottom:10px;}
+        .section-title{font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; margin:10px 0 8px; color:var(--olive);}
+        table{width:100%; border-collapse:collapse;}
+        thead th{text-align:left; font-size:12px; text-transform:uppercase; background:var(--sand); border-top:1px solid var(--line-soft); border-bottom:1px solid var(--line-soft); padding:8px 7px;}
+        tbody td{font-size:12px; padding:8px 7px; border-bottom:1px solid rgba(56,50,52,.09);}
+        .ta-center{text-align:center}
+        .ta-right{text-align:right}
+        .totals{width:320px; margin-left:auto; margin-top:10px; background:var(--sand); border:1px solid rgba(167,181,158,.4); border-radius:12px; padding:10px 12px;}
+        .totals-row{display:flex; justify-content:space-between; margin:6px 0; font-size:13px;}
+        .totals-grand{border-top:2px solid var(--olive); padding-top:10px; margin-top:8px; font-size:16px; font-weight:800;}
+        .legal{margin-top:14px; font-size:11px; line-height:1.32;}
+        .legal h4{margin:10px 0 5px; font-size:11.8px; color:var(--olive); border-left:4px solid var(--olive); padding-left:8px;}
+        .legal p{margin:4px 0;}
+        .abonos{margin:8px 0 0 16px; padding:0;}
+        .abonos li{margin:3px 0;}
+        .bottom{display:grid; grid-template-columns:1fr 126px; gap:12px; margin-top:12px; align-items:end;}
+        .qr-box{text-align:center; background:var(--sand); border:1px solid rgba(167,181,158,.45); border-radius:12px; padding:8px;}
+        .qr{width:106px; height:106px; display:block; margin:0 auto 5px;}
+        .qr-caption{font-size:10.5px;}
       </style>
     </head>
     <body>
-      <h1>Ticket oficial de apartado</h1>
-      <div class="meta"><b>Folio:</b> ${escape_(apartado.folio)}<br/><b>Fecha:</b> ${escape_(apartado.fecha)}<br/><b>Cliente:</b> ${escape_(apartado.cliente)}<br/><b>Contacto:</b> ${escape_(apartado.contacto)}<br/><b>Estatus:</b> ${escape_(apartado.estatus)}</div>
-      <table>
-        <thead><tr><th>Código</th><th>Descripción</th><th>Cant.</th><th>Precio</th></tr></thead>
-        <tbody>${itemsHtml || '<tr><td colspan="4">Sin productos</td></tr>'}</tbody>
-      </table>
-      <div class="totals">
-        <div class="totals-row"><span>Subtotal</span><b>$${apartado.subtotal.toFixed(2)}</b></div>
-        <div class="totals-row"><span>Descuento</span><b>$${apartado.descuento.toFixed(2)}</b></div>
-        <div class="totals-row"><span>Anticipo</span><b>$${apartado.anticipo.toFixed(2)}</b></div>
-        <div class="totals-row"><span>Total</span><b>$${apartado.total.toFixed(2)}</b></div>
-        <div class="totals-row"><span>Saldo</span><b>$${apartado.saldo.toFixed(2)}</b></div>
+      <div class="card">
+        <div class="logo-wrap">
+          <img class="logo" src="https://harujagdl.com/assets/haruja-logo.png" alt="HarujaGdl" />
+        </div>
+
+        <hr class="top-line" />
+
+        <div class="top-row">
+          <div class="title">Ticket de apartado</div>
+          <div class="folio">#${escape_(apartado.folio)}</div>
+        </div>
+
+        <div class="meta">
+          <b>Fecha:</b><div>${escape_(apartado.fecha)}</div>
+          <b>Cliente:</b><div>${escape_(apartado.cliente)}</div>
+          <b>Contacto:</b><div>${escape_(apartado.contacto)}</div>
+          <b>Estatus:</b><div>${escape_(apartado.estatus)}</div>
+        </div>
+
+        <div class="section-title">Detalle</div>
+
+        <table>
+          <thead>
+            <tr><th>Código</th><th>Descripción</th><th class="ta-center">Cant</th><th class="ta-right">P.U.</th><th class="ta-right">Importe</th></tr>
+          </thead>
+          <tbody>${itemsHtml || fallbackItemsHtml}</tbody>
+        </table>
+
+        <div class="totals">
+          <div class="totals-row"><b>Subtotal:</b><span>${formatMoney_(apartado.subtotal)}</span></div>
+          <div class="totals-row"><b>Anticipo:</b><span>${formatMoney_(apartado.anticipo)}</span></div>
+          <div class="totals-row"><b>Descuento:</b><span>${formatMoney_(apartado.descuento)}</span></div>
+          <div class="totals-row"><b>Saldo:</b><span>${formatMoney_(apartado.saldo)}</span></div>
+          <div class="totals-row totals-grand"><b>TOTAL</b><span>${formatMoney_(apartado.total)}</span></div>
+        </div>
+
+        <div class="legal">
+          <p><strong>Gracias por tu compra en HarujaGdl</strong></p>
+          <p>Todos nuestros productos pasan por inspección para garantizar calidad, talla solicitada y que estén libres de defectos.</p>
+          <h4>CAMBIOS</h4>
+          <p>Solicítalo dentro de 7 días naturales de recibir tu compra. La prenda debe estar nueva, sin uso, sin lavar y con etiquetas originales.</p>
+          <h4>APARTADOS</h4>
+          <p>Puedes apartar con 25% de anticipo y cuentas con un plazo máximo de 30 días para recoger.</p>
+          ${abonosHtml ? `<h4>ÚLTIMOS ABONOS</h4><ul class="abonos">${abonosHtml}</ul>` : ''}
+        </div>
+
+        <div class="bottom">
+          <div class="meta">
+            <b>Pedido:</b><div>${escape_(apartado.folio)}</div>
+            <b>Fecha:</b><div>${escape_(apartado.fecha)}</div>
+            <b>Cliente:</b><div>${escape_(apartado.cliente)}</div>
+            <b>Contacto:</b><div>${escape_(apartado.contacto)}</div>
+          </div>
+          <div class="qr-box">
+            <img class="qr" src="${qrSrc}" alt="QR apartado" />
+            <div class="qr-caption">Escanea para ver tu apartado</div>
+          </div>
+        </div>
       </div>
     </body>
   </html>`;
