@@ -87,29 +87,13 @@
     const estadoEl = document.getElementById('estado');
 
 
-    function getPdfWebAppUrl() {
-      const fromWindow = String(window.HARUJA_APARTADOS_PDF_WEBAPP_URL || '').trim();
-      const fromStorage = String(window.localStorage?.getItem('HARUJA_APARTADOS_PDF_WEBAPP_URL') || '').trim();
-      return fromWindow || fromStorage;
-    }
-
-    async function generateOfficialPdfViaAppsScript(folio) {
-      const webAppUrl = getPdfWebAppUrl();
-      if (!webAppUrl) {
-        throw new Error('Falta configurar HARUJA_APARTADOS_PDF_WEBAPP_URL para generar el PDF oficial.');
-      }
-      const resp = await fetch(webAppUrl, {
+    async function generateOfficialPdfViaApi(folio) {
+      const resp = await fetch('/api/core?action=apartados&op=pdf-refresh', {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'generar_pdf_apartado', folio }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folio }),
       });
-      const raw = await resp.text();
-      let data = null;
-      try {
-        data = raw ? JSON.parse(raw) : null;
-      } catch (_) {
-        throw new Error(`Apps Script devolvió una respuesta no JSON: ${raw || 'vacía'}`);
-      }
+      const data = await resp.json().catch(() => ({}));
       if (!resp.ok || !data?.ok) {
         const message = data?.details || data?.message || data?.error || `HTTP ${resp.status}`;
         throw new Error(message || 'No se pudo generar PDF oficial.');
@@ -120,11 +104,8 @@
     function validateOfficialPdfPayload(payload = {}) {
       const pdfUrl = String(payload?.pdfUrl || '').trim();
       const fileId = String(payload?.fileId || '').trim();
-      const folderId = String(payload?.folderId || payload?.driveFolderId || '').trim();
-      if (!pdfUrl) throw new Error('No se recibió pdfUrl real desde Apps Script.');
-      if (!fileId) throw new Error('No se recibió fileId real desde Apps Script.');
-      if (!folderId) throw new Error('No se recibió folderId del PDF oficial.');
-      return { pdfUrl, fileId, folderId };
+      if (!pdfUrl) throw new Error(String(payload?.message || 'No se recibió pdfUrl real desde Apps Script.'));
+      return { pdfUrl, fileId };
     }
 
     const formatMoney = (value) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(value || 0));
@@ -229,10 +210,10 @@
       btn.disabled = true;
       btn.textContent = 'Generando PDF...';
       try {
-        const data = await generateOfficialPdfViaAppsScript(folio);
+        const data = await generateOfficialPdfViaApi(folio);
         const validated = validateOfficialPdfPayload(data);
         state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase()
-          ? { ...item, pdfDriveUrl: validated.pdfUrl, pdfFileId: validated.fileId, pdfFolderId: validated.folderId }
+          ? { ...item, pdfDriveUrl: validated.pdfUrl, pdfFileId: validated.fileId }
           : item);
         state.missingPdf.delete(folio.toUpperCase());
         applyFilter();
