@@ -306,8 +306,10 @@ return''
 }
 
 
-function getOfficialPdfUrl(folio){
-return `/api/pdf-apartado?folio=${encodeURIComponent(folio)}`
+function generarPdfOficial(folio){
+const url=`/api/pdf-apartado?folio=${encodeURIComponent(folio)}`
+window.open(url,'_blank','noopener,noreferrer')
+return url
 }
 
 function money(v){
@@ -364,12 +366,11 @@ statusEl.textContent='Genera el PDF oficial con el botón para descargarlo.'
 
 refreshBtn.style.display='inline-block'
 refreshBtn.onclick=()=>{
-const pdfUrl=getOfficialPdfUrl(folio)
+const pdfUrl=generarPdfOficial(folio)
 viewBtn.style.display='inline-block'
 downloadBtn.style.display='inline-block'
 viewBtn.onclick=()=>window.open(pdfUrl,'_blank','noopener')
 downloadBtn.onclick=()=>window.open(pdfUrl,'_blank','noopener')
-window.open(pdfUrl,'_blank','noopener')
 statusEl.textContent='Abriendo PDF oficial…'
 }
 applyPdf('','')
