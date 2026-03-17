@@ -306,18 +306,15 @@ return''
 }
 
 
-function validateOfficialPdfPayload(payload={}){
-const pdfUrl=String(payload?.pdfUrl||'').trim()
-const fileId=String(payload?.fileId||'').trim()
-if(!pdfUrl) throw new Error(String(payload?.message||'No se recibió pdfUrl real.'))
-return{pdfUrl,fileId}
-}
-
 async function generateOfficialPdfViaApi(folio){
-const res=await fetch('/api/core?action=apartados&op=pdf-refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folio})})
-const data=await res.json().catch(()=>({}))
-if(!res.ok||!data?.ok) throw new Error(data?.details||data?.message||data?.error||`HTTP ${res.status}`)
-return data
+const res=await fetch(`/api/pdf-apartado?folio=${encodeURIComponent(folio)}`)
+if(!res.ok){
+const errData=await res.json().catch(()=>({}))
+throw new Error(errData?.message||errData?.error||`HTTP ${res.status}`)
+}
+const blob=await res.blob()
+if(blob.type!=='application/pdf') throw new Error('La API no devolvió un PDF válido.')
+return blob
 }
 
 function money(v){
@@ -368,7 +365,7 @@ statusEl.textContent=`PDF oficial disponible${updatedAt?` · Actualizado: ${upda
 }else{
 viewBtn.style.display='none'
 downloadBtn.style.display='none'
-statusEl.textContent='No existe PDF oficial persistente todavía.'
+statusEl.textContent='Genera el PDF oficial con el botón para descargarlo.'
 }
 }
 
@@ -377,26 +374,27 @@ refreshBtn.onclick=async()=>{
 refreshBtn.disabled=true
 statusEl.textContent='Generando PDF oficial…'
 try{
-const data=await generateOfficialPdfViaApi(folio)
-const validated=validateOfficialPdfPayload(data)
-applyPdf(validated.pdfUrl,data.updatedAt||'')
-statusEl.textContent='PDF oficial guardado correctamente en Drive.'
+const pdfBlob=await generateOfficialPdfViaApi(folio)
+const pdfUrl=URL.createObjectURL(pdfBlob)
+viewBtn.style.display='inline-block'
+downloadBtn.style.display='inline-block'
+viewBtn.onclick=()=>window.open(pdfUrl,'_blank','noopener')
+downloadBtn.onclick=()=>{
+const a=document.createElement('a')
+a.href=pdfUrl
+a.download=`apartado-${folio}.pdf`
+document.body.appendChild(a)
+a.click()
+a.remove()
+}
+statusEl.textContent='PDF oficial generado correctamente.'
 }catch(err){
 statusEl.textContent=`No se pudo actualizar el PDF: ${err?.message||'error'}`
 }finally{
 refreshBtn.disabled=false
 }
 }
-
-try{
-const res=await fetch(`/api/sheets?action=ticket-pdf-status&folio=${encodeURIComponent(folio)}`)
-const payload=await res.json()
-const data=payload?.data||payload
-if(!res.ok||payload?.ok===false) throw new Error(payload?.message||`HTTP ${res.status}`)
-applyPdf(data.pdfUrl||'',data.updatedAt||'')
-}catch(err){
-statusEl.textContent=`No se pudo consultar PDF persistente: ${err?.message||'error'}`
-}
+applyPdf('','')
 }
 
 function renderTicket(payload){
