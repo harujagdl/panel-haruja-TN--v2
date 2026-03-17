@@ -2422,6 +2422,14 @@ body.haruja-col-resizing{
               </table>
             </div>
             <div id="metaAnnualView" class="hidden">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Periodo</th><th>Venta</th><th>Meta</th><th>% Cumplimiento</th><th>Comparativo</th>
+                  </tr>
+                </thead>
+                <tbody id="metaAnnualTbody"></tbody>
+              </table>
               <div class="summary-grid">
                 <article><h3>Venta anual</h3><p id="metaAnnualSales">$0.00</p></article>
                 <article><h3>Meta anual</h3><p id="metaAnnualGoal">$0.00</p></article>
@@ -3488,6 +3496,7 @@ Errores: 0</pre>
         fromMonth: 1,
         toMonth: new Date().getMonth() + 1,
         rowsByMonth: {},
+        annualRow: null,
         initialized: false,
         loading: false,
         error: null
@@ -3508,6 +3517,7 @@ Errores: 0</pre>
       const metaMonthlyView = document.getElementById("metaMonthlyView");
       const metaAnnualView = document.getElementById("metaAnnualView");
       const metaMonthlyTbody = document.getElementById("metaMonthlyTbody");
+      const metaAnnualTbody = document.getElementById("metaAnnualTbody");
       const metaAnnualSales = document.getElementById("metaAnnualSales");
       const metaAnnualGoal = document.getElementById("metaAnnualGoal");
       const metaAnnualPct = document.getElementById("metaAnnualPct");
@@ -3597,11 +3607,24 @@ Errores: 0</pre>
         }
         metaMonthlyTbody.innerHTML = rows.join("") || '<tr><td colspan="5">Sin datos para el rango seleccionado.</td></tr>';
 
-        const annualPctValue = rangeGoalTotal > 0 ? (rangeSalesTotal / rangeGoalTotal) * 100 : 0;
-        if (metaAnnualSales) metaAnnualSales.textContent = moneyMx.format(rangeSalesTotal);
-        if (metaAnnualGoal) metaAnnualGoal.textContent = moneyMx.format(rangeGoalTotal);
+        const annualSource = metaState.annualRow || {
+          venta: rangeSalesTotal,
+          meta: rangeGoalTotal,
+          cumplimiento: rangeGoalTotal > 0 ? (rangeSalesTotal / rangeGoalTotal) * 100 : 0,
+          barPercent: rangeGoalTotal > 0 ? (rangeSalesTotal / rangeGoalTotal) * 100 : 0
+        };
+        const annualVenta = Number(annualSource.venta || 0);
+        const annualMeta = Number(annualSource.meta || 0);
+        const annualPctValue = Number(annualSource.cumplimiento || 0);
+        const annualBarPercent = Math.max(0, Math.min(100, Number(annualSource.barPercent || 0)));
+
+        if (metaAnnualTbody) {
+          metaAnnualTbody.innerHTML = `<tr><td>Anual</td><td>${moneyMx.format(annualVenta)}</td><td>${moneyMx.format(annualMeta)}</td><td>${annualPctValue.toFixed(1)}%</td><td><div class="bar-track"><span class="bar-fill" style="width:${annualBarPercent.toFixed(1)}%;"></span></div></td></tr>`;
+        }
+        if (metaAnnualSales) metaAnnualSales.textContent = moneyMx.format(annualVenta);
+        if (metaAnnualGoal) metaAnnualGoal.textContent = moneyMx.format(annualMeta);
         if (metaAnnualPct) metaAnnualPct.textContent = `${annualPctValue.toFixed(1)}%`;
-        if (metaAnnualDiff) metaAnnualDiff.textContent = moneyMx.format(rangeSalesTotal - rangeGoalTotal);
+        if (metaAnnualDiff) metaAnnualDiff.textContent = moneyMx.format(annualVenta - annualMeta);
       };
 
       const loadMetaVsVenta = async ({ force = false } = {}) => {
@@ -3625,7 +3648,8 @@ Errores: 0</pre>
             body: JSON.stringify({
               year: metaState.year,
               fromMonth: startMonth,
-              toMonth: endMonth
+              toMonth: endMonth,
+              view: metaState.view
             })
           });
           const metaPayload = await safeJson(metaResponse);
@@ -3634,18 +3658,27 @@ Errores: 0</pre>
           }
 
           const rowsByMonth = {};
+          let annualRow = null;
           (metaPayload?.data?.rows || []).forEach((row) => {
             const month = Number(row?.month || 0);
-            if (month < 1 || month > 12) return;
-            rowsByMonth[month] = {
+            const parsedRow = {
               venta: Number(row?.venta || 0),
               meta: Number(row?.meta || 0),
               cumplimiento: Number(row?.cumplimiento || 0),
               barPercent: Number(row?.barPercent || 0)
             };
+            if (month === 0) {
+              annualRow = parsedRow;
+              return;
+            }
+            if (month < 1 || month > 12) return;
+            rowsByMonth[month] = parsedRow;
           });
 
-          metaState.rowsByMonth = rowsByMonth;
+          if (Object.keys(rowsByMonth).length > 0) {
+            metaState.rowsByMonth = rowsByMonth;
+          }
+          metaState.annualRow = annualRow;
           metaState.initialized = true;
           setMetaStatus("");
           renderMeta();
@@ -3687,9 +3720,10 @@ Errores: 0</pre>
           renderMeta();
         };
 
-        const setMetaView = (nextView) => {
+        const setMetaView = async (nextView) => {
           metaState.view = nextView === "annual" ? "annual" : "monthly";
           syncMetaUiState();
+          await loadMetaVsVenta({ force: true });
         };
 
         metaAdminLoginBtn?.addEventListener("click", async () => {
@@ -3727,8 +3761,8 @@ Errores: 0</pre>
         });
         metaToolbarRetryBtn?.addEventListener("click", () => loadMetaVsVenta({ force: true }));
         metaHeaderRetryBtn?.addEventListener("click", () => loadMetaVsVenta({ force: true }));
-        metaViewMonthlyTab.addEventListener("click", () => setMetaView("monthly"));
-        metaViewAnnualTab.addEventListener("click", () => setMetaView("annual"));
+        metaViewMonthlyTab.addEventListener("click", async () => setMetaView("monthly"));
+        metaViewAnnualTab.addEventListener("click", async () => setMetaView("annual"));
         syncMetaUiState();
         syncMetaAccessUi();
 
