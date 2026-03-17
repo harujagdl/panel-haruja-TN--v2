@@ -18,6 +18,10 @@
       "destination": "/apartados/index.html?folio=:folio"
     },
     {
+      "source": "/apartado-pdf/:folio",
+      "destination": "/apartado-pdf/index.html?folio=:folio"
+    },
+    {
       "source": "/",
       "destination": "/index.html"
     }

@@ -1,0 +1,10 @@
+{
+  "name": "panel-haruja-tn-v2",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@sparticuz/chromium": "^131.0.1",
+    "googleapis": "^144.0.0",
+    "puppeteer-core": "^23.10.4"
+  }
+}
