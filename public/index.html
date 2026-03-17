@@ -2144,6 +2144,22 @@ th.col-drag-over {
         padding: 0 16px;
       }
 
+      #meta-vs-venta .bar-track {
+        width: 100%;
+        height: 10px;
+        background: #e5e7eb;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+
+      #meta-vs-venta .bar-fill {
+        display: block;
+        height: 100%;
+        background: #2f6fe4;
+        border-radius: 999px;
+        transition: width .25s ease;
+      }
+
       #meta-vs-venta .meta-error-banner {
         display: flex;
         align-items: flex-start;
@@ -2816,12 +2832,6 @@ Errores: 0</pre>
         adminSignOut,
         isAdminUser
       } from "/shared/adminAuth.js";
-      import {
-        getGoalsSalesState,
-        saveAnnualGoal,
-        saveMonthlyGoal,
-        saveRangeMonthlyGoal
-      } from "/shared/goalsSales.js";
       import { loadBaseRowsFromSheets } from "/shared/sheets-adapter.js";
       import { loadDictionariesFromSheets } from "/shared/dictionaries-adapter.js";
       import { generateHarujaCode, normalizeCodeBase } from "/shared/code-generator.js";
@@ -3477,10 +3487,7 @@ Errores: 0</pre>
         view: "monthly",
         fromMonth: 1,
         toMonth: new Date().getMonth() + 1,
-        defaultMonthlyGoal: 10000,
-        annualGoal: 0,
-        monthlyGoals: {},
-        monthlySales: emptyMonths(),
+        rowsByMonth: {},
         initialized: false,
         loading: false,
         error: null
@@ -3569,8 +3576,8 @@ Errores: 0</pre>
         if (!metaMonthlyTbody) return;
         metaMonthlyView?.classList.toggle("hidden", metaState.view !== "monthly");
         metaAnnualView?.classList.toggle("hidden", metaState.view !== "annual");
-        metaAdminMonthlyTools?.classList.toggle("hidden", metaState.view !== "monthly");
-        metaAdminAnnualTools?.classList.toggle("hidden", metaState.view !== "annual");
+        metaAdminMonthlyTools?.classList.toggle("hidden", true);
+        metaAdminAnnualTools?.classList.toggle("hidden", true);
 
         syncMetaAccessUi();
 
@@ -3578,30 +3585,24 @@ Errores: 0</pre>
         const rows = [];
         let rangeSalesTotal = 0;
         let rangeGoalTotal = 0;
-        for (let month = 1; month <= 12; month += 1) {
-          const key = monthKey(metaState.year, month);
-          const sale = Number(metaState.monthlySales[key] || 0);
-          const goal = Number(metaState.monthlyGoals[key] ?? metaState.defaultMonthlyGoal ?? 0);
-          if (month < start || month > end) continue;
+        for (let month = start; month <= end; month += 1) {
+          const monthRow = metaState.rowsByMonth[month] || {};
+          const sale = Number(monthRow.venta || 0);
+          const goal = Number(monthRow.meta || 0);
+          const pct = Number(monthRow.cumplimiento || 0);
+          const barPercent = Number(monthRow.barPercent || 0);
           rangeSalesTotal += sale;
           rangeGoalTotal += goal;
-          const pct = goal > 0 ? (sale / goal) * 100 : 0;
-          rows.push(`<tr><td>${monthLabels[month - 1]}</td><td>${moneyMx.format(sale)}</td><td>${moneyMx.format(goal)}</td><td>${pct.toFixed(1)}%</td><td><div style="height:8px;background:#eee;border-radius:999px;overflow:hidden;"><span style="display:block;height:100%;width:${Math.min(100, Math.max(0, pct)).toFixed(0)}%;background:${pct >= 100 ? "#2f9e44" : "#1e5eff"};"></span></div></td></tr>`);
+          rows.push(`<tr><td>${monthLabels[month - 1]}</td><td>${moneyMx.format(sale)}</td><td>${moneyMx.format(goal)}</td><td>${pct.toFixed(1)}%</td><td><div class="bar-track"><span class="bar-fill" style="width:${Math.max(0, Math.min(100, barPercent)).toFixed(1)}%;"></span></div></td></tr>`);
         }
         metaMonthlyTbody.innerHTML = rows.join("") || '<tr><td colspan="5">Sin datos para el rango seleccionado.</td></tr>';
 
-        const selectedMonths = Math.max(1, (end - start) + 1);
-        const annualGoalValue = Number(metaState.annualGoal || 0) > 0
-          ? Number(metaState.annualGoal) * (selectedMonths / 12)
-          : rangeGoalTotal;
-        const annualPctValue = annualGoalValue > 0 ? (rangeSalesTotal / annualGoalValue) * 100 : 0;
+        const annualPctValue = rangeGoalTotal > 0 ? (rangeSalesTotal / rangeGoalTotal) * 100 : 0;
         if (metaAnnualSales) metaAnnualSales.textContent = moneyMx.format(rangeSalesTotal);
-        if (metaAnnualGoal) metaAnnualGoal.textContent = moneyMx.format(annualGoalValue);
+        if (metaAnnualGoal) metaAnnualGoal.textContent = moneyMx.format(rangeGoalTotal);
         if (metaAnnualPct) metaAnnualPct.textContent = `${annualPctValue.toFixed(1)}%`;
-        if (metaAnnualDiff) metaAnnualDiff.textContent = moneyMx.format(rangeSalesTotal - annualGoalValue);
+        if (metaAnnualDiff) metaAnnualDiff.textContent = moneyMx.format(rangeSalesTotal - rangeGoalTotal);
       };
-
-      const monthIndex = (year, month) => ((Number(year) || 0) * 12) + (Math.max(1, Math.min(12, Number(month) || 1)) - 1);
 
       const loadMetaVsVenta = async ({ force = false } = {}) => {
         if (metaState.loading) return;
@@ -3614,18 +3615,17 @@ Errores: 0</pre>
 
           const startMonth = Math.max(1, Math.min(12, Number(metaState.fromMonth) || 1));
           const endMonth = Math.max(startMonth, Math.min(12, Number(metaState.toMonth) || startMonth));
-          const startIndex = monthIndex(metaState.year, startMonth);
-          const endIndex = monthIndex(metaState.year, endMonth);
 
           const apiUrl = new URL("/api/core", window.location.origin);
+          // Fuente unificada: el backend de /api/core?action=meta-vs-venta devuelve ventas y metas desde Sheets.
           apiUrl.searchParams.set("action", "meta-vs-venta");
           const metaResponse = await fetch(apiUrl.toString(), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               year: metaState.year,
-              fromMonth: (startIndex % 12) + 1,
-              toMonth: (endIndex % 12) + 1
+              fromMonth: startMonth,
+              toMonth: endMonth
             })
           });
           const metaPayload = await safeJson(metaResponse);
@@ -3633,17 +3633,19 @@ Errores: 0</pre>
             throw new Error(metaPayload?.message || "No se pudo cargar meta vs venta.");
           }
 
-          const goals = await getGoalsSalesState(db, { year: metaState.year, auth });
-          const salesMap = emptyMonths(metaState.year);
+          const rowsByMonth = {};
           (metaPayload?.data?.rows || []).forEach((row) => {
             const month = Number(row?.month || 0);
             if (month < 1 || month > 12) return;
-            salesMap[monthKey(metaState.year, month)] = Number(row?.venta || 0);
+            rowsByMonth[month] = {
+              venta: Number(row?.venta || 0),
+              meta: Number(row?.meta || 0),
+              cumplimiento: Number(row?.cumplimiento || 0),
+              barPercent: Number(row?.barPercent || 0)
+            };
           });
-          metaState.monthlySales = salesMap;
-          metaState.defaultMonthlyGoal = goals.defaultMonthlyGoal || 10000;
-          metaState.monthlyGoals = goals.monthlyGoals || {};
-          metaState.annualGoal = goals.annualGoal || 0;
+
+          metaState.rowsByMonth = rowsByMonth;
           metaState.initialized = true;
           setMetaStatus("");
           renderMeta();
@@ -3736,55 +3738,16 @@ Errores: 0</pre>
           metaAdminMonth.value = String(metaState.fromMonth);
         }
 
-        const withAdminSaving = async (buttonId, action) => {
-          const button = document.getElementById(buttonId);
-          if (!button) return;
-          const adminEnabled = isMetaAdmin();
-          if (!adminEnabled) {
-            if (metaAdminMessage) {
-              metaAdminMessage.textContent = "No tienes permisos para editar metas (solo admin).";
-              metaAdminMessage.classList.remove("hidden");
-              metaAdminMessage.classList.add("error");
-            }
-            return;
-          }
-          button.disabled = true;
-          try {
-            await action();
-            if (metaAdminMessage) {
-              metaAdminMessage.textContent = "Meta guardada ✅";
-              metaAdminMessage.classList.remove("hidden", "error");
-            }
-            await loadMetaVsVenta({ force: true });
-          } catch (error) {
-            if (metaAdminMessage) {
-              metaAdminMessage.textContent = error?.code === "permission-denied"
-                ? "No tienes permisos para editar metas (solo admin)."
-                : (error?.message || "No se pudo guardar la meta.");
-              metaAdminMessage.classList.remove("hidden");
-              metaAdminMessage.classList.add("error");
-            }
-          } finally {
-            button.disabled = false;
-          }
+        const metaGoalsSourceMessage = "Las metas de este módulo ahora se administran desde la hoja 'Metas' en Google Sheets.";
+        const notifyMetaGoalsSource = () => {
+          if (!metaAdminMessage) return;
+          metaAdminMessage.textContent = metaGoalsSourceMessage;
+          metaAdminMessage.classList.remove("hidden", "error");
         };
 
-        document.getElementById("metaSaveMonthGoal")?.addEventListener("click", () => withAdminSaving("metaSaveMonthGoal", async () => {
-          const month = Number(document.getElementById("metaAdminMonth")?.value || 0);
-          const amount = Number(document.getElementById("metaAdminMonthGoal")?.value || 0);
-          await saveMonthlyGoal(db, { year: metaState.year, month, amount, auth });
-        }));
-
-        document.getElementById("metaSaveRangeGoal")?.addEventListener("click", () => withAdminSaving("metaSaveRangeGoal", async () => {
-          const amount = Number(document.getElementById("metaAdminRangeGoal")?.value || 0);
-          const { start, end } = monthRange();
-          await saveRangeMonthlyGoal(db, { year: metaState.year, startMonth: start, endMonth: end, amount, writeBatch, auth });
-        }));
-
-        document.getElementById("metaSaveAnnualGoal")?.addEventListener("click", () => withAdminSaving("metaSaveAnnualGoal", async () => {
-          const amount = Number(document.getElementById("metaAdminAnnualGoalInput")?.value || 0);
-          await saveAnnualGoal(db, { year: metaState.year, amount, auth });
-        }));
+        document.getElementById("metaSaveMonthGoal")?.addEventListener("click", notifyMetaGoalsSource);
+        document.getElementById("metaSaveRangeGoal")?.addEventListener("click", notifyMetaGoalsSource);
+        document.getElementById("metaSaveAnnualGoal")?.addEventListener("click", notifyMetaGoalsSource);
       };
 
       const safeJson = async (response) => {
