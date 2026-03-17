@@ -1,7 +1,5 @@
-import { registerApartadoPdfGeneration } from '../lib/api/apartados.js';
-
 function getBaseUrl(reqLike = {}) {
-  const configured = String(process.env.APP_URL || '').trim().replace(/\/$/, '');
+  const configured = String(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '').trim().replace(/\/$/, '');
   if (configured) return configured;
   const headers = reqLike.headers || {};
   const host = headers['x-forwarded-host'] || headers.host || '';
@@ -52,11 +50,6 @@ export default async function handler(req, res) {
         bottom: '12mm',
         left: '12mm',
       },
-    });
-
-    await registerApartadoPdfGeneration({
-      folio,
-      generatedAt: new Date().toISOString(),
     });
 
     res.setHeader('Content-Type', 'application/pdf');
