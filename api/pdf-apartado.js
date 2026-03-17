@@ -1,4 +1,4 @@
-const { google } = require('googleapis');
+import { saveRenderedApartadoPdfToDrive } from '../lib/apartados/pdf-sync.js';
 
 function getBaseUrl(reqLike = {}) {
   const configured = String(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '')
@@ -67,7 +67,7 @@ export default async function handler(req, res) {
       }
     });
 
-    const pdf = await page.pdf({
+    const pdfBuffer = await page.pdf({
       format: 'letter',
       printBackground: true,
       margin: {
@@ -77,43 +77,23 @@ export default async function handler(req, res) {
         left: '12mm',
       },
     });
-    logStep('pdf.generated', { bytes: pdf.length });
+    logStep('pdf.generated', { bytes: pdfBuffer.length });
+    console.log('PDF generado para folio:', folio);
+    console.log('Intentando guardar PDF en Drive...');
 
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      },
-      scopes: ['https://www.googleapis.com/auth/drive'],
+    const driveResult = await saveRenderedApartadoPdfToDrive({
+      folio,
+      pdfBuffer,
     });
 
-    const drive = google.drive({
-      version: 'v3',
-      auth,
-    });
-
-    const FOLDER_ID = '1y3l0r-4XnSsicnuSeVaATSh3rC89j-If';
-
-    const fileMetadata = {
-      name: `Apartado-${folio}.pdf`,
-      parents: [FOLDER_ID],
-    };
-
-    const media = {
-      mimeType: 'application/pdf',
-      body: Buffer.from(pdf),
-    };
-
-    await drive.files.create({
-      resource: fileMetadata,
-      media,
-      fields: 'id',
-    });
-    logStep('drive.upload.ok', { fileName: fileMetadata.name });
+    console.log('Resultado Drive:', driveResult);
+    if (!driveResult?.ok) {
+      console.error('DRIVE SAVE ERROR:', driveResult);
+    }
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename=${folio}.pdf`);
-    return res.status(200).send(Buffer.from(pdf));
+    res.setHeader('Content-Disposition', `inline; filename="${folio}.pdf"`);
+    return res.status(200).send(pdfBuffer);
   } catch (error) {
     logStep('error.final', { message: error?.message || 'unknown error' });
     return res.status(500).json({ ok: false, message: error?.message || 'No se pudo generar el PDF oficial.' });
