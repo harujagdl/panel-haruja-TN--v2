@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     const page = await browser.newPage();
     await page.emulateMediaType('screen');
     await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 45000 });
-    await page.waitForSelector('[data-ticket-pdf-ready="true"]', { timeout: 15000 });
+    await page.waitForSelector('[data-pdf-ticket="true"]', { timeout: 15000 });
     await page.evaluate(async () => {
       if (document?.fonts?.ready) {
         await document.fonts.ready;
