@@ -5,6 +5,7 @@ import {
   createPrenda,
   deletePrenda,
   getCatalogos,
+  getMetaVsVentaData,
   getVentasComisiones,
   getVentasConfig,
   getVentasDetalle,
@@ -170,6 +171,11 @@ export default async function handler(req, res) {
     if (action === 'ventas-comisiones') {
       if (req.method === 'GET') return sendOk(res, await getVentasComisiones(req.query || {}, req));
       if (req.method === 'POST') return sendOk(res, await updateVentasComisiones(req.body || {}, req));
+    }
+
+    if (action === 'meta-vs-venta') {
+      const payload = req.method === 'POST' ? (req.body || {}) : (req.query || {});
+      return sendOk(res, await getMetaVsVentaData(payload));
     }
 
     if (action === 'ventas-config') return sendOk(res, await getVentasConfig());

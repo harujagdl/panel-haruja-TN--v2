@@ -2809,8 +2809,7 @@ Errores: 0</pre>
       } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
       import { ajustarDesdePrecioConIVA } from "/shared/priceRules.js";
       import {
-        emptyMonths,
-        getMonthlySalesMap
+        emptyMonths
       } from "/shared/salesTotals.js";
       import {
         adminSignIn,
@@ -3618,14 +3617,30 @@ Errores: 0</pre>
           const startIndex = monthIndex(metaState.year, startMonth);
           const endIndex = monthIndex(metaState.year, endMonth);
 
-          const [salesMap, goals] = await Promise.all([
-            getMonthlySalesMap(db, metaState.year, {
-              startMonth: (startIndex % 12) + 1,
-              endMonth: (endIndex % 12) + 1
-            }),
-            getGoalsSalesState(db, { year: metaState.year, auth })
-          ]);
-          metaState.monthlySales = salesMap || emptyMonths(metaState.year);
+          const apiUrl = new URL("/api/core", window.location.origin);
+          apiUrl.searchParams.set("action", "meta-vs-venta");
+          const metaResponse = await fetch(apiUrl.toString(), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              year: metaState.year,
+              fromMonth: (startIndex % 12) + 1,
+              toMonth: (endIndex % 12) + 1
+            })
+          });
+          const metaPayload = await safeJson(metaResponse);
+          if (!metaResponse.ok || !metaPayload?.ok) {
+            throw new Error(metaPayload?.message || "No se pudo cargar meta vs venta.");
+          }
+
+          const goals = await getGoalsSalesState(db, { year: metaState.year, auth });
+          const salesMap = emptyMonths(metaState.year);
+          (metaPayload?.data?.rows || []).forEach((row) => {
+            const month = Number(row?.month || 0);
+            if (month < 1 || month > 12) return;
+            salesMap[monthKey(metaState.year, month)] = Number(row?.venta || 0);
+          });
+          metaState.monthlySales = salesMap;
           metaState.defaultMonthlyGoal = goals.defaultMonthlyGoal || 10000;
           metaState.monthlyGoals = goals.monthlyGoals || {};
           metaState.annualGoal = goals.annualGoal || 0;
