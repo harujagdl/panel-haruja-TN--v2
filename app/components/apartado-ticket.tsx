@@ -21,29 +21,32 @@ type ApartadoData = {
 
 function money(value?: number) {
   const n = Number(value || 0);
-  return `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
+  return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
 }
 
 export function ApartadoTicket({
   apartado,
-  mode = "default",
+  mode = 'screen',
 }: {
   apartado: ApartadoData;
-  mode?: "default" | "pdf";
+  mode?: 'screen' | 'pdf';
 }) {
   const items = apartado.productos || [];
+  const isPdf = mode === 'pdf';
 
   return (
-    <section data-pdf-ticket={mode === "pdf" ? "true" : undefined}>
-      <div className="top-row">
+    <section className={isPdf ? 'ticket-pdf' : undefined} data-pdf-ticket={isPdf ? 'true' : undefined}>
+      {!isPdf ? <div className="toolbar">Ticket de apartado</div> : null}
+
+      <div className="top-row avoid-break">
         <div>Ticket de apartado</div>
-        <div>#{apartado.folio || ""}</div>
+        <div>#{apartado.folio || ''}</div>
       </div>
 
-      <div>
-        <div>Fecha: {apartado.fecha || ""}</div>
-        <div>Cliente: {apartado.cliente || ""}</div>
-        <div>Contacto: {apartado.telefono || apartado.contacto || ""}</div>
+      <div className="avoid-break">
+        <div>Fecha: {apartado.fecha || ''}</div>
+        <div>Cliente: {apartado.cliente || ''}</div>
+        <div>Contacto: {apartado.telefono || apartado.contacto || ''}</div>
       </div>
 
       <table>
@@ -59,9 +62,9 @@ export function ApartadoTicket({
         <tbody>
           {items.length ? (
             items.map((item, idx) => (
-              <tr key={`${item.codigo || "row"}-${idx}`}>
-                <td>{item.codigo || ""}</td>
-                <td>{item.descripcion || ""}</td>
+              <tr key={`${item.codigo || 'row'}-${idx}`}>
+                <td>{item.codigo || ''}</td>
+                <td>{item.descripcion || ''}</td>
                 <td>{item.cantidad || 1}</td>
                 <td>{money(item.precio)}</td>
                 <td>{money(item.subtotal)}</td>
@@ -75,12 +78,14 @@ export function ApartadoTicket({
         </tbody>
       </table>
 
-      <div>
+      <div className="avoid-break">
         <div>Subtotal: {money(apartado.subtotal)}</div>
         <div>Anticipo: {money(apartado.anticipo)}</div>
         <div>Descuento: {money(apartado.descuento)}</div>
         <div>Total: {money(apartado.total)}</div>
       </div>
+
+      {!isPdf ? <div className="actions">Acciones</div> : null}
     </section>
   );
 }
