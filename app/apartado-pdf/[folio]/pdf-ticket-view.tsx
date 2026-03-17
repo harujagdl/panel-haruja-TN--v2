@@ -5,6 +5,13 @@ import { ApartadoTicket } from "../../components/apartado-ticket";
 
 type ApiPayload = {
   apartado?: Record<string, unknown>;
+  data?: {
+    apartado?: Record<string, unknown>;
+    message?: string;
+    ok?: boolean;
+  };
+  message?: string;
+  ok?: boolean;
 } & Record<string, unknown>;
 
 export function PdfTicketView({ folio }: { folio: string }) {
@@ -16,9 +23,24 @@ export function PdfTicketView({ folio }: { folio: string }) {
 
     async function load() {
       try {
-        const res = await fetch(`/api/core?action=apartados&op=detail&folio=${encodeURIComponent(folio)}`);
-        const payload = (await res.json()) as ApiPayload;
+        const res = await fetch(`/api/core?action=apartados&op=detail&folio=${encodeURIComponent(folio)}`, {
+          cache: "no-store",
+        });
+        const text = await res.text();
+
+        let payload: ApiPayload;
+        try {
+          payload = JSON.parse(text) as ApiPayload;
+        } catch {
+          throw new Error(`Respuesta no válida del backend: ${text}`);
+        }
+
         const detail = (payload?.data as ApiPayload)?.apartado || payload?.apartado || payload;
+        const message = payload?.message || payload?.data?.message || "No se pudo cargar el apartado";
+        if (!res.ok || payload?.ok === false || payload?.data?.ok === false) {
+          throw new Error(String(message));
+        }
+
         if (!cancelled) setData(detail as Record<string, unknown>);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "No se pudo cargar el ticket");
