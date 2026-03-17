@@ -630,9 +630,9 @@ Si tienes dudas o quieres liquidarlo, escríbenos por aquí 💛`);
             </div>
             <div class="public-actions">
               <a class="public-btn" href="/ticket/${encodeURIComponent(folio)}" target="_blank" rel="noopener">Ver ticket</a>
-              <a class="public-btn primary" href="/api/pdf-apartado?folio=${encodeURIComponent(folio)}" target="_blank" rel="noopener">Generar PDF oficial</a>
+              <a class="public-btn primary" href="/apartado-pdf/${encodeURIComponent(folio)}?autoprint=1" target="_blank" rel="noopener">Generar PDF oficial</a>
               <a class="public-btn" href="${waHref}" target="_blank" rel="noopener">WhatsApp</a>
-              ${pdfPersistido ? `<a class="public-btn" href="${pdfPersistido}" target="_blank" rel="noopener">Ver PDF</a>` : `<a class="public-btn" href="/api/pdf-apartado?folio=${encodeURIComponent(folio)}" target="_blank" rel="noopener">Actualizar PDF</a>`}
+              ${pdfPersistido ? `<a class="public-btn" href="${pdfPersistido}" target="_blank" rel="noopener">Ver PDF</a>` : `<a class="public-btn" href="/apartado-pdf/${encodeURIComponent(folio)}?autoprint=1" target="_blank" rel="noopener">Actualizar PDF</a>`}
               ${pdfPersistido ? `<a class="public-btn" href="${pdfPersistido}" target="_blank" rel="noopener" download>Descargar PDF</a>` : ''}
             </div>
           </div>
