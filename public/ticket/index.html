@@ -306,15 +306,8 @@ return''
 }
 
 
-async function generateOfficialPdfViaApi(folio){
-const res=await fetch(`/api/pdf-apartado?folio=${encodeURIComponent(folio)}`)
-if(!res.ok){
-const errData=await res.json().catch(()=>({}))
-throw new Error(errData?.message||errData?.error||`HTTP ${res.status}`)
-}
-const blob=await res.blob()
-if(blob.type!=='application/pdf') throw new Error('La API no devolvió un PDF válido.')
-return blob
+function getOfficialPdfUrl(folio){
+return `/api/pdf-apartado?folio=${encodeURIComponent(folio)}`
 }
 
 function money(v){
@@ -370,29 +363,14 @@ statusEl.textContent='Genera el PDF oficial con el botón para descargarlo.'
 }
 
 refreshBtn.style.display='inline-block'
-refreshBtn.onclick=async()=>{
-refreshBtn.disabled=true
-statusEl.textContent='Generando PDF oficial…'
-try{
-const pdfBlob=await generateOfficialPdfViaApi(folio)
-const pdfUrl=URL.createObjectURL(pdfBlob)
+refreshBtn.onclick=()=>{
+const pdfUrl=getOfficialPdfUrl(folio)
 viewBtn.style.display='inline-block'
 downloadBtn.style.display='inline-block'
 viewBtn.onclick=()=>window.open(pdfUrl,'_blank','noopener')
-downloadBtn.onclick=()=>{
-const a=document.createElement('a')
-a.href=pdfUrl
-a.download=`apartado-${folio}.pdf`
-document.body.appendChild(a)
-a.click()
-a.remove()
-}
-statusEl.textContent='PDF oficial generado correctamente.'
-}catch(err){
-statusEl.textContent=`No se pudo actualizar el PDF: ${err?.message||'error'}`
-}finally{
-refreshBtn.disabled=false
-}
+downloadBtn.onclick=()=>window.open(pdfUrl,'_blank','noopener')
+window.open(pdfUrl,'_blank','noopener')
+statusEl.textContent='Abriendo PDF oficial…'
 }
 applyPdf('','')
 }
