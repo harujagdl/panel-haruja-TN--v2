@@ -22,6 +22,22 @@
       "destination": "/apartado-pdf/index.html?folio=:folio"
     },
     {
+      "source": "/lealtad",
+      "destination": "/app/lealtad/index.html"
+    },
+    {
+      "source": "/lealtad/manifest.json",
+      "destination": "/app/lealtad/manifest.json"
+    },
+    {
+      "source": "/lealtad/sw.js",
+      "destination": "/app/lealtad/sw.js"
+    },
+    {
+      "source": "/lealtad/:path*",
+      "destination": "/app/lealtad/:path*"
+    },
+    {
       "source": "/",
       "destination": "/index.html"
     }
