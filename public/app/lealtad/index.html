@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Plan de Lealtad Haruja</title>
+  <link rel="manifest" href="/lealtad/manifest.json" />
+  <meta name="theme-color" content="#faf7f2" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Lealtad Haruja" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
   <link rel="stylesheet" href="/app/lealtad/lealtad.css" />
 </head>
 <body>
@@ -927,5 +934,20 @@
       btn.addEventListener('click', () => setView(btn.dataset.view));
     });
   </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', async () => {
+        try {
+          await navigator.serviceWorker.register('/lealtad/sw.js', {
+            scope: '/lealtad/'
+          });
+          console.log('Service Worker registrado correctamente');
+        } catch (error) {
+          console.error('Error al registrar el Service Worker:', error);
+        }
+      });
+    }
+  </script>
+
 </body>
 </html>
