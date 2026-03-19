@@ -159,8 +159,21 @@
           throw new Error(`Respuesta no JSON del servidor: ${raw.slice(0, 180)}`);
         }
       }
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${payload?.message || raw.slice(0, 180) || fallbackError}`);
+      if (!res.ok) {
+        const err = new Error(`HTTP ${res.status}: ${payload?.message || raw.slice(0, 180) || fallbackError}`);
+        err.payload = payload;
+        err.httpStatus = res.status;
+        throw err;
+      }
       return payload;
+    };
+
+    const buildSyncErrorMessage = (error) => {
+      const payload = error?.payload || {};
+      if (payload?.code === "TIENDANUBE_NOT_FOUND") {
+        return "Error consultando Tiendanube: recurso no encontrado. Revisar endpoint/store_id de sincronización.";
+      }
+      return error?.message || "No fue posible actualizar con Tiendanube en este momento.";
     };
 
     const formatMoney = (value) => moneyMx.format(Number(value) || 0);
@@ -266,8 +279,18 @@
     };
 
     const autoSyncVentas = async () => {
-      const payload = await safeJson(await fetch('/api/ventas/sync-auto', { method: 'POST' }), 'No se pudo ejecutar sync automática');
+      let payload;
+      try {
+        payload = await safeJson(await fetch('/api/ventas/sync-auto', { method: 'POST' }), 'No se pudo ejecutar sync automática');
+      } catch (error) {
+        setStatus(`${buildSyncErrorMessage(error)} Mostrando la última información disponible.`, 'error');
+        return;
+      }
       if (payload?.skipped) return;
+      if (payload?.ok === false) {
+        setStatus(`${buildSyncErrorMessage({ payload })} Mostrando la última información disponible.`, 'error');
+        return;
+      }
       if (payload?.changed) {
         await loadVentasFull();
         return;
@@ -286,6 +309,8 @@
       try {
         await safeJson(await fetch('/api/ventas/sync', { method: 'POST' }), 'No se pudo sincronizar ventas');
         await loadVentasFull();
+      } catch (error) {
+        setStatus(`${buildSyncErrorMessage(error)} Mostrando la última información disponible.`, 'error');
       } finally {
         btnSync.disabled = false;
         btnSync.textContent = 'Forzar sincronización';

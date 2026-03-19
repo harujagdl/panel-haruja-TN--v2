@@ -28,7 +28,12 @@ export default async function handler(req, res) {
       last_created_at_max: now,
       last_updated_at_max: now,
     });
-    invalidateVentasFullCache();
+    const processed = Number(data?.inserted || 0) + Number(data?.updated || 0);
+    if (processed > 0) {
+      const touched = Array.isArray(data.months_rebuilt) ? data.months_rebuilt : [];
+      if (touched.length) touched.forEach((month) => invalidateVentasFullCache(month));
+      else invalidateVentasFullCache();
+    }
     return res.status(200).json({ ok: true, ...data });
   } catch (error) {
     await writeVentasSyncState({

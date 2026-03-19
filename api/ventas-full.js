@@ -6,8 +6,9 @@ export default async function handler(req, res) {
   }
 
   const mes = String(req.query?.mes || req.query?.month || '').trim();
+  const debug = String(req.query?.debug || '').trim() === '1';
   try {
-    const payload = await getVentasFullData(mes);
+    const payload = await getVentasFullData(mes, { debug });
     return res.status(200).json(payload);
   } catch (error) {
     const stale = getVentasFullStale(mes);
