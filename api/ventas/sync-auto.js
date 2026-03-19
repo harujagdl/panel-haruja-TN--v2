@@ -1,4 +1,5 @@
 import { syncVentasFromTiendanubeIncremental } from '../../lib/api/core.js';
+import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
 import {
   acquireVentasSyncLock,
   readVentasSyncState,
@@ -19,9 +20,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, message: 'Method not allowed.' });
   }
 
+  console.log('[ventas-sync-auto] start');
   const lock = await acquireVentasSyncLock();
   if (!lock.acquired) {
-    return res.status(200).json({ ok: true, skipped: true, message: 'sync_en_curso' });
+    return res.status(200).json({ ok: true, skipped: true, reason: 'sync_running' });
   }
 
   try {
@@ -33,18 +35,40 @@ export default async function handler(req, res) {
       updatedAtMin: lastUpdatedAtMax || undefined,
       createdAtMin: lastCreatedAtMax || undefined,
     });
+    const processed = Number(data.inserted || 0) + Number(data.updated || 0);
+    const changed = processed > 0;
 
     const now = new Date().toISOString();
     await writeVentasSyncState({
       mode: 'automatico',
       last_sync_at: now,
       last_sync_result: 'ok',
-      last_sync_message: data.synced > 0 ? 'sync-auto ejecutado' : 'sync-auto sin cambios',
-      last_created_at_max: now,
-      last_updated_at_max: now,
+      last_sync_message: changed ? `${processed} órdenes actualizadas` : 'sin cambios',
+      last_created_at_max: data.last_created_at_max || lastCreatedAtMax || previous.last_created_at_max || now,
+      last_updated_at_max: data.last_updated_at_max || lastUpdatedAtMax || previous.last_updated_at_max || now,
     });
 
-    return res.status(200).json({ ok: true, ...data });
+    if (changed) {
+      const touched = Array.isArray(data.months_rebuilt) ? data.months_rebuilt : [];
+      if (touched.length) touched.forEach((month) => invalidateVentasFullCache(month));
+      else invalidateVentasFullCache();
+      console.log('[ventas-sync-auto] cache_invalidated');
+      console.log(`[ventas-sync-auto] processed_${processed}`);
+    } else {
+      console.log('[ventas-sync-auto] no_changes');
+    }
+
+    const status = await readVentasSyncState();
+    return res.status(200).json({
+      ok: true,
+      changed,
+      processed,
+      status: {
+        last_sync_at: status.last_sync_at || now,
+        last_sync_result: status.last_sync_result || 'ok',
+        last_sync_message: status.last_sync_message || '',
+      },
+    });
   } catch (error) {
     await writeVentasSyncState({
       last_sync_at: new Date().toISOString(),
@@ -56,4 +80,3 @@ export default async function handler(req, res) {
     await releaseVentasSyncLock();
   }
 }
-
