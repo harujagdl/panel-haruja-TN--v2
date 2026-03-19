@@ -1,6 +1,6 @@
 {
   "engines": {
-    "node": "20.11.1"
+    "node": "20.x"
   },
   "dependencies": {
     "@sparticuz/chromium": "131.0.1",
