@@ -169,6 +169,12 @@
 
     const formatMoney = (value) => moneyMx.format(Number(value) || 0);
     const formatDate = (value) => value ? new Date(value).toLocaleDateString("es-MX") : "—";
+    const formatDateTime = (value, fallback) => {
+      if (!value) return fallback;
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return fallback;
+      return parsed.toLocaleString("es-MX");
+    };
     const formatMonth = (value) => String(value || "").slice(0, 7);
     const ticketText = (venta) => venta.ticket_label || (venta.ticket_number ? `#${venta.ticket_number}` : null) || venta.order_id || "-";
     const ticketCellHtml = (venta) => `${ticketText(venta)}<span class="ticket-tech">order_id: ${venta.order_id || "-"}</span>`;
@@ -243,50 +249,47 @@
       return { ...data, store_id: STORE_ID };
     };
 
-    const loadVentasResumen = async (month) => {
-      const url = new URL("/api/core", location.origin);
-      url.searchParams.set("action", "ventas-resumen");
-      url.searchParams.set("store_id", STORE_ID);
-      if (month) url.searchParams.set("month", month);
-      const res = await fetch(url.toString());
-      const payload = await safeJson(res, "No se pudo cargar el resumen de ventas");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar el resumen de ventas");
-      return payload.data || {};
-    };
-
-    const loadVentasDetalle = async (month, search) => {
-      const url = new URL("/api/core", location.origin);
-      url.searchParams.set("action", "ventas-detalle");
-      url.searchParams.set("store_id", STORE_ID);
+    const loadVentas = async () => {
+      const month = formatMonth(monthInput.value);
+      const search = String(searchInput.value || "").trim();
+      const url = new URL("/api/ventas", location.origin);
       if (month) url.searchParams.set("month", month);
       if (search) url.searchParams.set("search", search);
       const res = await fetch(url.toString());
-      const payload = await safeJson(res, "No se pudo cargar el detalle de ventas");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar el detalle de ventas");
-      return Array.isArray(payload.data) ? payload.data : [];
+      const payload = await safeJson(res, "No se pudo cargar ventas");
+      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar ventas");
+      const resumen = payload?.resumen || {};
+      const detalle = Array.isArray(payload?.detalle) ? payload.detalle : [];
+      ventasActuales = detalle;
+      renderResumen(resumen);
+      renderTabla(detalle);
+      setStatus(`Listo. ${detalle.length} ventas.`);
     };
 
 
-    const loadWebhookStatus = async () => {
-      const url = new URL("/api/core", location.origin);
-      url.searchParams.set("action", "ventas-webhook-status");
+    const loadVentasStatus = async () => {
+      const url = new URL("/api/ventas/status", location.origin);
       const res = await fetch(url.toString());
-      const payload = await safeJson(res, "No se pudo cargar el estado del webhook");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar el estado del webhook");
-      return payload.data || null;
+      const payload = await safeJson(res, "No se pudo cargar el estado de ventas");
+      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar el estado de ventas");
+      return payload;
     };
 
     const renderWebhookStatus = (data) => {
-      webhookModeEl.textContent = "Modo: Automático";
+      webhookModeEl.textContent = `Modo: ${data?.mode || "automatico"}`;
       if (!data) {
-        lastWebhookEventEl.textContent = "Último evento recibido: —";
-        lastWebhookOrderEl.textContent = "Última orden procesada: —";
+        lastWebhookEventEl.textContent = "Último evento recibido: Sin eventos aún";
+        lastWebhookOrderEl.textContent = "Última orden procesada: Sin órdenes procesadas aún";
         return;
       }
-      const event = data.event || "—";
-      const processedAt = data.processedAt ? ` (${new Date(data.processedAt).toLocaleString("es-MX")})` : "";
-      lastWebhookEventEl.textContent = `Último evento recibido: ${event}${processedAt}`;
-      lastWebhookOrderEl.textContent = `Última orden procesada: ${data.orderId || "—"}`;
+      const eventAt = formatDateTime(data.last_event_received_at, "Sin eventos aún");
+      const eventType = data.last_event_type ? ` (${data.last_event_type})` : "";
+      lastWebhookEventEl.textContent = `Último evento recibido: ${eventAt}${eventType}`;
+      const orderAt = formatDateTime(data.last_order_processed_at, "Sin órdenes procesadas aún");
+      const orderName = data.last_order_name || data.last_order_id || "";
+      lastWebhookOrderEl.textContent = orderName
+        ? `Última orden procesada: ${orderName} · ${orderAt}`
+        : `Última orden procesada: ${orderAt}`;
     };
 
     const renderResumen = (resumen) => {
@@ -390,33 +393,44 @@
       window.history.replaceState({}, '', nextUrl);
     };
 
-    const loadData = async () => {
+    const loadAll = async () => {
       setStatus("Cargando ventas...");
-      const month = formatMonth(monthInput.value);
-      const search = String(searchInput.value || "").trim();
-      const [resumen, detalle, webhookStatus] = await Promise.all([
-        loadVentasResumen(month),
-        loadVentasDetalle(month, search),
-        loadWebhookStatus().catch(() => null)
+      const [_, webhookStatus] = await Promise.all([
+        loadVentas(),
+        loadVentasStatus().catch(() => null)
       ]);
-
-      ventasActuales = detalle;
-      renderResumen(resumen);
-      renderTabla(detalle);
       renderWebhookStatus(webhookStatus);
-      setStatus(`Listo. ${detalle.length} ventas.`);
+    };
+
+    const autoSyncVentas = async () => {
+      const res = await fetch(`/api/ventas/sync-auto`, {
+        method: "POST"
+      });
+      const payload = await safeJson(res, "No se pudo ejecutar sync automático");
+      if (!payload?.ok) throw new Error(payload?.message || "No se pudo sincronizar ventas");
+      await loadVentas();
+      const status = await loadVentasStatus().catch(() => null);
+      renderWebhookStatus(status);
     };
 
     const syncVentas = async () => {
+      const button = document.getElementById("btnSync");
+      const previous = button.textContent;
+      button.disabled = true;
+      button.textContent = "Sincronizando...";
       setStatus("Sincronizando con Tiendanube...");
-      const res = await fetch(`/api/tiendanube?action=sync&store_id=${encodeURIComponent(STORE_ID)}`, {
-        method: "POST"
-      });
-      const payload = await safeJson(res, "No se pudo sincronizar ventas");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo sincronizar ventas");
-      const data = payload.data || {};
-      setStatus(`Sync OK: ${data.synced || 0} pedidos (${data.inserted || 0} nuevos / ${data.updated || 0} actualizados).`);
-      await loadData();
+      try {
+        const res = await fetch(`/api/ventas/sync`, { method: "POST" });
+        const payload = await safeJson(res, "No se pudo sincronizar ventas");
+        if (!payload?.ok) throw new Error(payload?.message || "No se pudo sincronizar ventas");
+        setStatus(`Sync OK: ${payload.synced || 0} pedidos (${payload.inserted || 0} nuevos / ${payload.updated || 0} actualizados).`);
+        await loadVentas();
+        const status = await loadVentasStatus().catch(() => null);
+        renderWebhookStatus(status);
+      } finally {
+        button.disabled = false;
+        button.textContent = previous;
+      }
     };
 
     const asignarVendedora = async (orderId, seller) => {
@@ -429,12 +443,12 @@
       });
       const payload = await safeJson(res, "No se pudo asignar vendedora");
       if (!payload?.ok) throw new Error(payload?.message || "No se pudo asignar vendedora");
-      await loadData();
+      await loadAll();
     };
 
-    document.getElementById("btnLoad").addEventListener("click", () => loadData().catch((e) => setStatus(e.message || String(e), "error")));
+    document.getElementById("btnLoad").addEventListener("click", () => loadAll().catch((e) => setStatus(e.message || String(e), "error")));
     searchInput.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") loadData().catch((e) => setStatus(e.message || String(e), "error"));
+      if (ev.key === "Enter") loadAll().catch((e) => setStatus(e.message || String(e), "error"));
     });
 
     document.getElementById("btnSync").addEventListener("click", () => syncVentas().catch((e) => setStatus(e.message || String(e), "error")));
@@ -461,10 +475,13 @@
       } catch (e) {
         setStatus(`No se pudo cargar configuración: ${e.message || String(e)}`, "error");
       }
-      loadData().catch((e) => setStatus(e.message || String(e), "error"));
+      loadAll().catch((e) => setStatus(e.message || String(e), "error"));
       setInterval(() => {
-        loadData().catch(() => {});
+        autoSyncVentas().catch(() => {});
       }, 60000);
+      setInterval(() => {
+        loadVentasStatus().then(renderWebhookStatus).catch(() => {});
+      }, 15000);
     })();
   </script>
 </body>
