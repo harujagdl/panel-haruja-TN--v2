@@ -1,4 +1,4 @@
-import { syncVentasFromTiendanubeIncremental } from '../../lib/api/core.js';
+import { FIXED_STORE_ID, syncVentasFromTiendanubeIncremental } from '../../lib/api/core.js';
 import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
 import {
   acquireVentasSyncLock,
@@ -30,6 +30,16 @@ export default async function handler(req, res) {
     const previous = await readVentasSyncState();
     const lastUpdatedAtMax = isoOrEmpty(previous.last_updated_at_max);
     const lastCreatedAtMax = isoOrEmpty(previous.last_created_at_max);
+    const storeId = FIXED_STORE_ID;
+    const baseUrl = 'https://api.tiendanube.com/v1';
+    const endpoint = '/orders';
+    const requestUrl = `${baseUrl}/${encodeURIComponent(storeId)}${endpoint}`;
+    console.log('[ventas-sync-auto] store_id=%s', storeId);
+    console.log('[ventas-sync-auto] base_url=%s', baseUrl);
+    console.log('[ventas-sync-auto] endpoint=%s', endpoint);
+    console.log('[ventas-sync-auto] request_url=%s', requestUrl);
+    console.log('[ventas-sync-auto] since_updated_at=%s', lastUpdatedAtMax || 'EMPTY');
+    console.log('[ventas-sync-auto] since_created_at=%s', lastCreatedAtMax || 'EMPTY');
 
     const data = await syncVentasFromTiendanubeIncremental({
       updatedAtMin: lastUpdatedAtMax || undefined,
@@ -70,12 +80,50 @@ export default async function handler(req, res) {
       },
     });
   } catch (error) {
+    const code = String(error?.code || '').trim();
+    const detailStatus = Number(error?.details?.status || error?.http_status || 500) || 500;
+    const detailEndpoint = String(error?.details?.endpoint || '/orders');
+    const detailStoreId = String(error?.details?.store_id || FIXED_STORE_ID).trim();
+    if (code) {
+      console.log('[ventas-sync-auto] tn_status=%s', detailStatus);
+      console.log('[ventas-sync-auto] tn_error=%s', String(error?.message || error));
+      console.log('[ventas-sync-auto] tn_store_id=%s', detailStoreId);
+      console.log('[ventas-sync-auto] tn_endpoint=%s', detailEndpoint);
+    }
     await writeVentasSyncState({
       last_sync_at: new Date().toISOString(),
       last_sync_result: 'error',
       last_sync_message: String(error?.message || error),
     });
-    return res.status(500).json({ ok: false, message: String(error?.message || error) });
+    const status = await readVentasSyncState();
+    if (code === 'TIENDANUBE_NOT_FOUND') {
+      return res.status(404).json({
+        ok: false,
+        code: 'TIENDANUBE_NOT_FOUND',
+        message: 'Recurso no encontrado en Tiendanube',
+        details: {
+          store_id: detailStoreId,
+          endpoint: detailEndpoint,
+        },
+        status: {
+          last_sync_at: status.last_sync_at || new Date().toISOString(),
+          last_sync_result: status.last_sync_result || 'error',
+          last_sync_message: status.last_sync_message || String(error?.message || error),
+        },
+        preserve_cache: true,
+      });
+    }
+    return res.status(500).json({
+      ok: false,
+      code: code || 'SYNC_AUTO_ERROR',
+      message: String(error?.message || error),
+      preserve_cache: true,
+      status: {
+        last_sync_at: status.last_sync_at || new Date().toISOString(),
+        last_sync_result: status.last_sync_result || 'error',
+        last_sync_message: status.last_sync_message || String(error?.message || error),
+      },
+    });
   } finally {
     await releaseVentasSyncLock();
   }
