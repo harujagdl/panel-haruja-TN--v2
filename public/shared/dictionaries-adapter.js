@@ -10,13 +10,13 @@ const normalizeEntries = (entries = []) => {
 };
 
 export async function loadDictionariesFromSheets() {
-  const response = await fetch('/api/core?action=catalogos', {
+  const response = await fetch('/api/core?action=diccionario', {
     method: 'GET',
     headers: { Accept: 'application/json' }
   });
 
   const payload = await response.json().catch(() => ({}));
-  const data = payload?.data || {};
+  const data = payload?.data || payload || {};
 
   if (!response.ok || payload?.ok === false) {
     throw new Error(payload?.message || 'No se pudieron cargar los diccionarios desde Sheets.');

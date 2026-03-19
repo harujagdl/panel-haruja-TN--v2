@@ -9212,24 +9212,6 @@ document.addEventListener("keydown", (event) => {
         populateMonthFilter();
         clearFiltersUi();
         try {
-          await ensureFirebaseSession();
-          console.log("[auth] currentUser:", auth.currentUser ? auth.currentUser.uid : null);
-          if (isEmbeddedApp) {
-            setAdminLoginStatus("Conectando...", "warning");
-          }
-          debugLog("init firebase/auth");
-          const redirectUser = await authRedirectResultPromise;
-          if (redirectUser) {
-            const email = safeString(redirectUser?.email).trim().toLowerCase();
-            if (isAllowlistedAdmin(email)) {
-              setAdminLoginStatus(`Admin autenticado: ${email}`, "success");
-              setAdminViewEnabled(true);
-            } else {
-              setAdminLoginStatus("Sesión iniciada, pero sin permisos de admin.", "warning");
-              await signOut(auth);
-            }
-          }
-
           setRegistroStatus("Cargando diccionario...");
           registroSubmit.disabled = true;
           setSelectLoading(registroProducto, "Cargando...");
@@ -9299,6 +9281,28 @@ document.addEventListener("keydown", (event) => {
           }
 
           registroSubmit.disabled = !dictionaryReady;
+
+          try {
+            console.log("[auth] currentUser:", auth.currentUser ? auth.currentUser.uid : null);
+            if (isEmbeddedApp) {
+              setAdminLoginStatus("Conectando...", "warning");
+            }
+            debugLog("init firebase/auth");
+            const redirectUser = await authRedirectResultPromise;
+            if (redirectUser) {
+              const email = safeString(redirectUser?.email).trim().toLowerCase();
+              if (isAllowlistedAdmin(email)) {
+                setAdminLoginStatus(`Admin autenticado: ${email}`, "success");
+                setAdminViewEnabled(true);
+              } else {
+                setAdminLoginStatus("Sesión iniciada, pero sin permisos de admin.", "warning");
+                await signOut(auth);
+              }
+            }
+          } catch (authError) {
+            console.warn("[auth] inicialización admin deshabilitada:", authError);
+            setAdminLoginStatus("Admin no disponible en este entorno.", "warning");
+          }
         } catch (error) {
           setRegistroStatus("No pudimos cargar el diccionario.", "error");
           registroSubmit.disabled = true;
