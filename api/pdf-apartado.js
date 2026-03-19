@@ -30,9 +30,24 @@ function toErrorPayload(error, stage) {
   };
 }
 
+async function launchBrowser() {
+  const executablePath = process.env.CHROMIUM_EXECUTABLE_PATH || (await chromium.executablePath());
+  if (!executablePath) {
+    throw new Error('No se pudo resolver executablePath de Chromium para Vercel.');
+  }
+
+  return puppeteer.launch({
+    args: chromium.args,
+    executablePath,
+    headless: chromium.headless,
+    defaultViewport: chromium.defaultViewport,
+    ignoreHTTPSErrors: true,
+  });
+}
+
 export default async function handler(req, res) {
   const folio = String(req.query?.folio || req.body?.folio || '').trim();
-  logStep('start', { folio });
+  logStep('pdf:start', { folio });
 
   if (!folio) {
     logStep('invalid_request', { reason: 'folio is required' });
@@ -46,49 +61,50 @@ export default async function handler(req, res) {
   }
 
   const targetUrl = `${baseUrl}/apartado-pdf/${encodeURIComponent(folio)}`;
+  logStep('pdf:folio', { folio, targetUrl });
+
   let browser;
   let stage = 'browser_launch';
 
   try {
-    browser = await puppeteer.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(),
-      headless: chromium.headless,
-      defaultViewport: chromium.defaultViewport,
-    });
-    logStep('browser_launched', { folio });
+    browser = await launchBrowser();
+    logStep('pdf:browser_ok', { folio });
 
-    stage = 'page_render';
+    stage = 'html_render';
     const page = await browser.newPage();
-    await page.emulateMediaType('screen');
+    await page.emulateMediaType('print');
     await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 45000 });
     await page.waitForSelector('[data-pdf-ticket="true"]', { timeout: 15000 });
     await page.evaluate(async () => {
       if (document?.fonts?.ready) await document.fonts.ready;
     });
-    logStep('html_loaded', { targetUrl });
+    logStep('pdf:html_ok', { folio });
 
     stage = 'pdf_generate';
     const pdfBuffer = await page.pdf({
       format: 'letter',
       printBackground: true,
+      preferCSSPageSize: true,
       margin: {
-        top: '12mm',
-        right: '12mm',
-        bottom: '12mm',
-        left: '12mm',
+        top: '10mm',
+        right: '10mm',
+        bottom: '10mm',
+        left: '10mm',
       },
     });
-    logStep('pdf_generated', { bytes: pdfBuffer.length });
+    logStep('pdf:buffer_ok', { bytes: pdfBuffer.length });
 
     stage = 'drive_upload';
+    logStep('drive_upload_start', { folio });
     const driveResult = await saveRenderedApartadoPdfToDrive({ folio, pdfBuffer });
     if (driveResult?.ok) {
-      logStep('drive_uploaded', {
+      logStep('drive_upload_success', {
         fileId: driveResult.fileId,
         fileName: driveResult.fileName,
         folderId: driveResult.folderId,
       });
+      logStep('drive_file_id', { fileId: driveResult.fileId });
+      logStep('pdf:drive_ok', { fileId: driveResult.fileId });
     } else {
       logStep('drive_upload_failed', {
         details: driveResult?.details || driveResult?.error || 'unknown error',
@@ -97,8 +113,8 @@ export default async function handler(req, res) {
 
     stage = 'response_send';
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${folio}.pdf"`);
-    logStep('response_sent', { folio });
+    res.setHeader('Content-Disposition', `inline; filename="Ticket-${folio}.pdf"`);
+    logStep('pdf:response_ok', { folio });
     return res.status(200).send(pdfBuffer);
   } catch (error) {
     const payload = toErrorPayload(error, stage);
