@@ -14,8 +14,8 @@ function getBaseUrl(reqLike = {}) {
   return host ? `${proto}://${host}` : '';
 }
 
-function logStep(step, context = {}) {
-  console.log(`[pdf-apartado] ${step}`, context);
+function shouldSkipDriveUpload() {
+  return String(process.env.APARTADOS_PDF_DISABLE_DRIVE_UPLOAD || '').trim() === '1';
 }
 
 function toErrorPayload(error, stage) {
@@ -30,18 +30,24 @@ function toErrorPayload(error, stage) {
   };
 }
 
+async function getExecutablePath() {
+  const configured = String(process.env.CHROME_EXECUTABLE_PATH || '').trim();
+  if (configured) return configured;
+  return chromium.executablePath();
+}
+
 export default async function handler(req, res) {
+  console.log('pdf:start');
+
   const folio = String(req.query?.folio || req.body?.folio || '').trim();
-  logStep('start', { folio });
+  console.log('pdf:folio', { folio });
 
   if (!folio) {
-    logStep('invalid_request', { reason: 'folio is required' });
     return res.status(400).json({ ok: false, message: 'folio es obligatorio.' });
   }
 
   const baseUrl = getBaseUrl(req);
   if (!baseUrl) {
-    logStep('invalid_request', { reason: 'baseUrl unavailable' });
     return res.status(500).json({ ok: false, message: 'No se pudo resolver APP_URL.' });
   }
 
@@ -50,13 +56,16 @@ export default async function handler(req, res) {
   let stage = 'browser_launch';
 
   try {
+    const executablePath = await getExecutablePath();
+
     browser = await puppeteer.launch({
       args: chromium.args,
-      executablePath: await chromium.executablePath(),
+      executablePath,
       headless: chromium.headless,
       defaultViewport: chromium.defaultViewport,
+      ignoreHTTPSErrors: true,
     });
-    logStep('browser_launched', { folio });
+    console.log('pdf:browser_ok', { folio, targetUrl });
 
     stage = 'page_render';
     const page = await browser.newPage();
@@ -66,48 +75,52 @@ export default async function handler(req, res) {
     await page.evaluate(async () => {
       if (document?.fonts?.ready) await document.fonts.ready;
     });
-    logStep('html_loaded', { targetUrl });
+    console.log('pdf:html_ok', { targetUrl });
 
     stage = 'pdf_generate';
     const pdfBuffer = await page.pdf({
       format: 'letter',
       printBackground: true,
       margin: {
-        top: '12mm',
-        right: '12mm',
-        bottom: '12mm',
-        left: '12mm',
+        top: '10mm',
+        right: '10mm',
+        bottom: '10mm',
+        left: '10mm',
       },
+      preferCSSPageSize: true,
     });
-    logStep('pdf_generated', { bytes: pdfBuffer.length });
+    console.log('pdf:buffer_ok', { bytes: pdfBuffer.length });
 
-    stage = 'drive_upload';
-    const driveResult = await saveRenderedApartadoPdfToDrive({ folio, pdfBuffer });
-    if (driveResult?.ok) {
-      logStep('drive_uploaded', {
-        fileId: driveResult.fileId,
-        fileName: driveResult.fileName,
-        folderId: driveResult.folderId,
-      });
+    if (shouldSkipDriveUpload()) {
+      console.log('pdf:drive_skip');
     } else {
-      logStep('drive_upload_failed', {
-        details: driveResult?.details || driveResult?.error || 'unknown error',
-      });
+      stage = 'drive_upload';
+      console.log('pdf:drive_start', { folio });
+      const driveResult = await saveRenderedApartadoPdfToDrive({ folio, pdfBuffer });
+
+      if (driveResult?.ok) {
+        console.log('pdf:drive_ok', { fileName: driveResult.fileName });
+        console.log('pdf:drive_file_id', { fileId: driveResult.fileId });
+      } else {
+        console.error('pdf:drive_error', {
+          details: driveResult?.details || driveResult?.error || 'unknown error',
+        });
+      }
     }
 
     stage = 'response_send';
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${folio}.pdf"`);
-    logStep('response_sent', { folio });
-    return res.status(200).send(pdfBuffer);
+    res.status(200).send(pdfBuffer);
+    console.log('pdf:response_ok', { folio });
+    return;
   } catch (error) {
     const payload = toErrorPayload(error, stage);
-    logStep('error', payload);
+    console.error('pdf:error', payload);
     return res.status(500).json(payload);
   } finally {
     if (browser) {
       await browser.close();
-      logStep('browser_closed', { folio });
     }
   }
 }
