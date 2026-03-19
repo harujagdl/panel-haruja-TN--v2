@@ -32,15 +32,55 @@ function toErrorPayload(error, stage) {
 
 async function getExecutablePath() {
   const isProd = process.env.NODE_ENV === 'production';
-  if (!isProd) {
-    const localOverride = String(process.env.CHROME_EXECUTABLE_PATH || '').trim();
-    if (localOverride) {
-      console.log('pdf:chrome_override_dev', { executablePath: localOverride });
-      return localOverride;
-    }
+
+  // En producción NO forzar rutas manuales.
+  if (isProd) {
+    return await chromium.executablePath();
   }
 
-  return chromium.executablePath();
+  // Solo en local permitir override manual si hace falta.
+  const localOverride = String(process.env.CHROME_EXECUTABLE_PATH || '').trim();
+  if (localOverride) {
+    console.log('pdf:chrome_override_dev', { executablePath: localOverride });
+    return localOverride;
+  }
+
+  return await chromium.executablePath();
+}
+
+async function waitForQrReady(page) {
+  await page.waitForFunction(
+    () => {
+      const flagOk = document?.body?.dataset?.qrReady === '1';
+      if (!flagOk) return false;
+
+      const canvas = document.getElementById('qr');
+      if (!canvas) return false;
+
+      const hasSize = Number(canvas.width) > 0 && Number(canvas.height) > 0;
+      if (!hasSize) return false;
+
+      const ctx = canvas.getContext?.('2d');
+      if (!ctx) return false;
+
+      // Revisa varios puntos del canvas para evitar falsos negativos.
+      const points = [
+        [0, 0],
+        [Math.max(0, Math.floor(canvas.width / 2)), Math.max(0, Math.floor(canvas.height / 2))],
+        [Math.max(0, canvas.width - 1), Math.max(0, canvas.height - 1)],
+      ];
+
+      return points.some(([x, y]) => {
+        try {
+          const data = ctx.getImageData(x, y, 1, 1)?.data || [];
+          return Number(data[3] || 0) > 0;
+        } catch {
+          return false;
+        }
+      });
+    },
+    { timeout: 15000 }
+  );
 }
 
 export default async function handler(req, res) {
@@ -64,11 +104,20 @@ export default async function handler(req, res) {
 
   try {
     const executablePath = await getExecutablePath();
+    console.log('pdf:executable_path_ok');
 
     browser = await puppeteer.launch({
-      args: chromium.args,
+      args: [
+        ...chromium.args,
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--font-render-hinting=none',
+        '--single-process',
+      ],
       executablePath,
-      headless: chromium.headless,
+      headless: 'new',
       defaultViewport: chromium.defaultViewport,
       ignoreHTTPSErrors: true,
     });
@@ -77,30 +126,25 @@ export default async function handler(req, res) {
     stage = 'page_render';
     const page = await browser.newPage();
     await page.emulateMediaType('screen');
-    await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 45000 });
-    await page.waitForSelector('[data-pdf-ticket="true"]', { timeout: 15000 });
-    await page.evaluate(async () => {
-      if (document?.fonts?.ready) await document.fonts.ready;
+    console.log('pdf:page_ok_opened');
+
+    await page.goto(targetUrl, {
+      waitUntil: 'networkidle2',
+      timeout: 45000,
     });
-    console.log('pdf:page_ok', { targetUrl });
+
+    await page.waitForSelector('[data-pdf-ticket="true"]', { timeout: 15000 });
+
+    await page.evaluate(async () => {
+      if (document?.fonts?.ready) {
+        await document.fonts.ready;
+      }
+    });
+
+    console.log('pdf:html_ok', { targetUrl });
 
     stage = 'qr_wait';
-    await page.waitForFunction(
-      () => {
-        const flagOk = document?.body?.dataset?.qrReady === '1';
-        const canvas = document.getElementById('qr');
-        if (!flagOk || !canvas) return false;
-
-        const hasSize = Number(canvas.width) > 0 && Number(canvas.height) > 0;
-        const ctx = canvas.getContext?.('2d');
-        if (!hasSize || !ctx) return false;
-
-        const probe = ctx.getImageData(0, 0, 1, 1)?.data || [];
-        const alpha = Number(probe[3] || 0);
-        return alpha > 0;
-      },
-      { timeout: 15000 }
-    );
+    await waitForQrReady(page);
     console.log('pdf:qr_ready', { folio });
 
     stage = 'pdf_generate';
@@ -108,13 +152,15 @@ export default async function handler(req, res) {
       format: 'letter',
       printBackground: true,
       margin: {
-        top: '10mm',
-        right: '10mm',
-        bottom: '10mm',
-        left: '10mm',
+        top: '8mm',
+        right: '8mm',
+        bottom: '8mm',
+        left: '8mm',
       },
-      preferCSSPageSize: true,
+      // Evita pelearse con @page si el HTML ya trae estilos de impresión.
+      preferCSSPageSize: false,
     });
+
     console.log('pdf:buffer_ok', { bytes: pdfBuffer.length });
 
     if (shouldSkipDriveUpload()) {
@@ -153,7 +199,13 @@ export default async function handler(req, res) {
     return res.status(500).json(payload);
   } finally {
     if (browser) {
-      await browser.close();
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.error('pdf:browser_close_error', {
+          message: closeError?.message || 'unknown error',
+        });
+      }
     }
   }
 }
