@@ -124,8 +124,9 @@
   </div>
 
   <script>
-    const SELLERS = ["Haru", "Vendedora"];
     const STORE_ID = "6432936";
+    const AUTO_SYNC_MS = 120000;
+    const FULL_RELOAD_MS = 180000;
     const moneyMx = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 });
 
     const monthInput = document.getElementById("month");
@@ -140,7 +141,9 @@
     const webhookModeEl = document.getElementById("webhookMode");
     const lastWebhookEventEl = document.getElementById("lastWebhookEvent");
     const lastWebhookOrderEl = document.getElementById("lastWebhookOrder");
+    const btnSync = document.getElementById("btnSync");
     let ventasActuales = [];
+    let lastFullReloadAt = 0;
 
     const setStatus = (txt = "", type = "info") => {
       statusEl.textContent = txt;
@@ -151,19 +154,12 @@
       const raw = await res.text();
       let payload = {};
       if (raw) {
-        try {
-          payload = JSON.parse(raw);
-        } catch (_err) {
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${raw.slice(0, 180) || fallbackError}`);
-          }
+        try { payload = JSON.parse(raw); } catch (_err) {
+          if (!res.ok) throw new Error(`HTTP ${res.status}: ${raw.slice(0, 180) || fallbackError}`);
           throw new Error(`Respuesta no JSON del servidor: ${raw.slice(0, 180)}`);
         }
       }
-      if (!res.ok) {
-        const msg = payload?.message || raw.slice(0, 180) || fallbackError;
-        throw new Error(`HTTP ${res.status}: ${msg}`);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${payload?.message || raw.slice(0, 180) || fallbackError}`);
       return payload;
     };
 
@@ -175,51 +171,12 @@
       if (Number.isNaN(parsed.getTime())) return fallback;
       return parsed.toLocaleString("es-MX");
     };
-    const formatMonth = (value) => String(value || "").slice(0, 7);
+    const monthKey = () => String(monthInput.value || "").slice(0, 7);
     const ticketText = (venta) => venta.ticket_label || (venta.ticket_number ? `#${venta.ticket_number}` : null) || venta.order_id || "-";
     const ticketCellHtml = (venta) => `${ticketText(venta)}<span class="ticket-tech">order_id: ${venta.order_id || "-"}</span>`;
 
-    const paymentStatusEs = {
-      paid: "Pagado",
-      pending: "Pendiente",
-      authorized: "Autorizado",
-      cancelled: "Cancelado",
-      refunded: "Reembolsado",
-      voided: "Anulado"
-    };
-
-    const fulfillmentStatusEs = {
-      delivered: "Entregado",
-      unpacked: "No preparado",
-      packed: "Empacado",
-      shipped: "Enviado",
-      unfulfilled: "No surtido",
-      fulfilled: "Surtido"
-    };
-
-    const normalizeStatus = (value) => String(value || "").trim().toLowerCase();
-
-    const formatEstado = (venta = {}) => {
-      const paymentRaw = normalizeStatus(venta.payment_status);
-      const fulfillmentRaw = normalizeStatus(venta.fulfillment_status);
-      const paymentEs = paymentStatusEs[paymentRaw] || (paymentRaw ? paymentRaw : "");
-      const fulfillmentEs = fulfillmentStatusEs[fulfillmentRaw] || (fulfillmentRaw ? fulfillmentRaw : "");
-      if (paymentEs && fulfillmentEs) return `${paymentEs} / ${fulfillmentEs}`;
-      return paymentEs || fulfillmentEs || "—";
-    };
-
-    const toCsvField = (value) => {
-      const raw = value === null || value === undefined ? "" : String(value);
-      const escaped = raw.replace(/"/g, '""');
-      return `"${escaped}"`;
-    };
-
-    const formatCsvDate = (value) => {
-      if (!value) return "";
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return String(value);
-      return date.toISOString().slice(0, 10);
-    };
+    const paymentStatusEs = { paid: "Pagado", pending: "Pendiente", authorized: "Autorizado", cancelled: "Cancelado", refunded: "Reembolsado", voided: "Anulado" };
+    const fulfillmentStatusEs = { delivered: "Entregado", unpacked: "No preparado", packed: "Empacado", shipped: "Enviado", unfulfilled: "No surtido", fulfilled: "Surtido" };
 
     const normalizeSeller = (value = "") => {
       const raw = String(value).trim().toLowerCase();
@@ -238,50 +195,17 @@
         </select>`;
     };
 
-    const loadVentasConfig = async () => {
-      storeIdInput.value = STORE_ID;
-      const url = new URL("/api/core", location.origin);
-      url.searchParams.set("action", "ventas-config");
-      const res = await fetch(url.toString());
-      const payload = await safeJson(res, "No se pudo cargar la configuración de ventas");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar la configuración de ventas");
-      const data = payload.data || {};
-      return { ...data, store_id: STORE_ID };
+    const formatEstado = (venta = {}) => {
+      const paymentRaw = String(venta.payment_status || "").trim().toLowerCase();
+      const fulfillmentRaw = String(venta.fulfillment_status || "").trim().toLowerCase();
+      const paymentEs = paymentStatusEs[paymentRaw] || (paymentRaw ? paymentRaw : "");
+      const fulfillmentEs = fulfillmentStatusEs[fulfillmentRaw] || (fulfillmentRaw ? fulfillmentRaw : "");
+      if (paymentEs && fulfillmentEs) return `${paymentEs} / ${fulfillmentEs}`;
+      return paymentEs || fulfillmentEs || "—";
     };
 
-    const loadVentas = async () => {
-      const month = formatMonth(monthInput.value);
-      const search = String(searchInput.value || "").trim();
-      const url = new URL("/api/ventas", location.origin);
-      if (month) url.searchParams.set("month", month);
-      if (search) url.searchParams.set("search", search);
-      const res = await fetch(url.toString());
-      const payload = await safeJson(res, "No se pudo cargar ventas");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar ventas");
-      const resumen = payload?.resumen || {};
-      const detalle = Array.isArray(payload?.detalle) ? payload.detalle : [];
-      ventasActuales = detalle;
-      renderResumen(resumen);
-      renderTabla(detalle);
-      setStatus(`Listo. ${detalle.length} ventas.`);
-    };
-
-
-    const loadVentasStatus = async () => {
-      const url = new URL("/api/ventas/status", location.origin);
-      const res = await fetch(url.toString());
-      const payload = await safeJson(res, "No se pudo cargar el estado de ventas");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo cargar el estado de ventas");
-      return payload;
-    };
-
-    const renderWebhookStatus = (data) => {
-      webhookModeEl.textContent = `Modo: ${data?.mode || "automatico"}`;
-      if (!data) {
-        lastWebhookEventEl.textContent = "Último evento recibido: Sin eventos aún";
-        lastWebhookOrderEl.textContent = "Última orden procesada: Sin órdenes procesadas aún";
-        return;
-      }
+    const renderWebhookStatus = (data = {}) => {
+      webhookModeEl.textContent = `Modo: ${data.mode || "automatico"}`;
       const eventAt = formatDateTime(data.last_event_received_at, "Sin eventos aún");
       const eventType = data.last_event_type ? ` (${data.last_event_type})` : "";
       lastWebhookEventEl.textContent = `Último evento recibido: ${eventAt}${eventType}`;
@@ -292,23 +216,29 @@
         : `Última orden procesada: ${orderAt}`;
     };
 
-    const renderResumen = (resumen) => {
-      const ticketPromedio = Number(resumen?.ticket_promedio ?? 0);
+    const renderResumen = (resumen = {}) => {
       totalMesEl.textContent = formatMoney(resumen.total_mes);
-      totalsBySellerEl.textContent = `Haru ${formatMoney(resumen.total_haru)} · Vendedora ${formatMoney(resumen.total_vendedora)}`;
+      const porVendedora = resumen?.por_vendedora || {};
+      totalsBySellerEl.textContent = `Haru ${formatMoney(porVendedora.Haru)} · Vendedora ${formatMoney(porVendedora.Vendedora)}`;
       sinAsignarEl.textContent = String(Number(resumen.sin_asignar) || 0);
-      ticketPromedioEl.textContent = formatMoney(ticketPromedio);
+      ticketPromedioEl.textContent = formatMoney(resumen.ticket_promedio);
     };
 
-    const renderTabla = (ventas) => {
-      if (!ventas.length) {
+    const renderTabla = (ventas = []) => {
+      const searchTerm = String(searchInput.value || "").trim().toLowerCase();
+      const filtered = !searchTerm ? ventas : ventas.filter((venta) => {
+        const searchable = [venta.ticket_label, venta.ticket_number, venta.order_id, venta.customer_name]
+          .map((value) => String(value || "").toLowerCase())
+          .join(" ");
+        return searchable.includes(searchTerm);
+      });
+      if (!filtered.length) {
         tbody.innerHTML = `<tr><td colspan="6">No hay ventas para este mes.</td></tr>`;
         return;
       }
-      tbody.innerHTML = ventas.map((venta) => {
-        console.log("[ventas-detalle]", venta.order_id, venta.seller);
-        const seller = normalizeSeller((venta.seller || "").trim());
-        const noAssigned = !seller;
+      tbody.innerHTML = filtered.map((venta) => {
+        const seller = normalizeSeller(venta.seller);
+        const noAssigned = !seller || !venta.seller_assigned;
         return `
           <tr data-order-id="${venta.order_id}">
             <td>${formatDate(venta.created_at)}</td>
@@ -316,172 +246,109 @@
             <td>${venta.customer_name || "—"}</td>
             <td>${formatMoney(venta.total)}</td>
             <td>${formatEstado(venta)}</td>
-            <td>${sellerSelectHtml(seller)} ${noAssigned ? '<span class="badge">Pendiente</span>' : ''}</td>
+            <td>${sellerSelectHtml(seller)} ${noAssigned ? '<span class="badge">Sin asignar</span>' : ''}</td>
           </tr>`;
       }).join("");
     };
 
-    const exportCsv = () => {
-      const month = formatMonth(monthInput.value);
-      if (!ventasActuales.length) {
-        setStatus("No hay ventas para exportar en este mes.");
-        return;
-      }
-
-      const headers = [
-        "Fecha",
-        "Ticket",
-        "Cliente",
-        "Total pagado",
-        "Payment Status",
-        "Fulfillment Status",
-        "Estado (español)",
-        "Vendedora",
-        "Comisión",
-        "Store ID",
-        "Mes"
-      ];
-
-      const csvRows = [headers.map(toCsvField).join(",")];
-      ventasActuales.forEach((venta) => {
-        const row = [
-          formatCsvDate(venta.created_at),
-          ticketText(venta),
-          venta.customer_name || "",
-          Number(venta.total) || 0,
-          normalizeStatus(venta.payment_status),
-          normalizeStatus(venta.fulfillment_status),
-          formatEstado(venta),
-          normalizeSeller(venta.seller) || "",
-          Number(venta.commission_amount) || 0,
-          STORE_ID,
-          venta.month_key || month
-        ];
-        csvRows.push(row.map(toCsvField).join(","));
-      });
-
-      const csvContent = `\uFEFF${csvRows.join("\n")}`;
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const downloadUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = `ventas-${month || "mes"}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(downloadUrl);
-      setStatus(`CSV exportado: ventas-${month || "mes"}.csv`);
-    };
-
-
-    const showOAuthMessage = () => {
-      const params = new URLSearchParams(location.search);
-      const oauth = params.get('oauth');
-      if (!oauth) return;
-      const message = params.get('message') || '';
-
-      if (oauth === 'success') {
-        setStatus('Conexión con Tiendanube completada.', 'info');
-      } else {
-        setStatus(message || 'No se pudo completar la conexión con Tiendanube.', 'error');
-      }
-
-      params.delete('oauth');
-      params.delete('message');
-      const search = params.toString();
-      const nextUrl = `${location.pathname}${search ? `?${search}` : ''}${location.hash}`;
-      window.history.replaceState({}, '', nextUrl);
-    };
-
-    const loadAll = async () => {
-      setStatus("Cargando ventas...");
-      const [_, webhookStatus] = await Promise.all([
-        loadVentas(),
-        loadVentasStatus().catch(() => null)
-      ]);
-      renderWebhookStatus(webhookStatus);
+    const loadVentasFull = async () => {
+      const url = new URL('/api/ventas-full', location.origin);
+      const mes = monthKey();
+      if (mes) url.searchParams.set('mes', mes);
+      const payload = await safeJson(await fetch(url.toString()), 'No se pudo cargar ventas');
+      ventasActuales = Array.isArray(payload.ventas) ? payload.ventas : [];
+      renderResumen(payload.resumen || {});
+      renderTabla(ventasActuales);
+      renderWebhookStatus(payload.status || {});
+      const staleMsg = payload.stale ? ' Mostrando última información disponible.' : '';
+      setStatus(`Listo. ${ventasActuales.length} ventas.${staleMsg}`);
+      lastFullReloadAt = Date.now();
     };
 
     const autoSyncVentas = async () => {
-      const res = await fetch(`/api/ventas/sync-auto`, {
-        method: "POST"
-      });
-      const payload = await safeJson(res, "No se pudo ejecutar sync automático");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo sincronizar ventas");
-      await loadVentas();
-      const status = await loadVentasStatus().catch(() => null);
-      renderWebhookStatus(status);
+      const payload = await safeJson(await fetch('/api/ventas/sync-auto', { method: 'POST' }), 'No se pudo ejecutar sync automática');
+      if (payload?.skipped) return;
+      if (payload?.changed) {
+        await loadVentasFull();
+        return;
+      }
+      if (payload?.status) {
+        renderWebhookStatus({ ...(payload.status || {}), mode: 'automatico' });
+      }
+      if (Date.now() - lastFullReloadAt >= FULL_RELOAD_MS) {
+        await loadVentasFull();
+      }
     };
 
-    const syncVentas = async () => {
-      const button = document.getElementById("btnSync");
-      const previous = button.textContent;
-      button.disabled = true;
-      button.textContent = "Sincronizando...";
-      setStatus("Sincronizando con Tiendanube...");
+    const forceSyncVentas = async () => {
+      btnSync.disabled = true;
+      btnSync.textContent = 'Sincronizando...';
       try {
-        const res = await fetch(`/api/ventas/sync`, { method: "POST" });
-        const payload = await safeJson(res, "No se pudo sincronizar ventas");
-        if (!payload?.ok) throw new Error(payload?.message || "No se pudo sincronizar ventas");
-        setStatus(`Sync OK: ${payload.synced || 0} pedidos (${payload.inserted || 0} nuevos / ${payload.updated || 0} actualizados).`);
-        await loadVentas();
-        const status = await loadVentasStatus().catch(() => null);
-        renderWebhookStatus(status);
+        await safeJson(await fetch('/api/ventas/sync', { method: 'POST' }), 'No se pudo sincronizar ventas');
+        await loadVentasFull();
       } finally {
-        button.disabled = false;
-        button.textContent = previous;
+        btnSync.disabled = false;
+        btnSync.textContent = 'Forzar sincronización';
       }
     };
 
     const asignarVendedora = async (orderId, seller) => {
       const normalized = normalizeSeller(seller);
-      if (!normalized) throw new Error("Selecciona una vendedora válida (Haru o Vendedora)");
-      const res = await fetch("/api/core?action=assign-seller", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_id: orderId, seller: normalized })
-      });
-      const payload = await safeJson(res, "No se pudo asignar vendedora");
-      if (!payload?.ok) throw new Error(payload?.message || "No se pudo asignar vendedora");
-      await loadAll();
+      if (!normalized) throw new Error('Selecciona una vendedora válida (Haru o Vendedora)');
+      await safeJson(await fetch('/api/core?action=venta-asignar-vendedora', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId, seller: normalized }),
+      }), 'No se pudo asignar vendedora');
+      await loadVentasFull();
     };
 
-    document.getElementById("btnLoad").addEventListener("click", () => loadAll().catch((e) => setStatus(e.message || String(e), "error")));
-    searchInput.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") loadAll().catch((e) => setStatus(e.message || String(e), "error"));
-    });
+    const toCsvField = (value) => `"${String(value === null || value === undefined ? '' : value).replace(/"/g, '""')}"`;
+    const exportCsv = () => {
+      if (!ventasActuales.length) return setStatus('No hay ventas para exportar.');
+      const header = ['fecha', 'ticket', 'order_id', 'cliente', 'total', 'estado', 'vendedora'];
+      const rows = ventasActuales.map((venta) => [
+        formatDate(venta.created_at),
+        ticketText(venta),
+        venta.order_id || '',
+        venta.customer_name || '',
+        Number(venta.total || 0).toFixed(2),
+        formatEstado(venta),
+        venta.seller || '',
+      ]);
+      const csv = [header, ...rows].map((row) => row.map(toCsvField).join(',')).join('\\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `ventas-${monthKey() || 'mes'}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
 
-    document.getElementById("btnSync").addEventListener("click", () => syncVentas().catch((e) => setStatus(e.message || String(e), "error")));
-    document.getElementById("btnCsv").addEventListener("click", exportCsv);
+    document.getElementById('btnLoad').addEventListener('click', () => loadVentasFull().catch((e) => setStatus(e.message || String(e), 'error')));
+    document.getElementById('btnSync').addEventListener('click', () => forceSyncVentas().catch((e) => setStatus(e.message || String(e), 'error')));
+    document.getElementById('btnCsv').addEventListener('click', exportCsv);
+    searchInput.addEventListener('input', () => renderTabla(ventasActuales));
+    monthInput.addEventListener('change', () => loadVentasFull().catch((e) => setStatus(e.message || String(e), 'error')));
 
-    tbody.addEventListener("change", (ev) => {
-      if (!(ev.target instanceof HTMLSelectElement) || !ev.target.hasAttribute("data-seller")) return;
-      const row = ev.target.closest("tr");
-      const orderId = row?.getAttribute("data-order-id") || "";
+    tbody.addEventListener('change', (ev) => {
+      if (!(ev.target instanceof HTMLSelectElement) || !ev.target.hasAttribute('data-seller')) return;
+      const row = ev.target.closest('tr');
+      const orderId = row?.getAttribute('data-order-id') || '';
       const seller = ev.target.value;
-      if (!orderId || seller === "__unassigned__") {
-        setStatus("Selecciona Haru o Vendedora para guardar la asignación.", "error");
-        return;
-      }
-      asignarVendedora(orderId, seller).catch((e) => setStatus(e.message || String(e), "error"));
+      if (!orderId || seller === '__unassigned__') return;
+      asignarVendedora(orderId, seller).catch((e) => setStatus(e.message || String(e), 'error'));
     });
 
     monthInput.value = new Date().toISOString().slice(0, 7);
     storeIdInput.value = STORE_ID;
     (async () => {
       try {
-        showOAuthMessage();
-        await loadVentasConfig();
+        await loadVentasFull();
+        setInterval(() => autoSyncVentas().catch((e) => setStatus(e.message || String(e), 'error')), AUTO_SYNC_MS);
       } catch (e) {
-        setStatus(`No se pudo cargar configuración: ${e.message || String(e)}`, "error");
+        setStatus(e.message || String(e), 'error');
       }
-      loadAll().catch((e) => setStatus(e.message || String(e), "error"));
-      setInterval(() => {
-        autoSyncVentas().catch(() => {});
-      }, 60000);
-      setInterval(() => {
-        loadVentasStatus().then(renderWebhookStatus).catch(() => {});
-      }, 15000);
     })();
   </script>
 </body>

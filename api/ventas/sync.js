@@ -1,4 +1,5 @@
 import { syncVentasFromTiendanube } from '../../lib/api/core.js';
+import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
 import {
   acquireVentasSyncLock,
   releaseVentasSyncLock,
@@ -10,9 +11,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, message: 'Method not allowed.' });
   }
 
+  console.log('[ventas-sync-manual] start');
   const lock = await acquireVentasSyncLock();
   if (!lock.acquired) {
-    return res.status(200).json({ ok: true, skipped: true, message: 'sync_en_curso' });
+    return res.status(200).json({ ok: true, skipped: true, reason: 'sync_running' });
   }
 
   try {
@@ -26,6 +28,7 @@ export default async function handler(req, res) {
       last_created_at_max: now,
       last_updated_at_max: now,
     });
+    invalidateVentasFullCache();
     return res.status(200).json({ ok: true, ...data });
   } catch (error) {
     await writeVentasSyncState({
@@ -38,4 +41,3 @@ export default async function handler(req, res) {
     await releaseVentasSyncLock();
   }
 }
-

@@ -1,8 +1,11 @@
-import { fetchTiendanubeOrderById, getVentasConfig, processTiendanubeWebhook } from '../../lib/api/core.js';
+import { FIXED_STORE_ID, fetchTiendanubeOrderById, getVentasConfig, processTiendanubeWebhook } from '../../lib/api/core.js';
 import { verifyTiendanubeWebhook } from '../../lib/tiendanube/verifyWebhook.js';
-import { writeVentasSyncState } from '../../lib/ventas/syncState.js';
-
-const FIXED_STORE_ID = '6432936';
+import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
+import {
+  acquireVentasSyncLock,
+  releaseVentasSyncLock,
+  writeVentasSyncState,
+} from '../../lib/ventas/syncState.js';
 
 export const config = {
   api: {
@@ -48,6 +51,8 @@ export default async function handler(req, res) {
   const secret = String(process.env.TIENDANUBE_APP_SECRET || '').trim();
   const signature = String(req.headers?.['x-linkedstore-hmac-sha256'] || '').trim();
   const receivedAt = new Date().toISOString();
+  let lockAcquired = false;
+  console.log('[ventas-webhook] received');
 
   try {
     const rawBody = await readRawBody(req);
@@ -79,10 +84,16 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, ignored: 'missing_order_id' });
     }
 
+    const lock = await acquireVentasSyncLock();
+    if (!lock.acquired) {
+      return res.status(200).json({ ok: true, skipped: true, reason: 'sync_running' });
+    }
+    lockAcquired = true;
+
     const configVentas = await getVentasConfig();
     const enrichedPayload = { ...payload };
-    if (!enrichedPayload.order && configVentas?.store_id && configVentas?.access_token) {
-      enrichedPayload.order = await fetchTiendanubeOrderById(configVentas.store_id, configVentas.access_token, orderId);
+    if (!enrichedPayload.order && configVentas?.access_token) {
+      enrichedPayload.order = await fetchTiendanubeOrderById(FIXED_STORE_ID, configVentas.access_token, orderId);
     }
 
     const result = await processTiendanubeWebhook(enrichedPayload, req);
@@ -99,6 +110,10 @@ export default async function handler(req, res) {
       last_created_at_max: processedAt,
       last_updated_at_max: processedAt,
     });
+    invalidateVentasFullCache(result.month_key);
+    console.log(`[ventas-webhook] processed_order_${orderId}`);
+    await releaseVentasSyncLock();
+    lockAcquired = false;
 
     return res.status(200).json({ ok: true, ...result });
   } catch (error) {
@@ -107,7 +122,7 @@ export default async function handler(req, res) {
       last_sync_result: 'error',
       last_sync_message: String(error?.message || error),
     });
+    if (lockAcquired) await releaseVentasSyncLock();
     return res.status(500).json({ ok: false, message: String(error?.message || error) });
   }
 }
-
