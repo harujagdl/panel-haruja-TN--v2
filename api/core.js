@@ -143,6 +143,10 @@ export default async function handler(req, res) {
     if (action === 'ventas-detalle' || action === 'detalle') return sendOk(res, await getVentasDetalle(req.query?.month, req.query?.q || req.query?.search));
     if (action === 'ventas-webhook-status') return sendOk(res, await getLatestWebhookEvent());
     if (action === 'catalogos') return sendOk(res, await getCatalogos());
+    if (action === 'diccionario') {
+      const data = await getCatalogos();
+      return res.status(200).json({ ok: true, ...data });
+    }
 
     if (action === 'prendas-list') return sendOk(res, await listPrendas());
     if (action === 'prendas-create') return sendOk(res, await createPrenda(req.body || {}));
