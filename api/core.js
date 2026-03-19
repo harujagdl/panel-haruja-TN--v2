@@ -74,10 +74,14 @@ async function handleApartados(req, res) {
   const op = String(req.query?.op || req.body?.op || '').trim();
   const folio = String(req.query?.folio || req.body?.folio || '').trim();
   const action = String(req.query?.action || '').trim();
-  if (req.method === 'GET' && (!op || op === 'list')) return sendOk(res, await listApartados());
+  if (req.method === 'GET' && (!op || op === 'list')) return sendOk(res, await listApartados(req.query || {}));
   if (req.method === 'GET' && op === 'next') return sendOk(res, await getNextFolio(req.query?.fecha || req.body?.fecha || ''));
   if (req.method === 'GET' && op === 'search') return sendOk(res, await searchApartados(req.query || {}));
-  if (req.method === 'GET' && op === 'missing-pdf') return sendOk(res, await getApartadosMissingPdf());
+  if (req.method === 'GET' && op === 'missing-pdf') {
+    const result = await getApartadosMissingPdf(folio);
+    if (result?.status) return res.status(result.status).json(result.body);
+    return sendOk(res, result);
+  }
   if (req.method === 'GET' && op === 'detail') {
     if (!folio) return sendErr(res, 400, 'folio es obligatorio.');
     const result = await getApartadoDetail(folio);
