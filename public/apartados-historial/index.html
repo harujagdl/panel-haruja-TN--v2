@@ -80,12 +80,14 @@
   </div>
 
   <script>
-    const state = { apartados: [], filtered: [], missingPdf: new Set() };
+    const state = { apartados: [] };
     const statusEl = document.getElementById('status');
     const rowsEl = document.getElementById('rows');
     const searchEl = document.getElementById('search');
     const estadoEl = document.getElementById('estado');
-
+    const btnFiltrar = document.getElementById('btn-filtrar');
+    let debounceTimer = null;
+    let currentController = null;
 
     async function generateOfficialPdfViaApi(folio) {
       const resp = await fetch('/api/core?action=apartados&op=pdf-refresh', {
@@ -104,41 +106,48 @@
     function validateOfficialPdfPayload(payload = {}) {
       const pdfUrl = String(payload?.pdfUrl || '').trim();
       const fileId = String(payload?.fileId || '').trim();
-      if (!pdfUrl) throw new Error(String(payload?.message || 'No se recibió pdfUrl real desde Apps Script.'));
+      if (!pdfUrl) throw new Error(String(payload?.message || 'No se devolvió la URL del PDF oficial.'));
       return { pdfUrl, fileId };
     }
 
-    const formatMoney = (value) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(value || 0));
-    function formatDate(value) {
-      if (!value) return '-';
-      const d = new Date(value);
-      if (Number.isNaN(d.getTime())) return value;
-      return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(d);
+    function formatMoney(value) {
+      const amount = Number(value || 0);
+      return amount.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
     }
+
+    function formatDate(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '-';
+      const date = new Date(raw);
+      if (Number.isNaN(date.getTime())) return raw;
+      return date.toLocaleDateString('es-MX');
+    }
+
     function estadoClass(estado) {
       const normalized = String(estado || '').toLowerCase();
-      if (normalized === 'liquidado') return 'liquidado';
-      if (normalized === 'cancelado') return 'cancelado';
+      if (normalized.includes('liquid')) return 'liquidado';
+      if (normalized.includes('cancel')) return 'cancelado';
       return 'activo';
     }
+
     function ticketUrlFor(item) {
-      const folio = String(item?.folio || '').trim();
-      if (!folio) return '';
-      return item.ticketUrl || `/ticket/${encodeURIComponent(folio)}`;
+      const ticketUrl = String(item.ticketUrl || '').trim();
+      if (ticketUrl) return ticketUrl;
+      const folio = String(item.folio || '').trim();
+      return folio ? `/ticket/${encodeURIComponent(folio)}` : '';
     }
 
     function renderRows() {
-      if (!state.filtered.length) {
+      if (!state.apartados.length) {
         rowsEl.innerHTML = '<tr><td colspan="9" class="muted">No se encontraron apartados.</td></tr>';
         return;
       }
 
-      rowsEl.innerHTML = state.filtered.map((item) => {
+      rowsEl.innerHTML = state.apartados.map((item) => {
         const folio = String(item.folio || '').trim();
         const ticketUrl = ticketUrlFor(item);
         const pdfUrl = String(item.pdfDriveUrl || item.pdfUrlPersistido || item.pdfUrl || '').trim();
         const hasPdf = Boolean(pdfUrl);
-        const needsRegen = state.missingPdf.has(folio.toUpperCase()) || !hasPdf;
         const copyTarget = hasPdf ? pdfUrl : '';
         const abonoUrl = `/apartados?abono=1&folio=${encodeURIComponent(folio)}`;
 
@@ -148,7 +157,7 @@
         const pdfButton = hasPdf
           ? `<a class="action pdf" href="${pdfUrl}" target="_blank" rel="noopener noreferrer">Abrir PDF</a>`
           : '';
-        const regenButton = needsRegen
+        const regenButton = !hasPdf
           ? `<button class="action regen" data-folio="${folio}" onclick="regeneratePdf(this)">Generar PDF oficial</button>`
           : '';
         const copyButton = copyTarget
@@ -158,30 +167,17 @@
         return `
           <tr>
             <td>${folio || '-'}</td>
-            <td>${formatDate(item.ultimoMovimiento || item.fecha)}</td>
+            <td>${formatDate(item.fecha)}</td>
             <td>${item.cliente || '-'}</td>
             <td>${item.contacto || '-'}</td>
             <td>${formatMoney(item.total)}</td>
             <td>${formatMoney(item.anticipo)}</td>
             <td>${formatMoney(item.saldo)}</td>
-            <td><span class="estado ${estadoClass(item.estado)}">${item.estado || 'ACTIVO'}</span></td>
+            <td><span class="estado ${estadoClass(item.estatus)}">${item.estatus || 'ACTIVO'}</span></td>
             <td><div class="actions"><a class="action abonar" href="${abonoUrl}">Abonar</a>${ticketButton}${pdfButton}${regenButton}${copyButton}</div></td>
           </tr>
         `;
       }).join('');
-    }
-
-    function applyFilter() {
-      const term = searchEl.value.trim().toLowerCase();
-      const estado = String(estadoEl.value || '').toUpperCase();
-      state.filtered = state.apartados.filter((item) => {
-        const byText = !term || [item.folio, item.cliente, item.contacto].some((value) => String(value || '').toLowerCase().includes(term));
-        const byEstado = !estado || String(item.estado || '').toUpperCase() === estado;
-        return byText && byEstado;
-      });
-      renderRows();
-      statusEl.textContent = `${state.filtered.length} apartado(s) mostrado(s).`;
-      statusEl.className = 'status muted';
     }
 
     async function copyLink(btn) {
@@ -215,9 +211,7 @@
         state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase()
           ? { ...item, pdfDriveUrl: validated.pdfUrl, pdfFileId: validated.fileId }
           : item);
-        state.missingPdf.delete(folio.toUpperCase());
-        applyFilter();
-        await loadMissingPdf();
+        renderRows();
         statusEl.textContent = `PDF oficial guardado correctamente en Drive para ${folio}.`;
         statusEl.className = 'status muted';
       } catch (error) {
@@ -229,42 +223,60 @@
       }
     }
 
-    async function loadMissingPdf() {
-      const resp = await fetch('/api/core?action=apartados&op=missing-pdf');
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok || !data.ok) return;
-      const rows = Array.isArray(data?.data?.apartados) ? data.data.apartados : [];
-      state.missingPdf = new Set(rows.map((row) => String(row.folio || '').toUpperCase()));
+    function buildListUrl() {
+      const url = new URL('/api/core', window.location.origin);
+      url.searchParams.set('action', 'apartados');
+      url.searchParams.set('op', 'list');
+      const q = searchEl.value.trim();
+      const status = String(estadoEl.value || '').trim().toUpperCase();
+      if (q) url.searchParams.set('q', q);
+      if (status) url.searchParams.set('status', status);
+      return url.toString();
     }
 
-    async function loadHistorial() {
+    function mapQuotaError(message) {
+      const raw = String(message || '');
+      if (raw.toLowerCase().includes('quota exceeded')) {
+        return 'El historial está temporalmente saturado. Intenta de nuevo en unos segundos.';
+      }
+      return raw;
+    }
+
+    async function fetchList() {
+      if (currentController) currentController.abort();
+      currentController = new AbortController();
+      const listUrl = buildListUrl();
       try {
-        await loadMissingPdf();
-        const resp = await fetch('/api/core?action=apartados&op=list');
-        const data = await resp.json();
-        if (!resp.ok || !data.ok) throw new Error(data.message || 'No se pudo cargar el historial.');
+        statusEl.textContent = 'Cargando apartados...';
+        statusEl.className = 'status muted';
+        const resp = await fetch(listUrl, { signal: currentController.signal });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) {
+          throw new Error(data?.message || 'No se pudo cargar el historial.');
+        }
 
         const body = data.data || {};
-        state.apartados = (Array.isArray(body.apartados) ? body.apartados : []).map((item) => ({
-          ...item,
-          contacto: item.telefono || item.contacto || '',
-          estado: (item.status || item.estado || 'ACTIVO').toUpperCase(),
-          saldo: item.saldoPendiente ?? item.saldo ?? 0,
-          ticketUrl: item.ticketUrl || `/ticket/${encodeURIComponent(item.folio || '')}`,
-          pdfDriveUrl: item.pdfDriveUrl || item.pdfUrlPersistido || item.pdfUrl || '',
-        }));
-        applyFilter();
+        state.apartados = Array.isArray(body.apartados) ? body.apartados : [];
+        renderRows();
+        statusEl.textContent = `${state.apartados.length} apartado(s) mostrado(s).`;
+        statusEl.className = 'status muted';
       } catch (error) {
-        statusEl.textContent = error.message || 'Error cargando historial.';
+        if (error?.name === 'AbortError') return;
+        statusEl.textContent = mapQuotaError(error.message || 'Error cargando historial.');
         statusEl.className = 'status err';
         rowsEl.innerHTML = '<tr><td colspan="9" class="muted">Sin datos.</td></tr>';
       }
     }
 
-    searchEl.addEventListener('input', applyFilter);
-    estadoEl.addEventListener('change', applyFilter);
-    document.getElementById('btn-filtrar').addEventListener('click', applyFilter);
-    loadHistorial();
+    function fetchListDebounced() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fetchList, 350);
+    }
+
+    searchEl.addEventListener('input', fetchListDebounced);
+    estadoEl.addEventListener('change', fetchList);
+    btnFiltrar.addEventListener('click', fetchList);
+    fetchList();
   </script>
 </body>
 </html>

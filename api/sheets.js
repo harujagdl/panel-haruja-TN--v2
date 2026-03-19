@@ -25,9 +25,13 @@ export default async function handler(req, res) {
 
   try {
     if (action === 'apartados-next') return jsonOk(res, await getNextFolio(req.query?.fecha || req.body?.fecha || ''));
-    if (action === 'apartados-list') return jsonOk(res, await listApartados());
+    if (action === 'apartados-list') return jsonOk(res, await listApartados(req.query || {}));
     if (action === 'apartados-search') return jsonOk(res, await searchApartados(req.query || {}));
-    if (action === 'apartados-missing-pdf') return jsonOk(res, await getApartadosMissingPdf());
+    if (action === 'apartados-missing-pdf') {
+      const result = await getApartadosMissingPdf(folio);
+      if (result?.status) return res.status(result.status).json(result.body);
+      return jsonOk(res, result);
+    }
     if (action === 'apartados-create') return jsonOk(res, await createApartado(req.body || {}));
     if (action === 'apartados-abono') return jsonOk(res, await addAbono(req.body || {}));
 
