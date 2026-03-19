@@ -31,8 +31,15 @@ function toErrorPayload(error, stage) {
 }
 
 async function getExecutablePath() {
-  const configured = String(process.env.CHROME_EXECUTABLE_PATH || '').trim();
-  if (configured) return configured;
+  const isProd = process.env.NODE_ENV === 'production';
+  if (!isProd) {
+    const localOverride = String(process.env.CHROME_EXECUTABLE_PATH || '').trim();
+    if (localOverride) {
+      console.log('pdf:chrome_override_dev', { executablePath: localOverride });
+      return localOverride;
+    }
+  }
+
   return chromium.executablePath();
 }
 
@@ -75,7 +82,26 @@ export default async function handler(req, res) {
     await page.evaluate(async () => {
       if (document?.fonts?.ready) await document.fonts.ready;
     });
-    console.log('pdf:html_ok', { targetUrl });
+    console.log('pdf:page_ok', { targetUrl });
+
+    stage = 'qr_wait';
+    await page.waitForFunction(
+      () => {
+        const flagOk = document?.body?.dataset?.qrReady === '1';
+        const canvas = document.getElementById('qr');
+        if (!flagOk || !canvas) return false;
+
+        const hasSize = Number(canvas.width) > 0 && Number(canvas.height) > 0;
+        const ctx = canvas.getContext?.('2d');
+        if (!hasSize || !ctx) return false;
+
+        const probe = ctx.getImageData(0, 0, 1, 1)?.data || [];
+        const alpha = Number(probe[3] || 0);
+        return alpha > 0;
+      },
+      { timeout: 15000 }
+    );
+    console.log('pdf:qr_ready', { folio });
 
     stage = 'pdf_generate';
     const pdfBuffer = await page.pdf({
@@ -95,15 +121,22 @@ export default async function handler(req, res) {
       console.log('pdf:drive_skip');
     } else {
       stage = 'drive_upload';
-      console.log('pdf:drive_start', { folio });
-      const driveResult = await saveRenderedApartadoPdfToDrive({ folio, pdfBuffer });
+      try {
+        const driveResult = await saveRenderedApartadoPdfToDrive({ folio, pdfBuffer });
 
-      if (driveResult?.ok) {
-        console.log('pdf:drive_ok', { fileName: driveResult.fileName });
-        console.log('pdf:drive_file_id', { fileId: driveResult.fileId });
-      } else {
+        if (driveResult?.ok) {
+          console.log('pdf:drive_ok', {
+            fileId: driveResult.fileId,
+            fileName: driveResult.fileName,
+          });
+        } else {
+          console.error('pdf:drive_error', {
+            details: driveResult?.details || driveResult?.error || 'unknown error',
+          });
+        }
+      } catch (driveError) {
         console.error('pdf:drive_error', {
-          details: driveResult?.details || driveResult?.error || 'unknown error',
+          message: driveError?.message || 'unknown error',
         });
       }
     }
