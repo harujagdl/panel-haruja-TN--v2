@@ -4,6 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Tarjeta de Lealtad | HarujaGdl</title>
+  <link rel="manifest" href="/manifest-tarjeta-lealtad.json" />
+  <meta name="theme-color" content="#faf7f2" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Lealtad Haruja" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 
@@ -135,6 +142,11 @@
       margin: 8px 0 14px;
     }
 
+    .actions {
+      display: grid;
+      gap: 10px;
+    }
+
     .btn{
       width: 100%;
       border: none;
@@ -150,6 +162,14 @@
 
     .btn:active{ transform: translateY(1px); }
     .btn:hover{ background: var(--olive-dark); }
+
+    .btn.secondary {
+      background: #4b5563;
+    }
+
+    .btn.secondary:hover {
+      background: #374151;
+    }
 
     .status{
       margin-top: 12px;
@@ -258,7 +278,10 @@
         <ul id="promosNivel"></ul>
       </div>
 
-      <button class="btn" id="btnRefresh" type="button">Actualizar datos</button>
+      <div class="actions">
+        <button class="btn" id="btnRefresh" type="button">Actualizar datos</button>
+        <button class="btn secondary" id="btnInstall" type="button" style="display:none;">Instalar app</button>
+      </div>
 
       <div class="status" id="estado"></div>
       <div class="small">Consejo: agrégala a tu pantalla de inicio para tenerla siempre a la mano ✨</div>
@@ -296,9 +319,104 @@
     };
 
     const DOMAIN_BASE = window.location.origin;
+    const LOYALTY_TOKEN_STORAGE_KEY = "haruja_lealtad_token";
+    const FIXED_PWA_URL = "/tarjeta-lealtad.html?pwa=1";
 
-    function getToken() {
+    const installButton = document.getElementById("btnInstall");
+    let deferredInstallPrompt = null;
+
+    function registerServiceWorker() {
+      if (!('serviceWorker' in navigator)) {
+        return;
+      }
+
+      window.addEventListener('load', async () => {
+        try {
+          await navigator.serviceWorker.register('/sw-tarjeta-lealtad.js', { scope: '/' });
+        } catch (error) {
+          console.error('[tarjeta-lealtad] SW no registrado', error);
+        }
+      });
+    }
+
+    function setupInstallPrompt() {
+      window.addEventListener('beforeinstallprompt', (event) => {
+        event.preventDefault();
+        deferredInstallPrompt = event;
+        installButton.style.display = 'block';
+      });
+
+      window.addEventListener('appinstalled', () => {
+        deferredInstallPrompt = null;
+        installButton.style.display = 'none';
+      });
+
+      installButton.addEventListener('click', async () => {
+        if (!deferredInstallPrompt) {
+          return;
+        }
+
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+        installButton.style.display = 'none';
+      });
+    }
+
+    function getTokenFromUrl() {
       return new URLSearchParams(location.search).get("token") || "";
+    }
+
+    function persistToken(token) {
+      if (!token) {
+        return;
+      }
+
+      try {
+        localStorage.setItem(LOYALTY_TOKEN_STORAGE_KEY, token);
+      } catch (error) {
+        console.error('[tarjeta-lealtad] No se pudo guardar token en localStorage', error);
+      }
+    }
+
+    function getStoredToken() {
+      try {
+        return localStorage.getItem(LOYALTY_TOKEN_STORAGE_KEY) || "";
+      } catch (error) {
+        console.error('[tarjeta-lealtad] No se pudo leer token de localStorage', error);
+        return "";
+      }
+    }
+
+    function resolveToken() {
+      const url = new URL(window.location.href);
+      const tokenFromUrl = getTokenFromUrl();
+      const isPwaEntry = url.searchParams.get('pwa') === '1';
+
+      if (tokenFromUrl) {
+        persistToken(tokenFromUrl);
+        if (isPwaEntry) {
+          url.searchParams.delete('pwa');
+          url.searchParams.set('token', tokenFromUrl);
+          history.replaceState(null, '', url.pathname + url.search);
+        }
+        return tokenFromUrl;
+      }
+
+      if (!isPwaEntry) {
+        return "";
+      }
+
+      const storedToken = getStoredToken();
+      if (!storedToken) {
+        return "";
+      }
+
+      url.searchParams.delete('pwa');
+      url.searchParams.set('token', storedToken);
+      history.replaceState(null, '', url.pathname + url.search);
+
+      return storedToken;
     }
 
     function money(n) {
@@ -402,10 +520,10 @@
     }
 
     async function cargarTarjeta() {
-      const token = getToken();
+      const token = resolveToken();
 
       if (!token) {
-        setNotFound("Falta el token en el link.");
+        setNotFound("Falta el token en el link o en esta instalación.");
         return;
       }
 
@@ -441,7 +559,7 @@
         }
         setLevelExtras(c, promotions);
 
-        const pwaLink = `${DOMAIN_BASE}/tarjeta-lealtad?token=${encodeURIComponent(token)}`;
+        const pwaLink = `${DOMAIN_BASE}/tarjeta-lealtad.html?token=${encodeURIComponent(token)}`;
         setQrFromLink(pwaLink);
 
         setStatus("");
@@ -450,6 +568,9 @@
         setNotFound("No pudimos cargar tu tarjeta. Intenta de nuevo.");
       }
     }
+
+    registerServiceWorker();
+    setupInstallPrompt();
 
     try {
       const app = initializeApp(firebaseConfig);
@@ -473,6 +594,7 @@
       };
 
       console.log("[tarjeta-lealtad] Firebase conectado:", firebaseConfig.projectId);
+      console.log("[tarjeta-lealtad] Start URL fijo PWA:", FIXED_PWA_URL);
 
       await loadScript("/shared/loyaltyService.js");
 
