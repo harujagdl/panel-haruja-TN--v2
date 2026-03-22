@@ -195,6 +195,87 @@
       gap: 4px;
     }
 
+    .beneficios-box{
+      margin-top: 12px;
+      text-align: left;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      background: linear-gradient(180deg, rgba(167,181,158,.18), rgba(255,255,255,.9));
+    }
+
+    .beneficios-box h3{
+      margin: 0;
+      font-size: 13px;
+      color: #383234;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .promos-contador{
+      margin: 4px 0 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .promos-lista{
+      display: grid;
+      gap: 8px;
+    }
+
+    .promo-item{
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fff;
+      box-shadow: 0 6px 12px rgba(15, 23, 42, .04);
+    }
+
+    .promo-head{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .promo-badge{
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #3f4d38;
+      background: rgba(167,181,158,.25);
+    }
+
+    .promo-status{
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .promo-desc{
+      margin: 0;
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .promo-vigencia{
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .promo-empty{
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+      padding: 8px 4px;
+    }
+
     .badge{
       display:inline-flex;
       align-items:center;
@@ -230,15 +311,20 @@
       <div class="hint">Presenta esta tarjeta en cada visita 💚</div>
 
       <div class="grid">
-        <div class="label">Visitas</div>
-        <div class="value" id="visitasCliente">--</div>
-
         <div class="label">Nivel</div>
         <div class="value" id="nivelCliente">--</div>
 
         <div class="label">Total compras</div>
         <div class="value" id="comprasCliente">$0.00</div>
       </div>
+
+      <section class="beneficios-box">
+        <h3>Promociones para ti</h3>
+        <div class="promos-contador" id="promosContador">Cargando promociones...</div>
+        <div id="promosCliente" class="promos-lista">
+          <p class="promo-empty">Cargando promociones disponibles...</p>
+        </div>
+      </section>
 
       <div class="qrbox" id="qrBox" style="display:none;">
         <div id="qrSvg"></div>
@@ -251,11 +337,6 @@
       <div class="info-box" id="beneficiosBox" style="display:none;">
         <h3>Beneficios del nivel</h3>
         <ul id="beneficiosNivel"></ul>
-      </div>
-
-      <div class="info-box" id="promosBox" style="display:none;">
-        <h3>Promociones activas</h3>
-        <ul id="promosNivel"></ul>
       </div>
 
       <button class="btn" id="btnRefresh" type="button">Actualizar datos</button>
@@ -350,15 +431,15 @@
     function setNotFound(msg) {
       document.getElementById("nombreCliente").textContent = "Cliente no encontrado";
       document.getElementById("puntosCliente").innerHTML = '-- <span>pts</span>';
-      document.getElementById("visitasCliente").textContent = "--";
       document.getElementById("nivelCliente").textContent = "--";
       document.getElementById("comprasCliente").textContent = money(0);
+      document.getElementById("promosContador").textContent = "0 beneficios disponibles";
+      document.getElementById("promosCliente").innerHTML = '<p class="promo-empty">Por ahora no hay promociones activas para tu nivel 💚</p>';
 
       document.getElementById("qrBox").style.display = "none";
       document.getElementById("qrTexto").style.display = "none";
       document.getElementById("tokenBadge").style.display = "none";
       document.getElementById('beneficiosBox').style.display = 'none';
-      document.getElementById('promosBox').style.display = 'none';
 
       setStatus(msg || "No encontramos tu tarjeta, revisa el link con Haruja.", true);
     }
@@ -369,25 +450,93 @@
       ul.innerHTML = values.map((value) => `<li>${value}</li>`).join('');
     }
 
-    function setLevelExtras(client, promotions = []) {
+    function nivelNormalizado(nivel) {
+      return String(nivel || "").trim().toLowerCase();
+    }
+
+    function promoAplicaANivel(promo, nivelCliente) {
+      const niveles = Array.isArray(promo?.levels || promo?.niveles) ? (promo.levels || promo.niveles) : [];
+      return niveles.map((x) => String(x).trim().toLowerCase()).includes(nivelNormalizado(nivelCliente));
+    }
+
+    function fechaValida(valor) {
+      if (!valor) return null;
+      const fecha = new Date(valor);
+      return Number.isNaN(fecha.getTime()) ? null : fecha;
+    }
+
+    function promoEnVigencia(promo, ahora = new Date()) {
+      if (!promo || promo.active !== true) return false;
+      const inicio = fechaValida(promo.startAt || promo.vigenciaInicio);
+      const fin = fechaValida(promo.endAt || promo.vigenciaFin);
+      const tiempoActual = ahora.getTime();
+      if (inicio && tiempoActual < inicio.getTime()) return false;
+      if (fin && tiempoActual > fin.getTime()) return false;
+      return true;
+    }
+
+    function formatearFechaCorta(valor) {
+      const fecha = fechaValida(valor);
+      if (!fecha) return "Sin fecha límite";
+      return fecha.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+    }
+
+    function renderPromocionesDisponibles(nivelCliente, promociones = []) {
+      const promoBox = document.getElementById("promosCliente");
+      const contador = document.getElementById("promosContador");
+      const nivel = nivelNormalizado(nivelCliente);
+
+      const visibles = (Array.isArray(promociones) ? promociones : [])
+        .filter((promo) => promoEnVigencia(promo))
+        .filter((promo) => nivel && promoAplicaANivel(promo, nivel))
+        .sort((a, b) => {
+          const prioridadA = Number(a.priority || a.prioridad || 0);
+          const prioridadB = Number(b.priority || b.prioridad || 0);
+          if (prioridadA !== prioridadB) return prioridadA - prioridadB;
+
+          const finA = fechaValida(a.endAt || a.vigenciaFin)?.getTime() ?? Number.POSITIVE_INFINITY;
+          const finB = fechaValida(b.endAt || b.vigenciaFin)?.getTime() ?? Number.POSITIVE_INFINITY;
+          if (finA !== finB) return finA - finB;
+
+          const nombreA = String(a.title || a.nombre || "").trim();
+          const nombreB = String(b.title || b.nombre || "").trim();
+          return nombreA.localeCompare(nombreB, "es");
+        });
+
+      if (!visibles.length) {
+        contador.textContent = "0 beneficios disponibles";
+        promoBox.innerHTML = '<p class="promo-empty">Por ahora no hay promociones activas para tu nivel 💚</p>';
+        return;
+      }
+
+      contador.textContent = visibles.length === 1 ? "1 promoción activa para ti" : `${visibles.length} beneficios disponibles`;
+      promoBox.innerHTML = visibles.map((promo) => {
+        const nombre = String(promo.title || promo.nombre || "Promoción").trim();
+        const descripcion = String(promo.description || promo.descripcion || "").trim() || "Beneficio activo para tu nivel.";
+        const vigencia = `Válida hasta ${formatearFechaCorta(promo.endAt || promo.vigenciaFin)}`;
+        return `
+          <article class="promo-item">
+            <div class="promo-head">
+              <span class="promo-badge">${nombre}</span>
+              <span class="promo-status">Activa</span>
+            </div>
+            <p class="promo-desc">${descripcion}</p>
+            <div class="promo-vigencia">${vigencia}</div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function setLevelExtras(client) {
       const benefits = Array.isArray(client?.levelBenefits) ? client.levelBenefits : [];
-      const promoLabels = promotions.map((item) => item.title).filter(Boolean);
 
       const beneficiosBox = document.getElementById('beneficiosBox');
-      const promosBox = document.getElementById('promosBox');
 
       if (benefits.length) {
         fillList('beneficiosNivel', benefits);
         beneficiosBox.style.display = 'block';
       } else {
         beneficiosBox.style.display = 'none';
-      }
-
-      if (promoLabels.length) {
-        fillList('promosNivel', promoLabels);
-        promosBox.style.display = 'block';
-      } else {
-        promosBox.style.display = 'none';
       }
     }
 
@@ -426,20 +575,18 @@
 
         document.getElementById("nombreCliente").textContent = c.name || "Cliente Haruja";
         document.getElementById("puntosCliente").innerHTML = `${Number(c.points || 0)} <span>pts</span>`;
-        document.getElementById("visitasCliente").textContent = Number(c.visits || 0);
         document.getElementById("nivelCliente").textContent = c.level || "Nuevo";
         document.getElementById("comprasCliente").textContent = money(c.totalPurchases || 0);
 
         let promotions = [];
-        if (c.levelId) {
-          try {
-            const promoResponse = await window.loyaltyService.getPromotionsForLevel(c.levelId);
-            promotions = promoResponse.items || [];
-          } catch (_err) {
-            promotions = [];
-          }
+        try {
+          const promoResponse = await window.loyaltyService.getActivePromotions();
+          promotions = promoResponse.items || [];
+        } catch (_err) {
+          promotions = [];
         }
-        setLevelExtras(c, promotions);
+        renderPromocionesDisponibles(c.level, promotions);
+        setLevelExtras(c);
 
         const pwaLink = `${DOMAIN_BASE}/tarjeta-lealtad?token=${encodeURIComponent(token)}`;
         setQrFromLink(pwaLink);
