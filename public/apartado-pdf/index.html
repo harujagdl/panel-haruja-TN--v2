@@ -6,39 +6,74 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <style>
-@page { size: Letter; margin: 0; }
-html,body{margin:0;padding:0;background:#fff}
-body{font-family:"Segoe UI",Arial,sans-serif;color:#383234}
-.ticket-pdf{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box;width:100%;max-width:736px;margin:0 auto;background:#fff;padding:10px 12px;}
-.logo-wrap{text-align:center;min-height:72px}
-.logo{width:180px;height:auto;display:block;margin:0 auto}
-.top-line{border:0;border-top:2px solid #383234;margin:6px 0 8px}
-.top-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.title{font-size:18px;font-weight:700;text-transform:uppercase}
-.folio{font-weight:700;background:#faf7f2;padding:5px 10px;border-radius:999px;font-size:13px}
-.meta{display:grid;grid-template-columns:86px 1fr;gap:3px 10px;font-size:12px;margin-bottom:6px}
-.section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin:7px 0 5px;color:#a7b59e}
-table{width:100%;border-collapse:collapse;table-layout:fixed}
-thead th{text-align:left;font-size:11px;text-transform:uppercase;background:#faf7f2;border-top:1px solid #d8d3cc;border-bottom:1px solid #d8d3cc;padding:5px 6px}
-tbody td{font-size:11.5px;padding:5px 6px;border-bottom:1px solid rgba(56,50,52,.09);vertical-align:top}
-.col-code{width:23%}.col-desc{width:33%}.col-qty{width:10%}.col-unit{width:17%}.col-amount{width:17%}
-.cell-desc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ta-center{text-align:center}.ta-right{text-align:right}
-.avoid-break{break-inside:avoid;page-break-inside:avoid;page-break-before:avoid;page-break-after:avoid}
-.totals-box{width:298px;margin-left:auto;margin-top:6px;background:#faf7f2;border:1px solid rgba(167,181,158,.4);border-radius:10px;padding:7px 9px;break-inside:avoid;page-break-inside:avoid;page-break-before:avoid;page-break-after:avoid}
-.totals-row{display:flex;justify-content:space-between;margin:3px 0;font-size:12px}.totals-grand{border-top:2px solid #a7b59e;padding-top:6px;margin-top:5px;font-size:15px;font-weight:800}
-.bottom-block{margin-top:6px;break-inside:avoid;page-break-inside:avoid;page-break-before:avoid;page-break-after:avoid}
-.legal-box{margin-top:0;font-size:9.9px;line-height:1.16;break-inside:avoid;page-break-inside:avoid;page-break-before:avoid;page-break-after:avoid}
-.legal-box h3{margin:0 0 3px;font-size:10.9px}
-.legal-box h4{margin:5px 0 2px;font-size:10.5px;color:#a7b59e;border-left:4px solid #a7b59e;padding-left:7px}
-.legal-box p{margin:0 0 2px}
-.footer-box{display:flex;justify-content:flex-end;margin-top:5px;break-inside:avoid;page-break-inside:avoid;page-break-before:avoid;page-break-after:avoid}
-.qr-box{text-align:center;background:#faf7f2;border:1px solid rgba(167,181,158,.45);border-radius:12px;padding:5px;width:104px;break-inside:avoid;page-break-inside:avoid;page-break-before:avoid;page-break-after:avoid}
-#qr{display:block;margin:auto;width:82px;height:82px}.qr-caption{font-size:9px;line-height:1.1}
+@page { size: Letter; margin: 8mm; }
+html, body { margin: 0; padding: 0; background: #fff; }
+body { font-family: "Segoe UI", Arial, sans-serif; color: #383234; }
+.ticket-pdf {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  background: #fff;
+  padding: 4px 6px;
+}
+.logo-wrap { text-align: center; min-height: 66px; }
+.logo { width: 174px; height: auto; display: block; margin: 0 auto; }
+.top-line { border: 0; border-top: 2px solid #383234; margin: 4px 0 6px; }
+.top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.title { font-size: 17px; font-weight: 700; text-transform: uppercase; }
+.folio { font-weight: 700; background: #faf7f2; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; }
+.meta { display: grid; grid-template-columns: 82px 1fr; gap: 2px 8px; font-size: 11.5px; margin-bottom: 6px; }
+.section-title { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin: 6px 0 4px; color: #a7b59e; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+thead th { text-align: left; font-size: 10.5px; text-transform: uppercase; background: #faf7f2; border-top: 1px solid #d8d3cc; border-bottom: 1px solid #d8d3cc; padding: 4px 6px; }
+tbody td { font-size: 11px; padding: 4px 6px; border-bottom: 1px solid rgba(56, 50, 52, .09); vertical-align: top; }
+.col-code { width: 23%; }
+.col-desc { width: 33%; }
+.col-qty { width: 10%; }
+.col-unit { width: 17%; }
+.col-amount { width: 17%; }
+.cell-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ta-center { text-align: center; }
+.ta-right { text-align: right; }
+.avoid-break { break-inside: avoid; page-break-inside: avoid; }
+.totals-box {
+  width: 292px;
+  margin-left: auto;
+  margin-top: 5px;
+  background: #faf7f2;
+  border: 1px solid rgba(167, 181, 158, .4);
+  border-radius: 10px;
+  padding: 6px 8px;
+}
+.totals-row { display: flex; justify-content: space-between; margin: 2px 0; font-size: 11.5px; }
+.totals-grand { border-top: 2px solid #a7b59e; padding-top: 5px; margin-top: 4px; font-size: 14px; font-weight: 800; }
+.bottom-grid {
+  margin-top: 5px;
+  display: grid;
+  grid-template-columns: 1fr 112px;
+  gap: 10px;
+  align-items: end;
+}
+.legal-box { font-size: 9.5px; line-height: 1.13; }
+.legal-box h3 { margin: 0 0 2px; font-size: 10.5px; }
+.legal-box h4 { margin: 4px 0 2px; font-size: 10px; color: #a7b59e; border-left: 4px solid #a7b59e; padding-left: 6px; }
+.legal-box p { margin: 0 0 2px; }
+.qr-box {
+  text-align: center;
+  background: #faf7f2;
+  border: 1px solid rgba(167, 181, 158, .45);
+  border-radius: 12px;
+  padding: 5px;
+  width: 112px;
+}
+#qr { display: block; margin: auto; width: 84px; height: 84px; }
+.qr-caption { font-size: 8.8px; line-height: 1.1; }
 @media print {
-html, body { background:#fff !important; }
-body { margin:0; padding:0; }
-.ticket-pdf { margin:0 auto; box-shadow:none !important; }
+  html, body { background: #fff !important; }
+  .ticket-pdf { margin: 0 auto; box-shadow: none !important; }
 }
 </style>
 </head>
@@ -47,11 +82,172 @@ body { margin:0; padding:0; }
 <script>
 const params = new URLSearchParams(window.location.search);
 const autoPrint = params.get('autoprint') === '1';
-function getFolioFromPath(){const p=new URLSearchParams(window.location.search);const q=String(p.get('folio')||'').trim();if(q)return q;const parts=window.location.pathname.split('/').filter(Boolean);if(parts[0]==='apartado-pdf'&&parts[1])return decodeURIComponent(parts[1]).trim();return''}
-function money(v){const n=Number(v||0);return '$'+n.toLocaleString('es-MX',{minimumFractionDigits:2})}
-function esc(v){return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')}
-async function loadTicket(){const folio=getFolioFromPath();if(!folio){document.getElementById('app').textContent='Folio inválido';return}let text='';try{const res=await fetch(`/api/core?action=apartados&op=detail&folio=${encodeURIComponent(folio)}`);text=await res.text();let payload;try{payload=JSON.parse(text)}catch(err){document.getElementById('app').innerHTML='<p>No se pudo interpretar la respuesta del servidor.</p>';return}if(!res.ok||payload?.ok===false){const message=payload?.message||'No se pudo cargar el apartado.';document.getElementById('app').innerHTML=`<p>${esc(message)}</p>`;return}await renderTicket(payload?.data||payload)}catch(err){document.getElementById('app').innerHTML='<p>Error al cargar el apartado. Intenta nuevamente.</p>';}}
-async function renderTicket(payload){document.body.dataset.qrReady='0';const a=payload.apartado||payload;const rows=(a.productos||[]).length?(a.productos||[]).map(i=>`<tr class="table-row"><td>${esc(i.codigo)}</td><td class="cell-desc">${esc(i.descripcion)}</td><td class="ta-center">${esc(i.cantidad||1)}</td><td class="ta-right">${money(i.precio)}</td><td class="ta-right">${money(i.subtotal)}</td></tr>`).join(''):`<tr class="table-row"><td colspan="5" class="ta-center">No hay productos</td></tr>`;document.getElementById('app').innerHTML=`<section class="ticket-pdf" data-pdf-ticket="true"><div class="logo-wrap"><img class="logo" src="/assets/haruja-logo.png" alt="HarujaGdl"></div><hr class="top-line"><div class="top-row"><div class="title">Ticket de apartado</div><div class="folio">#${esc(a.folio)}</div></div><div class="meta"><b>Fecha:</b><div>${esc(a.fecha)}</div><b>Cliente:</b><div>${esc(a.cliente)}</div><b>Contacto:</b><div>${esc(a.telefono||a.contacto)}</div></div><div class="section-title">Detalle</div><table><thead><tr><th class="col-code">Código</th><th class="col-desc">Descripción</th><th class="col-qty ta-center">Cant</th><th class="col-unit ta-right">P.U.</th><th class="col-amount ta-right">Importe</th></tr></thead><tbody>${rows}</tbody></table><div class="totals-box avoid-break"><div class="totals-row"><b>Subtotal:</b><span>${money(a.subtotal)}</span></div><div class="totals-row"><b>Anticipo:</b><span>${money(a.anticipo)}</span></div><div class="totals-row"><b>Descuento:</b><span>${money(a.descuento)}</span></div><div class="totals-row totals-grand"><b>TOTAL</b><span>${money(a.total)}</span></div></div><div class="bottom-block avoid-break"><div class="legal-box avoid-break"><h3>Gracias por tu compra en HarujaGdl</h3><p>Todos nuestros productos pasan por inspección para garantizar calidad, talla solicitada y que estén libres de defectos.</p><h4>CAMBIOS</h4><p>Solicítalo dentro de 7 días naturales de recibir tu compra.</p><p>La prenda debe estar nueva, sin uso, sin lavar y con etiquetas originales.</p><p>No aplican cambios en: prendas tejidas, bordadas, con aplicaciones, accesorios, prendas de ropa íntima, trajes de baño, rebajas o compras con cupón.</p><p>Los gastos de envío corren por cuenta del cliente.</p><p>Solicita tu cambio por WhatsApp al 33 3033 6506 indicando motivo, prenda y talla deseada.</p><h4>APARTADOS</h4><p>Puedes apartar con 25% de anticipo.</p><p>Plazo máximo para recoger: 30 días.</p><p>Pasado este tiempo, la prenda vuelve a la venta y el anticipo queda como saldo a favor por 3 meses a partir de la fecha inicial del apartado.</p><p>No aplican cambios ni devoluciones en apartados.</p><p>No realizamos devoluciones de dinero. Todos los cambios son por producto de igual o mayor valor.</p><p><strong>Gracias por elegirnos</strong></p></div><div class="footer-box avoid-break"><div class="qr-box"><canvas id="qr"></canvas><div class="qr-caption">Escanea para ver tu apartado</div></div></div></div></section>`;const urlStatus=`${window.location.origin}/apartado/${encodeURIComponent(a.folio||'')}`;const qrCanvas=document.getElementById('qr');if(window.QRCode&&typeof window.QRCode.toCanvas==='function'){await window.QRCode.toCanvas(qrCanvas,urlStatus,{width:82,margin:1})}else{const ctx=qrCanvas.getContext('2d');qrCanvas.width=82;qrCanvas.height=82;ctx.fillStyle='#fff';ctx.fillRect(0,0,82,82);ctx.fillStyle='#111';ctx.fillRect(10,10,62,62);}document.body.dataset.qrReady='1';if(autoPrint){setTimeout(()=>window.print(),500)}}
+window.__qrReady = false;
+
+function getFolioFromPath() {
+  const p = new URLSearchParams(window.location.search);
+  const q = String(p.get('folio') || '').trim();
+  if (q) return q;
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  if (parts[0] === 'apartado-pdf' && parts[1]) return decodeURIComponent(parts[1]).trim();
+  return '';
+}
+
+function money(v) {
+  const n = Number(v || 0);
+  return '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2 });
+}
+
+function esc(v) {
+  return String(v ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+async function loadTicket() {
+  const folio = getFolioFromPath();
+  if (!folio) {
+    document.getElementById('app').textContent = 'Folio inválido';
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/core?action=apartados&op=detail&folio=${encodeURIComponent(folio)}`);
+    const text = await res.text();
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch (_) {
+      document.getElementById('app').innerHTML = '<p>No se pudo interpretar la respuesta del servidor.</p>';
+      return;
+    }
+
+    if (!res.ok || payload?.ok === false) {
+      const message = payload?.message || 'No se pudo cargar el apartado.';
+      document.getElementById('app').innerHTML = `<p>${esc(message)}</p>`;
+      return;
+    }
+
+    await renderTicket(payload?.data || payload);
+  } catch (_) {
+    document.getElementById('app').innerHTML = '<p>Error al cargar el apartado. Intenta nuevamente.</p>';
+  }
+}
+
+async function waitForQrCanvasReady(canvas, timeoutMs = 10000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (canvas && canvas.width > 10 && canvas.height > 10) {
+      const ctx = canvas.getContext?.('2d');
+      if (ctx) {
+        try {
+          const center = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data;
+          if (Number(center[3] || 0) > 0) return true;
+        } catch (_) {
+          // noop
+        }
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+  return false;
+}
+
+async function renderTicket(payload) {
+  document.body.dataset.qrReady = '0';
+  window.__qrReady = false;
+
+  const a = payload.apartado || payload;
+  const products = Array.isArray(a.productos) ? a.productos : [];
+  const rows = products.length
+    ? products.map((i) => `<tr><td>${esc(i.codigo)}</td><td class="cell-desc">${esc(i.descripcion)}</td><td class="ta-center">${esc(i.cantidad || 1)}</td><td class="ta-right">${money(i.precio)}</td><td class="ta-right">${money(i.subtotal)}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="ta-center">No hay productos</td></tr>';
+
+  document.getElementById('app').innerHTML = `
+    <section class="ticket-pdf" data-pdf-ticket="true">
+      <div class="logo-wrap"><img class="logo" src="/assets/haruja-logo.png" alt="HarujaGdl"></div>
+      <hr class="top-line">
+      <div class="top-row"><div class="title">Ticket de apartado</div><div class="folio">#${esc(a.folio)}</div></div>
+      <div class="meta">
+        <b>Fecha:</b><div>${esc(a.fecha)}</div>
+        <b>Cliente:</b><div>${esc(a.cliente)}</div>
+        <b>Contacto:</b><div>${esc(a.telefono || a.contacto)}</div>
+      </div>
+
+      <div class="section-title">Detalle</div>
+      <table>
+        <thead>
+          <tr>
+            <th class="col-code">Código</th>
+            <th class="col-desc">Descripción</th>
+            <th class="col-qty ta-center">Cant</th>
+            <th class="col-unit ta-right">P.U.</th>
+            <th class="col-amount ta-right">Importe</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+
+      <div class="totals-box avoid-break">
+        <div class="totals-row"><b>Subtotal:</b><span>${money(a.subtotal)}</span></div>
+        <div class="totals-row"><b>Anticipo:</b><span>${money(a.anticipo)}</span></div>
+        <div class="totals-row"><b>Descuento:</b><span>${money(a.descuento)}</span></div>
+        <div class="totals-row totals-grand"><b>TOTAL</b><span>${money(a.total)}</span></div>
+      </div>
+
+      <div class="bottom-grid avoid-break">
+        <div class="legal-box avoid-break">
+          <h3>Gracias por tu compra en HarujaGdl</h3>
+          <p>Todos nuestros productos pasan por inspección para garantizar calidad, talla solicitada y que estén libres de defectos.</p>
+          <h4>CAMBIOS</h4>
+          <p>Solicítalo dentro de 7 días naturales de recibir tu compra.</p>
+          <p>La prenda debe estar nueva, sin uso, sin lavar y con etiquetas originales.</p>
+          <p>No aplican cambios en: prendas tejidas, bordadas, con aplicaciones, accesorios, prendas de ropa íntima, trajes de baño, rebajas o compras con cupón.</p>
+          <p>Los gastos de envío corren por cuenta del cliente.</p>
+          <p>Solicita tu cambio por WhatsApp al 33 3033 6506 indicando motivo, prenda y talla deseada.</p>
+          <h4>APARTADOS</h4>
+          <p>Puedes apartar con 25% de anticipo.</p>
+          <p>Plazo máximo para recoger: 30 días.</p>
+          <p>Pasado este tiempo, la prenda vuelve a la venta y el anticipo queda como saldo a favor por 3 meses a partir de la fecha inicial del apartado.</p>
+          <p>No aplican cambios ni devoluciones en apartados.</p>
+          <p>No realizamos devoluciones de dinero. Todos los cambios son por producto de igual o mayor valor.</p>
+          <p><strong>Gracias por elegirnos</strong></p>
+        </div>
+
+        <div class="qr-box avoid-break">
+          <canvas id="qr"></canvas>
+          <div class="qr-caption">Escanea para ver tu apartado</div>
+        </div>
+      </div>
+    </section>`;
+
+  const qrCanvas = document.getElementById('qr');
+  const urlStatus = `${window.location.origin}/apartado/${encodeURIComponent(a.folio || '')}`;
+
+  if (window.QRCode && typeof window.QRCode.toCanvas === 'function') {
+    await window.QRCode.toCanvas(qrCanvas, urlStatus, { width: 84, margin: 1 });
+  } else {
+    const ctx = qrCanvas.getContext('2d');
+    qrCanvas.width = 84;
+    qrCanvas.height = 84;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 84, 84);
+    ctx.fillStyle = '#111';
+    ctx.fillRect(10, 10, 64, 64);
+  }
+
+  const qrReady = await waitForQrCanvasReady(qrCanvas);
+  if (qrReady) {
+    document.body.dataset.qrReady = '1';
+    window.__qrReady = true;
+  }
+
+  if (autoPrint) {
+    setTimeout(() => window.print(), 500);
+  }
+}
+
 loadTicket();
 </script>
 </body>

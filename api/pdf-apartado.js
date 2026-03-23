@@ -14,10 +14,6 @@ function getBaseUrl(reqLike = {}) {
   return host ? `${proto}://${host}` : '';
 }
 
-function shouldSkipDriveUpload() {
-  return String(process.env.APARTADOS_PDF_DISABLE_DRIVE_UPLOAD || '').trim() === '1';
-}
-
 function toErrorPayload(error, stage) {
   return {
     ok: false,
@@ -30,72 +26,52 @@ function toErrorPayload(error, stage) {
   };
 }
 
+function shouldJsonResponse(req) {
+  const format = String(req.query?.format || req.body?.format || '').trim().toLowerCase();
+  return format === 'json';
+}
+
 async function getExecutablePath() {
-  const isProd = process.env.NODE_ENV === 'production';
-
-  // En producción NO forzar rutas manuales.
-  if (isProd) {
-    return await chromium.executablePath();
-  }
-
-  // Solo en local permitir override manual si hace falta.
   const localOverride = String(process.env.CHROME_EXECUTABLE_PATH || '').trim();
   if (localOverride) {
-    console.log('pdf:chrome_override_dev', { executablePath: localOverride });
+    console.log('pdf:chrome_override', { executablePath: localOverride });
     return localOverride;
   }
-
-  return await chromium.executablePath();
+  return chromium.executablePath();
 }
 
 async function waitForQrReady(page) {
   await page.waitForFunction(
     () => {
-      const flagOk = document?.body?.dataset?.qrReady === '1';
-      if (!flagOk) return false;
+      const body = document?.body;
+      const datasetReady = body?.dataset?.qrReady === '1';
+      const globalReady = window.__qrReady === true;
+      if (!datasetReady && !globalReady) return false;
 
       const canvas = document.getElementById('qr');
       if (!canvas) return false;
-
-      const hasSize = Number(canvas.width) > 0 && Number(canvas.height) > 0;
-      if (!hasSize) return false;
+      const width = Number(canvas.width || 0);
+      const height = Number(canvas.height || 0);
+      if (width < 20 || height < 20) return false;
 
       const ctx = canvas.getContext?.('2d');
       if (!ctx) return false;
 
-      // Revisa varios puntos del canvas para evitar falsos negativos.
-      const points = [
-        [0, 0],
-        [Math.max(0, Math.floor(canvas.width / 2)), Math.max(0, Math.floor(canvas.height / 2))],
-        [Math.max(0, canvas.width - 1), Math.max(0, canvas.height - 1)],
-      ];
-
-      return points.some(([x, y]) => {
-        try {
-          const data = ctx.getImageData(x, y, 1, 1)?.data || [];
-          return Number(data[3] || 0) > 0;
-        } catch {
-          return false;
-        }
-      });
+      try {
+        const center = ctx.getImageData(Math.floor(width / 2), Math.floor(height / 2), 1, 1)?.data || [];
+        return Number(center[3] || 0) > 0;
+      } catch (_) {
+        return false;
+      }
     },
-    { timeout: 15000 }
+    { timeout: 20000 },
   );
 }
 
-export default async function handler(req, res) {
-  console.log('pdf:start');
-
-  const folio = String(req.query?.folio || req.body?.folio || '').trim();
-  console.log('pdf:folio', { folio });
-
-  if (!folio) {
-    return res.status(400).json({ ok: false, message: 'folio es obligatorio.' });
-  }
-
+async function buildOfficialPdf({ folio, req }) {
   const baseUrl = getBaseUrl(req);
   if (!baseUrl) {
-    return res.status(500).json({ ok: false, message: 'No se pudo resolver APP_URL.' });
+    throw new Error('No se pudo resolver APP_URL.');
   }
 
   const targetUrl = `${baseUrl}/apartado-pdf/${encodeURIComponent(folio)}`;
@@ -104,44 +80,28 @@ export default async function handler(req, res) {
 
   try {
     const executablePath = await getExecutablePath();
-    console.log('pdf:executable_path_ok');
-
     browser = await puppeteer.launch({
-      args: [
-        ...chromium.args,
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--font-render-hinting=none',
-        '--single-process',
-      ],
+      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
       executablePath,
-      headless: 'new',
+      headless: chromium.headless,
       defaultViewport: chromium.defaultViewport,
       ignoreHTTPSErrors: true,
     });
-    console.log('pdf:browser_ok', { folio, targetUrl });
+    console.log('pdf:browser_ok', { folio });
 
-    stage = 'page_render';
+    stage = 'html_render';
     const page = await browser.newPage();
-    await page.emulateMediaType('screen');
-    console.log('pdf:page_ok_opened');
-
+    await page.emulateMediaType('print');
     await page.goto(targetUrl, {
       waitUntil: 'networkidle2',
       timeout: 45000,
     });
 
     await page.waitForSelector('[data-pdf-ticket="true"]', { timeout: 15000 });
-
     await page.evaluate(async () => {
-      if (document?.fonts?.ready) {
-        await document.fonts.ready;
-      }
+      if (document?.fonts?.ready) await document.fonts.ready;
     });
-
-    console.log('pdf:html_ok', { targetUrl });
+    console.log('pdf:html_ok', { folio, targetUrl });
 
     stage = 'qr_wait';
     await waitForQrReady(page);
@@ -152,51 +112,18 @@ export default async function handler(req, res) {
       format: 'letter',
       printBackground: true,
       margin: {
-        top: '8mm',
-        right: '8mm',
-        bottom: '8mm',
-        left: '8mm',
+        top: '0',
+        right: '0',
+        bottom: '0',
+        left: '0',
       },
-      // Evita pelearse con @page si el HTML ya trae estilos de impresión.
-      preferCSSPageSize: false,
+      preferCSSPageSize: true,
     });
+    console.log('pdf:buffer_ok', { folio, bytes: pdfBuffer.length });
 
-    console.log('pdf:buffer_ok', { bytes: pdfBuffer.length });
-
-    if (shouldSkipDriveUpload()) {
-      console.log('pdf:drive_skip');
-    } else {
-      stage = 'drive_upload';
-      try {
-        const driveResult = await saveRenderedApartadoPdfToDrive({ folio, pdfBuffer });
-
-        if (driveResult?.ok) {
-          console.log('pdf:drive_ok', {
-            fileId: driveResult.fileId,
-            fileName: driveResult.fileName,
-          });
-        } else {
-          console.error('pdf:drive_error', {
-            details: driveResult?.details || driveResult?.error || 'unknown error',
-          });
-        }
-      } catch (driveError) {
-        console.error('pdf:drive_error', {
-          message: driveError?.message || 'unknown error',
-        });
-      }
-    }
-
-    stage = 'response_send';
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${folio}.pdf"`);
-    res.status(200).send(pdfBuffer);
-    console.log('pdf:response_ok', { folio });
-    return;
+    return { pdfBuffer, stage: 'drive_upload' };
   } catch (error) {
-    const payload = toErrorPayload(error, stage);
-    console.error('pdf:error', payload);
-    return res.status(500).json(payload);
+    throw Object.assign(error, { _stage: stage });
   } finally {
     if (browser) {
       try {
@@ -207,5 +134,57 @@ export default async function handler(req, res) {
         });
       }
     }
+  }
+}
+
+export default async function handler(req, res) {
+  console.log('pdf:start');
+  const folio = String(req.query?.folio || req.body?.folio || '').trim();
+
+  if (!folio) {
+    return res.status(400).json({ ok: false, message: 'folio es obligatorio.' });
+  }
+
+  const wantsJson = shouldJsonResponse(req);
+  let stage = 'browser_launch';
+
+  try {
+    const renderResult = await buildOfficialPdf({ folio, req });
+    stage = renderResult.stage || 'drive_upload';
+
+    const driveResult = await saveRenderedApartadoPdfToDrive({ folio, pdfBuffer: renderResult.pdfBuffer });
+    if (!driveResult?.ok || (!driveResult?.pdfUrl && !driveResult?.fileId)) {
+      throw new Error(driveResult?.details || driveResult?.error || 'No se pudo guardar el PDF en Drive.');
+    }
+
+    const payload = {
+      ok: true,
+      folio,
+      pdfUrl: String(driveResult.pdfUrl || '').trim(),
+      fileId: String(driveResult.fileId || '').trim(),
+      updatedAt: String(driveResult.updatedAt || new Date().toISOString()).trim(),
+      fileName: String(driveResult.fileName || '').trim(),
+      replaced: Boolean(driveResult.replaced),
+    };
+
+    console.log('pdf:drive_ok', { folio, fileId: payload.fileId, pdfUrl: payload.pdfUrl });
+
+    if (wantsJson) {
+      console.log('pdf:response_ok', { folio, mode: 'json' });
+      return res.status(200).json(payload);
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${folio}.pdf"`);
+    res.setHeader('X-Apartado-Pdf-Url', payload.pdfUrl);
+    res.setHeader('X-Apartado-Pdf-File-Id', payload.fileId);
+    res.status(200).send(renderResult.pdfBuffer);
+    console.log('pdf:response_ok', { folio, mode: 'binary' });
+    return;
+  } catch (error) {
+    stage = error?._stage || stage;
+    const payload = toErrorPayload(error, stage);
+    console.error('pdf:error', payload);
+    return res.status(500).json(payload);
   }
 }

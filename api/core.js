@@ -104,7 +104,10 @@ async function handleApartados(req, res) {
   if (req.method === 'POST' && op === 'pdf-refresh') {
     if (!folio) return sendErr(res, 400, 'folio es obligatorio.');
     try {
-      const result = await regenerateApartadoPdf(folio, req.body || {});
+      const result = await regenerateApartadoPdf(folio, {
+        ...(req.body || {}),
+        appUrl: String(req.body?.appUrl || getBaseUrl(req) || '').trim(),
+      });
       if (result?.status) return res.status(result.status).json(result.body || { ok: false, message: 'No se pudo generar el PDF oficial.' });
       return res.status(200).json(result);
     } catch (err) {
