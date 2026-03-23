@@ -123,6 +123,38 @@ async function handleApartados(req, res) {
       });
     }
   }
+
+  if (req.method === 'POST' && op === 'pdf-webapp-proxy') {
+    console.log('pdf_proxy:start', { op, action: 'apartados' });
+    const webAppUrl = String(process.env.HARUJA_APARTADOS_PDF_WEBAPP_URL || '').trim();
+    if (!webAppUrl) {
+      console.error('pdf_proxy:missing_env', { env: 'HARUJA_APARTADOS_PDF_WEBAPP_URL' });
+      return sendErr(res, 500, 'Falta configurar HARUJA_APARTADOS_PDF_WEBAPP_URL en el servidor.');
+    }
+
+    try {
+      const proxyResp = await fetch(webAppUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(req.body || {}),
+      });
+      const raw = await proxyResp.text();
+      let payload;
+      try {
+        payload = JSON.parse(raw);
+      } catch (_) {
+        console.error('pdf_proxy:apps_script_invalid_json', { status: proxyResp.status });
+        return sendErr(res, 502, 'La respuesta del Apps Script no es JSON válido.');
+      }
+
+      console.log('pdf_proxy:apps_script_ok', { status: proxyResp.status, ok: Boolean(payload?.ok) });
+      return res.status(proxyResp.ok ? 200 : proxyResp.status).json(payload);
+    } catch (error) {
+      console.error('pdf_proxy:error', { message: error?.message });
+      return sendErr(res, 502, 'No se pudo conectar con el Apps Script.', error);
+    }
+  }
+
   if (req.method === 'POST' && op === 'pdf-drive-test') {
     const result = await runApartadoPdfDriveWriteTest();
     if (!result?.ok) return sendErr(res, 502, result?.error || 'No se pudo guardar el PDF en Drive.');
