@@ -142,32 +142,42 @@
       margin: 8px 0 14px;
     }
 
-    .actions {
-      display: grid;
-      gap: 10px;
+    .action-buttons{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      margin-top:14px;
     }
 
-    .btn{
+    .action-btn{
       width: 100%;
+      min-height: 44px;
+      padding: 10px 16px;
       border: none;
       border-radius: 999px;
-      padding: 14px 14px;
-      font-weight: 900;
-      font-size: 16px;
+      font-weight: 700;
+      font-size: 14px;
+      line-height: 1.2;
       cursor: pointer;
       background: var(--olive);
       color: #fff;
-      transition: transform .05s ease, background .15s ease;
+      transition: transform .15s ease, opacity .15s ease, background .15s ease;
     }
 
-    .btn:active{ transform: translateY(1px); }
-    .btn:hover{ background: var(--olive-dark); }
+    .action-btn:active{ transform: scale(.99); }
+    .action-btn:hover{ background: var(--olive-dark); }
 
-    .btn.secondary {
-      background: #4b5563;
+    .action-btn.primary {
+      background: var(--olive);
+      color:#fff;
     }
 
-    .btn.secondary:hover {
+    .action-btn.secondary {
+      background: #566277;
+      color:#fff;
+    }
+
+    .action-btn.secondary:hover {
       background: #374151;
     }
 
@@ -377,9 +387,9 @@
         <ul id="beneficiosNivel"></ul>
       </div>
 
-      <div class="actions">
-        <button class="btn" id="btnRefresh" type="button">Actualizar datos</button>
-        <button class="btn secondary" id="btnInstall" type="button" style="display:none;">Instalar app</button>
+      <div class="action-buttons">
+        <button class="action-btn primary" id="btnRefresh" type="button">Actualizar datos</button>
+        <button class="action-btn secondary" id="btnInstall" type="button" style="display:none;">Instalar app</button>
       </div>
 
       <div class="status" id="estado"></div>
@@ -605,6 +615,21 @@
       return Number.isNaN(ms) ? Number.NaN : ms;
     }
 
+    function toNumberSafe(value) {
+      if (typeof value === "number") return value;
+      if (typeof value === "string") {
+        const limpio = value.replace(/[^0-9.-]+/g, "");
+        const num = Number(limpio);
+        return Number.isNaN(num) ? 0 : num;
+      }
+      return 0;
+    }
+
+    function calcularPuntosDesdeCompras(totalCompras) {
+      const total = toNumberSafe(totalCompras);
+      return Math.max(0, Math.floor(total / 10));
+    }
+
     function promoEnVigencia(promo) {
       const now = Date.now();
       const inicio = toMillisSafe(promo?.vigenciaInicio || promo?.inicio || promo?.fechaInicio || promo?.startAt);
@@ -613,15 +638,35 @@
       return now >= inicio && now <= fin;
     }
 
+    function extractNormalizedValues(value) {
+      return toArray(value)
+        .flatMap((item) => {
+          if (item == null) return [];
+          if (typeof item === "object") {
+            return [
+              item.id,
+              item.nombre,
+              item.name,
+              item.slug,
+              item.value,
+              item.label,
+              item.nivelId,
+              item.nivelNombre,
+              item.tierId,
+              item.tierName
+            ];
+          }
+          return [item];
+        })
+        .filter(Boolean)
+        .map(norm);
+    }
+
     function promoAplicaANivel(promo, cliente) {
       const nivelesPromo = [
-        ...toArray(promo?.niveles),
-        ...toArray(promo?.levels),
-        ...toArray(promo?.nivelId),
-        ...toArray(promo?.tierId),
-        ...toArray(promo?.nivelNombre),
-        ...toArray(promo?.tierName)
-      ].filter(Boolean).map(norm);
+        ...extractNormalizedValues(promo?.niveles),
+        ...extractNormalizedValues(promo?.levels)
+      ];
 
       const candidatosCliente = [
         cliente?.nivelId,
@@ -629,13 +674,22 @@
         cliente?.nivelNombre,
         cliente?.nivelSlug,
         cliente?.tierId,
-        cliente?.tierName,
-        cliente?.level,
-        cliente?.levelId,
-        cliente?.levelName
+        cliente?.tierName
       ].filter(Boolean).map(norm);
 
       return candidatosCliente.some((valor) => nivelesPromo.includes(valor));
+    }
+
+    function ordenarPromociones(a, b) {
+      const pa = Number(a?.prioridad || 999);
+      const pb = Number(b?.prioridad || 999);
+      if (pa !== pb) return pa - pb;
+
+      const fa = toMillisSafe(a?.vigenciaFin || a?.fin || a?.fechaFin || a?.endAt);
+      const fb = toMillisSafe(b?.vigenciaFin || b?.fin || b?.fechaFin || b?.endAt);
+      if (fa !== fb) return fa - fb;
+
+      return String(a?.nombre || "").localeCompare(String(b?.nombre || ""));
     }
 
     function formatFechaCorta(value) {
@@ -666,10 +720,10 @@
           promo?.mecanica ||
           "Promo";
 
-        const nombre = promo?.nombre || promo?.title || "Promoción";
+        const nombre = promo?.nombre || "Promoción";
         const vigencia = formatFechaCorta(promo?.vigenciaFin || promo?.fin || promo?.fechaFin || promo?.endAt);
-        const descripcion = promo?.descripcion || promo?.description
-          ? `<div class="beneficio-desc">${promo?.descripcion || promo?.description}</div>`
+        const descripcion = promo?.descripcion
+          ? `<div class="beneficio-desc">${promo?.descripcion}</div>`
           : "";
 
         return `
@@ -687,9 +741,10 @@
 
     function filtrarPromocionesCliente(cliente, promociones = []) {
       return (Array.isArray(promociones) ? promociones : [])
-        .filter((promo) => promo?.activa === true || promo?.active === true)
+        .filter((promo) => promo?.activa === true)
         .filter((promo) => promoEnVigencia(promo))
-        .filter((promo) => promoAplicaANivel(promo, cliente));
+        .filter((promo) => promoAplicaANivel(promo, cliente))
+        .sort(ordenarPromociones);
     }
 
     function setLevelExtras(client) {
@@ -738,10 +793,19 @@
           return;
         }
 
-        document.getElementById("nombreCliente").textContent = c.name || "Cliente Haruja";
-        document.getElementById("puntosCliente").innerHTML = `${Number(c.points || 0)} <span>pts</span>`;
-        document.getElementById("nivelCliente").textContent = c.level || "Nuevo";
-        document.getElementById("comprasCliente").textContent = money(c.totalPurchases || 0);
+        const totalCompras = toNumberSafe(
+          c?.totalCompras ??
+          c?.compras ??
+          c?.montoAcumulado ??
+          c?.totalPurchases ??
+          0
+        );
+        const puntos = calcularPuntosDesdeCompras(totalCompras);
+
+        document.getElementById("nombreCliente").textContent = c?.name || c?.nombre || "Cliente Haruja";
+        document.getElementById("puntosCliente").innerHTML = `${puntos} <span>pts</span>`;
+        document.getElementById("nivelCliente").textContent = c?.nivelNombre || c?.nivel || c?.level || "Nuevo";
+        document.getElementById("comprasCliente").textContent = money(totalCompras);
 
         let promotions = [];
         try {
