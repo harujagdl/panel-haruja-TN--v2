@@ -101,6 +101,14 @@ async function handleApartados(req, res) {
     if (result?.status) return res.status(result.status).json(result.body);
     return sendOk(res, result);
   }
+  if (req.method === 'POST' && op === 'pdf-webapp-proxy') {
+    if (!folio) return sendErr(res, 400, 'folio es obligatorio.');
+    const result = await regenerateApartadoPdf(folio, {
+      ...(req.body || {}),
+    });
+    if (result?.status) return res.status(result.status).json(result.body);
+    return res.status(200).json(result);
+  }
   if (req.method === 'POST' && op === 'pdf-refresh') {
     if (!folio) return sendErr(res, 400, 'folio es obligatorio.');
     try {
