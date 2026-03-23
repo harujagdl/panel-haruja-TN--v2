@@ -545,17 +545,32 @@ async function syncPdfUi(apartado){
 
 function renderTicket(payload){
   const a = payload.apartado || payload;
-  const items = a.productos || [];
+  const items = Array.isArray(a.productos) ? a.productos : [];
 
-  const rows = items.length ? items.map(i => `
+  const subtotal = Number(a.subtotal || 0);
+  const anticipo = Number(a.anticipo || 0);
+  const descuento = Number(a.descuento || 0);
+  const saldoPendiente = Number(a.saldo || 0) > 0
+    ? Number(a.saldo || 0)
+    : Math.max(0, subtotal - descuento - anticipo);
+
+  const rows = items.length ? items.map(i => {
+    const cantidad = Number(i.cantidad || 1);
+    const precio = Number(i.precio || 0);
+    const subtotalCalculado = Number(i.subtotal || 0) > 0
+      ? Number(i.subtotal || 0)
+      : (cantidad * precio);
+
+    return `
 <tr>
 <td>${esc(i.codigo)}</td>
 <td>${esc(i.descripcion)}</td>
-<td class="ta-center">${esc(i.cantidad || 1)}</td>
-<td class="ta-right">${money(i.precio)}</td>
-<td class="ta-right">${money(i.subtotal)}</td>
+<td class="ta-center">${esc(cantidad)}</td>
+<td class="ta-right">${money(precio)}</td>
+<td class="ta-right">${money(subtotalCalculado)}</td>
 </tr>
-`).join('') : `<tr><td colspan="5" class="ta-center">No hay productos</td></tr>`;
+`;
+  }).join('') : `<tr><td colspan="5" class="ta-center">No hay productos</td></tr>`;
 
   document.getElementById('app').innerHTML = `
 <div class="card" id="ticket-pdf-source" data-folio="${esc(a.folio)}">
@@ -593,10 +608,10 @@ function renderTicket(payload){
   </table>
 
   <div class="totals">
-    <div class="totals-row"><b>Subtotal:</b><span>${money(a.subtotal)}</span></div>
-    <div class="totals-row"><b>Anticipo:</b><span>${money(a.anticipo)}</span></div>
-    <div class="totals-row"><b>Descuento:</b><span>${money(a.descuento)}</span></div>
-    <div class="totals-row totals-grand"><b>TOTAL</b><span>${money(a.total)}</span></div>
+    <div class="totals-row"><b>Subtotal:</b><span>${money(subtotal)}</span></div>
+    <div class="totals-row"><b>Anticipo:</b><span>${money(anticipo)}</span></div>
+    <div class="totals-row"><b>Descuento:</b><span>${money(descuento)}</span></div>
+    <div class="totals-row totals-grand"><b>TOTAL</b><span>${money(saldoPendiente)}</span></div>
   </div>
 
   <div class="legal">
