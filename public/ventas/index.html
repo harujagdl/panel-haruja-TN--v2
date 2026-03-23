@@ -328,24 +328,97 @@
       await loadVentasFull();
     };
 
-    const toCsvField = (value) => `"${String(value === null || value === undefined ? '' : value).replace(/"/g, '""')}"`;
+    const escapeCsvValue = (value) => {
+      if (value === null || value === undefined) return '""';
+      const str = String(value).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const extraerTallaDesdeSku = (sku = "") => {
+      const clean = String(sku).trim().toUpperCase();
+      const match = clean.match(/-([A-Z0-9]+)$/);
+      return match ? match[1] : "";
+    };
+
+    const normalizeItem = (item = {}) => {
+      const cantidad = Number(item?.cantidad ?? item?.quantity ?? item?.qty ?? 1) || 1;
+      const precioUnitario = Number(item?.precio_unitario ?? item?.unit_price ?? item?.price ?? 0) || 0;
+      const subtotal = Number(item?.subtotal ?? item?.total ?? (cantidad * precioUnitario)) || 0;
+      return {
+        nombre: item?.nombre ?? item?.name ?? item?.title ?? "",
+        sku: item?.sku ?? item?.variant_sku ?? "",
+        cantidad,
+        precioUnitario,
+        subtotal,
+      };
+    };
+
     const exportCsv = () => {
       if (!ventasActuales.length) return setStatus('No hay ventas para exportar.');
-      const header = ['fecha', 'ticket', 'order_id', 'cliente', 'total', 'estado', 'vendedora'];
-      const rows = ventasActuales.map((venta) => [
-        formatDate(venta.created_at),
-        ticketText(venta),
-        venta.order_id || '',
-        venta.customer_name || '',
-        Number(venta.total || 0).toFixed(2),
-        formatEstado(venta),
-        venta.seller || '',
-      ]);
-      const csv = [header, ...rows].map((row) => row.map(toCsvField).join(',')).join('\\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const headers = [
+        "fecha",
+        "ticket",
+        "order_id",
+        "cliente",
+        "producto",
+        "sku",
+        "talla",
+        "cantidad",
+        "precio_unitario",
+        "subtotal_item",
+        "estado",
+        "vendedora",
+      ];
+      const rows = [];
+
+      for (const venta of ventasActuales) {
+        const items = Array.isArray(venta?.items) ? venta.items : [];
+        if (!items.length) {
+          rows.push([
+            formatDate(venta.created_at),
+            ticketText(venta),
+            venta.order_id || "",
+            venta.customer_name || "",
+            "",
+            "",
+            "",
+            1,
+            0,
+            Number(venta.total || 0).toFixed(2),
+            formatEstado(venta),
+            venta.seller || "",
+          ]);
+          continue;
+        }
+
+        for (const rawItem of items) {
+          const item = normalizeItem(rawItem);
+          const sku = item.sku || "";
+          const talla = extraerTallaDesdeSku(sku);
+          rows.push([
+            formatDate(venta.created_at),
+            ticketText(venta),
+            venta.order_id || "",
+            venta.customer_name || "",
+            item.nombre || "",
+            sku,
+            talla,
+            item.cantidad,
+            Number(item.precioUnitario || 0).toFixed(2),
+            Number(item.subtotal || 0).toFixed(2),
+            formatEstado(venta),
+            venta.seller || "",
+          ]);
+        }
+      }
+
+      const csv = [headers, ...rows]
+        .map((row) => row.map(escapeCsvValue).join(","))
+        .join("\r\n");
+      const blob = new Blob(["\uFEFF", csv], { type: 'text/csv;charset=utf-8;' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `ventas-${monthKey() || 'mes'}.csv`;
+      a.download = `ventas-detalle-${monthKey() || 'mes'}.csv`;
       a.click();
       URL.revokeObjectURL(a.href);
     };
