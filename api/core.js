@@ -106,13 +106,12 @@ async function handleApartados(req, res) {
     try {
       const result = await regenerateApartadoPdf(folio, {
         ...(req.body || {}),
-        appUrl: String(req.body?.appUrl || getBaseUrl(req) || '').trim(),
       });
       if (result?.status) return res.status(result.status).json(result.body || { ok: false, message: 'No se pudo generar el PDF oficial.' });
       return res.status(200).json(result);
     } catch (err) {
       console.error('PDF OFICIAL ERROR', {
-        point: 'handleApartados:pdf-refresh',
+        point: 'handleApartados:pdf-refresh:webapp',
         action,
         folio,
         message: err?.message,
