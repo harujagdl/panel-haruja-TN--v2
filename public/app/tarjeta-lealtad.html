@@ -146,7 +146,7 @@
       display:flex;
       flex-direction:column;
       gap:10px;
-      margin-top:14px;
+      margin-top:12px;
     }
 
     .action-btn{
@@ -173,16 +173,12 @@
     }
 
     .action-btn.secondary {
-      background: #566277;
+      background: #5f6b80;
       color:#fff;
     }
 
-    .action-btn.secondary:hover {
-      background: #374151;
-    }
-
     .status{
-      margin-top: 12px;
+      margin-top: 10px;
       font-size: 13px;
       color: var(--muted);
     }
@@ -630,12 +626,34 @@
       return Math.max(0, Math.floor(total / 10));
     }
 
+    function normalizePromotionForCard(promo) {
+      return {
+        id: promo?.id || "",
+        active: promo?.active === true || promo?.activa === true,
+        title: promo?.title || promo?.nombre || "",
+        description: promo?.description || promo?.descripcion || "",
+        tag: promo?.tag || promo?.beneficio || promo?.tipo || promo?.mecanica || "Promo",
+        levels: Array.isArray(promo?.levels)
+          ? promo.levels
+          : Array.isArray(promo?.niveles)
+            ? promo.niveles
+            : [],
+        startAt: promo?.startAt || promo?.inicio || promo?.fechaInicio || promo?.vigenciaInicio || null,
+        endAt: promo?.endAt || promo?.fin || promo?.fechaFin || promo?.vigenciaFin || null,
+        priority: Number(promo?.priority ?? promo?.prioridad ?? 999)
+      };
+    }
+
     function promoEnVigencia(promo) {
       const now = Date.now();
-      const inicio = toMillisSafe(promo?.vigenciaInicio || promo?.inicio || promo?.fechaInicio || promo?.startAt);
-      const fin = toMillisSafe(promo?.vigenciaFin || promo?.fin || promo?.fechaFin || promo?.endAt);
-      if (Number.isNaN(inicio) || Number.isNaN(fin)) return false;
-      return now >= inicio && now <= fin;
+      const inicio = toMillisSafe(promo?.startAt || promo?.inicio || promo?.fechaInicio || promo?.vigenciaInicio);
+      const fin = toMillisSafe(promo?.endAt || promo?.fin || promo?.fechaFin || promo?.vigenciaFin);
+
+      if (Number.isNaN(inicio) && Number.isNaN(fin)) return true;
+      if (!Number.isNaN(inicio) && now < inicio) return false;
+      if (!Number.isNaN(fin) && now > fin) return false;
+
+      return true;
     }
 
     function extractNormalizedValues(value) {
@@ -645,15 +663,15 @@
           if (typeof item === "object") {
             return [
               item.id,
-              item.nombre,
               item.name,
+              item.nombre,
+              item.key,
               item.slug,
               item.value,
               item.label,
-              item.nivelId,
-              item.nivelNombre,
-              item.tierId,
-              item.tierName
+              item.levelId,
+              item.level,
+              item.levelName
             ];
           }
           return [item];
@@ -669,27 +687,15 @@
       ];
 
       const candidatosCliente = [
+        cliente?.levelId,
+        cliente?.level,
+        cliente?.levelName,
         cliente?.nivelId,
         cliente?.nivel,
-        cliente?.nivelNombre,
-        cliente?.nivelSlug,
-        cliente?.tierId,
-        cliente?.tierName
+        cliente?.nivelNombre
       ].filter(Boolean).map(norm);
 
       return candidatosCliente.some((valor) => nivelesPromo.includes(valor));
-    }
-
-    function ordenarPromociones(a, b) {
-      const pa = Number(a?.prioridad || 999);
-      const pb = Number(b?.prioridad || 999);
-      if (pa !== pb) return pa - pb;
-
-      const fa = toMillisSafe(a?.vigenciaFin || a?.fin || a?.fechaFin || a?.endAt);
-      const fb = toMillisSafe(b?.vigenciaFin || b?.fin || b?.fechaFin || b?.endAt);
-      if (fa !== fb) return fa - fb;
-
-      return String(a?.nombre || "").localeCompare(String(b?.nombre || ""));
     }
 
     function formatFechaCorta(value) {
@@ -714,16 +720,11 @@
       }
 
       box.innerHTML = promos.map((promo) => {
-        const badge =
-          promo?.beneficio ||
-          promo?.tipo ||
-          promo?.mecanica ||
-          "Promo";
-
-        const nombre = promo?.nombre || "Promoción";
-        const vigencia = formatFechaCorta(promo?.vigenciaFin || promo?.fin || promo?.fechaFin || promo?.endAt);
-        const descripcion = promo?.descripcion
-          ? `<div class="beneficio-desc">${promo?.descripcion}</div>`
+        const badge = promo?.tag || "Promo";
+        const nombre = promo?.title || "Promoción";
+        const vigencia = formatFechaCorta(promo?.endAt);
+        const descripcion = promo?.description
+          ? `<div class="beneficio-desc">${promo.description}</div>`
           : "";
 
         return `
@@ -741,10 +742,20 @@
 
     function filtrarPromocionesCliente(cliente, promociones = []) {
       return (Array.isArray(promociones) ? promociones : [])
-        .filter((promo) => promo?.activa === true)
+        .filter((promo) => promo?.active === true)
         .filter((promo) => promoEnVigencia(promo))
         .filter((promo) => promoAplicaANivel(promo, cliente))
-        .sort(ordenarPromociones);
+        .sort((a, b) => {
+          const pa = Number(a?.priority ?? 999);
+          const pb = Number(b?.priority ?? 999);
+          if (pa !== pb) return pa - pb;
+
+          const fa = toMillisSafe(a?.endAt);
+          const fb = toMillisSafe(b?.endAt);
+          if (fa !== fb) return fa - fb;
+
+          return String(a?.title || "").localeCompare(String(b?.title || ""));
+        });
     }
 
     function setLevelExtras(client) {
@@ -794,23 +805,23 @@
         }
 
         const totalCompras = toNumberSafe(
+          c?.totalPurchases ??
           c?.totalCompras ??
           c?.compras ??
           c?.montoAcumulado ??
-          c?.totalPurchases ??
           0
         );
         const puntos = calcularPuntosDesdeCompras(totalCompras);
 
         document.getElementById("nombreCliente").textContent = c?.name || c?.nombre || "Cliente Haruja";
         document.getElementById("puntosCliente").innerHTML = `${puntos} <span>pts</span>`;
-        document.getElementById("nivelCliente").textContent = c?.nivelNombre || c?.nivel || c?.level || "Nuevo";
+        document.getElementById("nivelCliente").textContent = c?.level || c?.nivelNombre || c?.nivel || "Nuevo";
         document.getElementById("comprasCliente").textContent = money(totalCompras);
 
         let promotions = [];
         try {
           const promoResponse = await window.loyaltyService.getActivePromotions();
-          promotions = promoResponse.items || [];
+          promotions = (promoResponse?.items || []).map(normalizePromotionForCard);
         } catch (_err) {
           promotions = [];
         }
