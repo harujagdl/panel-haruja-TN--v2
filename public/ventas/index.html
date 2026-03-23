@@ -400,18 +400,82 @@
       setStatus(`Resumen exportado (${rows.length} filas).`);
     };
 
-    const getOrderById = async (orderId) => {
+    const delay = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const summarizeError = (error) => {
+      if (!error) return "Error desconocido";
+      const payloadMessage = String(error?.payload?.message || "").trim();
+      const message = String(error?.message || "").trim();
+      return (payloadMessage || message || "Error desconocido").slice(0, 180);
+    };
+
+    const shouldRetryOrderError = (error) => {
+      if (!error) return false;
+      const status = Number(error?.httpStatus || 0);
+      if (status >= 500) return true;
+      const msg = String(error?.message || "").toLowerCase();
+      return msg.includes("timeout") || msg.includes("network") || msg.includes("failed to fetch") || msg.includes("abort");
+    };
+
+    const fetchOrderById = async (orderId, { timeoutMs = 20000 } = {}) => {
       const key = String(orderId || "").trim();
       if (!key) return null;
       if (orderCache.has(key)) return orderCache.get(key);
-      const payload = await safeJson(await fetch('/api/tiendanube?action=import-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: key }),
-      }), `No se pudo consultar order_id ${key}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(new Error('timeout')), timeoutMs);
+      let response;
+      try {
+        response = await fetch('/api/tiendanube?action=import-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: key }),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (controller.signal.aborted) {
+          const timeoutError = new Error(`Timeout consultando order_id ${key}`);
+          timeoutError.httpStatus = 408;
+          throw timeoutError;
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      const payload = await safeJson(response, `No se pudo consultar order_id ${key}`);
       const order = payload?.data || null;
       orderCache.set(key, order);
       return order;
+    };
+
+    const getOrderByIdWithRetry = async (orderId, { retries = 2 } = {}) => {
+      const key = String(orderId || "").trim();
+      if (!key) return { ok: false, order: null, httpStatus: 0, errorMessage: "order_id vacío", attempts: 0 };
+
+      let lastError = null;
+      const totalAttempts = Math.max(1, Number(retries) + 1);
+      for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+        try {
+          const order = await fetchOrderById(key);
+          return {
+            ok: true,
+            order,
+            httpStatus: 200,
+            errorMessage: "",
+            attempts: attempt,
+          };
+        } catch (error) {
+          lastError = error;
+          if (attempt >= totalAttempts || !shouldRetryOrderError(error)) break;
+          await delay(300 * attempt);
+        }
+      }
+      return {
+        ok: false,
+        order: null,
+        httpStatus: Number(lastError?.httpStatus || 0),
+        errorMessage: summarizeError(lastError),
+        attempts: totalAttempts,
+      };
     };
 
     const getVariantById = async (variantId) => {
@@ -479,26 +543,39 @@
         "subtotal_item",
         "estado",
         "vendedora",
+        "detalle_estado",
+        "detalle_error",
+        "http_status",
       ];
       const rows = [];
       let processed = 0;
+      const log = {
+        total_ventas_leidas: ventasActuales.length,
+        total_ordenes_consultadas: 0,
+        total_ordenes_ok: 0,
+        total_ordenes_con_error: 0,
+        total_items_exportados: 0,
+        total_ordenes_con_products: 0,
+        order_ids_fallidas: [],
+      };
+      const consultedOrderIds = new Set();
 
       for (const venta of ventasActuales) {
+        const orderId = String(venta.order_id || "").trim();
+        if (!orderId) continue;
         processed += 1;
         setStatus(`Consultando Tiendanube (${processed}/${ventasActuales.length})...`);
-        let order = null;
-        try {
-          order = await getOrderById(venta.order_id);
-        } catch (_error) {
-          order = null;
-        }
+        consultedOrderIds.add(orderId);
+        log.total_ordenes_consultadas = consultedOrderIds.size;
 
-        const items = extractOrderItems(order || {});
-        if (!items.length) {
+        const orderResult = await getOrderByIdWithRetry(orderId, { retries: 2 });
+        if (!orderResult.ok) {
+          log.total_ordenes_con_error += 1;
+          log.order_ids_fallidas.push(orderId);
           rows.push([
             formatDate(venta.created_at),
             ticketText(venta),
-            venta.order_id || "",
+            orderId,
             venta.customer_name || "",
             "",
             "",
@@ -510,17 +587,47 @@
             "",
             formatEstado(venta),
             venta.seller || "",
+            "error_api",
+            orderResult.errorMessage || "Error consultando Tiendanube",
+            orderResult.httpStatus || "",
           ]);
           continue;
         }
 
-        for (const item of items) {
-          const sku = await resolveSku(item.rawItem || {});
-          const talla = extraerTallaDesdeSku(sku) || extraerTallaDesdeNombre(item.productName);
+        log.total_ordenes_ok += 1;
+        const items = extractOrderItems(orderResult.order || {});
+        if (!items.length) {
           rows.push([
             formatDate(venta.created_at),
             ticketText(venta),
-            venta.order_id || "",
+            orderId,
+            venta.customer_name || "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            formatEstado(venta),
+            venta.seller || "",
+            "sin_products",
+            "",
+            orderResult.httpStatus || 200,
+          ]);
+          continue;
+        }
+
+        log.total_ordenes_con_products += 1;
+        for (const item of items) {
+          const sku = await resolveSku(item.rawItem || {});
+          const talla = extraerTallaDesdeSku(sku) || extraerTallaDesdeNombre(item.productName);
+          log.total_items_exportados += 1;
+          rows.push([
+            formatDate(venta.created_at),
+            ticketText(venta),
+            orderId,
             venta.customer_name || "",
             item.productName || "",
             item.productId || "",
@@ -532,6 +639,9 @@
             Number(item.subtotal || 0).toFixed(2),
             formatEstado(venta),
             venta.seller || "",
+            "ok",
+            "",
+            orderResult.httpStatus || 200,
           ]);
         }
       }
@@ -541,7 +651,9 @@
         rows,
         fileName: `ventas-detalle-${monthKey() || 'mes'}.csv`,
       });
-      setStatus(`Detalle exportado (${rows.length} filas).`);
+      const validationText = `Detalle exportado (${rows.length} filas). Órdenes resumen: ${ventasActuales.length}, consultadas: ${log.total_ordenes_consultadas}, con products: ${log.total_ordenes_con_products}, con error: ${log.total_ordenes_con_error}.`;
+      setStatus(validationText);
+      console.log('[ventas:detalle:export]', log);
       btnCsvDetalle.disabled = false;
       btnCsvDetalle.textContent = 'Exportar detalle';
     };
