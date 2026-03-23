@@ -147,8 +147,6 @@
     const btnCsvDetalle = document.getElementById("btnCsvDetalle");
     let ventasActuales = [];
     let lastFullReloadAt = 0;
-    const orderCache = new Map();
-    const variantCache = new Map();
 
     const setStatus = (txt = "", type = "info") => {
       statusEl.textContent = txt;
@@ -339,27 +337,6 @@
       return `"${str}"`;
     };
 
-    const extraerTallaDesdeSku = (sku = "") => {
-      const clean = String(sku).trim().toUpperCase();
-      const match = clean.match(/-([A-Z0-9]+)$/);
-      return match ? match[1] : "";
-    };
-
-    const extraerTallaDesdeNombre = (name = "") => {
-      const clean = String(name).trim().toUpperCase();
-      if (!clean) return "";
-      const wrapped = ` ${clean} `;
-      const sizeToken = wrapped.match(/\b(XXL|XL|L|M|S|XS|CH|MED|GDE)\b/);
-      if (sizeToken) return sizeToken[1];
-      const numericToken = wrapped.match(/\b(\d{2})\b/);
-      return numericToken ? numericToken[1] : "";
-    };
-
-    const parseNumeric = (value, fallback = 0) => {
-      const n = Number(value);
-      return Number.isFinite(n) ? n : fallback;
-    };
-
     const downloadCsv = ({ headers = [], rows = [], fileName = "ventas.csv" } = {}) => {
       const csv = [headers, ...rows]
         .map((row) => row.map(escapeCsvValue).join(","))
@@ -400,260 +377,29 @@
       setStatus(`Resumen exportado (${rows.length} filas).`);
     };
 
-    const delay = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
-
-    const summarizeError = (error) => {
-      if (!error) return "Error desconocido";
-      const payloadMessage = String(error?.payload?.message || "").trim();
-      const message = String(error?.message || "").trim();
-      return (payloadMessage || message || "Error desconocido").slice(0, 180);
-    };
-
-    const shouldRetryOrderError = (error) => {
-      if (!error) return false;
-      const status = Number(error?.httpStatus || 0);
-      if (status >= 500) return true;
-      const msg = String(error?.message || "").toLowerCase();
-      return msg.includes("timeout") || msg.includes("network") || msg.includes("failed to fetch") || msg.includes("abort");
-    };
-
-    const fetchOrderById = async (orderId, { timeoutMs = 20000 } = {}) => {
-      const key = String(orderId || "").trim();
-      if (!key) return null;
-      if (orderCache.has(key)) return orderCache.get(key);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(new Error('timeout')), timeoutMs);
-      let response;
-      try {
-        response = await fetch('/api/tiendanube?action=import-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: key }),
-          signal: controller.signal,
-        });
-      } catch (error) {
-        if (controller.signal.aborted) {
-          const timeoutError = new Error(`Timeout consultando order_id ${key}`);
-          timeoutError.httpStatus = 408;
-          throw timeoutError;
-        }
-        throw error;
-      } finally {
-        clearTimeout(timeoutId);
-      }
-      const payload = await safeJson(response, `No se pudo consultar order_id ${key}`);
-      const order = payload?.data || null;
-      orderCache.set(key, order);
-      return order;
-    };
-
-    const getOrderByIdWithRetry = async (orderId, { retries = 2 } = {}) => {
-      const key = String(orderId || "").trim();
-      if (!key) return { ok: false, order: null, httpStatus: 0, errorMessage: "order_id vacío", attempts: 0 };
-
-      let lastError = null;
-      const totalAttempts = Math.max(1, Number(retries) + 1);
-      for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
-        try {
-          const order = await fetchOrderById(key);
-          return {
-            ok: true,
-            order,
-            httpStatus: 200,
-            errorMessage: "",
-            attempts: attempt,
-          };
-        } catch (error) {
-          lastError = error;
-          if (attempt >= totalAttempts || !shouldRetryOrderError(error)) break;
-          await delay(300 * attempt);
-        }
-      }
-      return {
-        ok: false,
-        order: null,
-        httpStatus: Number(lastError?.httpStatus || 0),
-        errorMessage: summarizeError(lastError),
-        attempts: totalAttempts,
-      };
-    };
-
-    const getVariantById = async (variantId) => {
-      const key = String(variantId || "").trim();
-      if (!key) return null;
-      if (variantCache.has(key)) return variantCache.get(key);
-      try {
-        const payload = await safeJson(await fetch(`/api/tiendanube?action=variant&variantId=${encodeURIComponent(key)}`), `No se pudo consultar variant_id ${key}`);
-        const variant = payload?.data || null;
-        variantCache.set(key, variant);
-        return variant;
-      } catch (_error) {
-        variantCache.set(key, null);
-        return null;
-      }
-    };
-
-    const resolveSku = async (item = {}) => {
-      const rawSku = String(item.sku || item.variant_sku || item?.variant?.sku || "").trim();
-      if (rawSku) return rawSku;
-      const variantId = String(item.variant_id || item?.variant?.id || "").trim();
-      if (!variantId) return "";
-      const variant = await getVariantById(variantId);
-      return String(variant?.sku || variant?.product_sku || "").trim();
-    };
-
-    const extractOrderItems = (order = {}) => {
-      const products = Array.isArray(order?.products) ? order.products : [];
-      const lineItems = Array.isArray(order?.line_items) ? order.line_items : [];
-      const source = products.length ? products : lineItems;
-      return source.map((item) => {
-        const quantity = parseNumeric(item?.quantity ?? item?.qty ?? 1, 1);
-        const unitPrice = parseNumeric(item?.price ?? item?.price_per_unit ?? item?.unit_price ?? 0, 0);
-        const subtotal = parseNumeric(item?.subtotal ?? item?.total ?? (unitPrice * quantity), unitPrice * quantity);
-        return {
-          productName: String(item?.name || item?.title || item?.product_name || "").trim(),
-          productId: String(item?.product_id || item?.id || "").trim(),
-          variantId: String(item?.variant_id || item?.variant?.id || "").trim(),
-          quantity,
-          unitPrice,
-          subtotal,
-          rawItem: item,
-        };
-      });
-    };
-
     const exportDetalleCsv = async () => {
       if (!ventasActuales.length) return setStatus('No hay ventas para exportar.');
       btnCsvDetalle.disabled = true;
       btnCsvDetalle.textContent = 'Exportando...';
-      setStatus('Generando detalle por artículo desde Tiendanube...');
+      setStatus('Generando detalle por artículo (consulta desacoplada del sync)...');
 
-      const headers = [
-        "fecha",
-        "ticket",
-        "order_id",
-        "cliente",
-        "producto",
-        "product_id",
-        "variant_id",
-        "sku",
-        "talla",
-        "cantidad",
-        "precio_unitario",
-        "subtotal_item",
-        "estado",
-        "vendedora",
-        "detalle_estado",
-        "detalle_error",
-        "http_status",
-      ];
-      const rows = [];
-      let processed = 0;
-      const log = {
-        total_ventas_leidas: ventasActuales.length,
-        total_ordenes_consultadas: 0,
-        total_ordenes_ok: 0,
-        total_ordenes_con_error: 0,
-        total_items_exportados: 0,
-        total_ordenes_con_products: 0,
-        order_ids_fallidas: [],
-      };
-      const consultedOrderIds = new Set();
-
-      for (const venta of ventasActuales) {
-        const orderId = String(venta.order_id || "").trim();
-        if (!orderId) continue;
-        processed += 1;
-        setStatus(`Consultando Tiendanube (${processed}/${ventasActuales.length})...`);
-        consultedOrderIds.add(orderId);
-        log.total_ordenes_consultadas = consultedOrderIds.size;
-
-        const orderResult = await getOrderByIdWithRetry(orderId, { retries: 2 });
-        if (!orderResult.ok) {
-          log.total_ordenes_con_error += 1;
-          log.order_ids_fallidas.push(orderId);
-          rows.push([
-            formatDate(venta.created_at),
-            ticketText(venta),
-            orderId,
-            venta.customer_name || "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            formatEstado(venta),
-            venta.seller || "",
-            "error_api",
-            orderResult.errorMessage || "Error consultando Tiendanube",
-            orderResult.httpStatus || "",
-          ]);
-          continue;
-        }
-
-        log.total_ordenes_ok += 1;
-        const items = extractOrderItems(orderResult.order || {});
-        if (!items.length) {
-          rows.push([
-            formatDate(venta.created_at),
-            ticketText(venta),
-            orderId,
-            venta.customer_name || "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            formatEstado(venta),
-            venta.seller || "",
-            "sin_products",
-            "",
-            orderResult.httpStatus || 200,
-          ]);
-          continue;
-        }
-
-        log.total_ordenes_con_products += 1;
-        for (const item of items) {
-          const sku = await resolveSku(item.rawItem || {});
-          const talla = extraerTallaDesdeSku(sku) || extraerTallaDesdeNombre(item.productName);
-          log.total_items_exportados += 1;
-          rows.push([
-            formatDate(venta.created_at),
-            ticketText(venta),
-            orderId,
-            venta.customer_name || "",
-            item.productName || "",
-            item.productId || "",
-            item.variantId || "",
-            sku,
-            talla,
-            item.quantity,
-            Number(item.unitPrice || 0).toFixed(2),
-            Number(item.subtotal || 0).toFixed(2),
-            formatEstado(venta),
-            venta.seller || "",
-            "ok",
-            "",
-            orderResult.httpStatus || 200,
-          ]);
-        }
-      }
+      const payload = await safeJson(await fetch('/api/ventas/export-detalle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ventas: ventasActuales }),
+      }), 'No se pudo exportar detalle');
+      const headers = Array.isArray(payload?.headers) ? payload.headers : [];
+      const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+      const summary = payload?.resumen || {};
 
       downloadCsv({
         headers,
         rows,
         fileName: `ventas-detalle-${monthKey() || 'mes'}.csv`,
       });
-      const validationText = `Detalle exportado (${rows.length} filas). Órdenes resumen: ${ventasActuales.length}, consultadas: ${log.total_ordenes_consultadas}, con products: ${log.total_ordenes_con_products}, con error: ${log.total_ordenes_con_error}.`;
+      const validationText = `Detalle exportado (${rows.length} filas). Ventas leídas: ${summary.total_ventas_leidas || 0}, órdenes consultadas: ${summary.total_ordenes_consultadas || 0}, cache: ${summary.total_ordenes_resueltas_cache || 0}, Tiendanube: ${summary.total_ordenes_consultadas_tiendanube || 0}, errores Sheets: ${summary.total_errores_sheets || 0}, errores Tiendanube: ${summary.total_errores_tiendanube || 0}.`;
       setStatus(validationText);
-      console.log('[ventas:detalle:export]', log);
+      console.log('[ventas:detalle:export]', summary);
       btnCsvDetalle.disabled = false;
       btnCsvDetalle.textContent = 'Exportar detalle';
     };

@@ -1,4 +1,4 @@
-import { FIXED_STORE_ID, syncVentasFromTiendanubeIncremental } from '../../lib/api/core.js';
+import { resolveTiendanubeConnection, syncVentasFromTiendanubeIncremental } from '../../lib/api/core.js';
 import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
 import {
   acquireVentasSyncLock,
@@ -30,11 +30,14 @@ export default async function handler(req, res) {
     const previous = await readVentasSyncState();
     const lastUpdatedAtMax = isoOrEmpty(previous.last_updated_at_max);
     const lastCreatedAtMax = isoOrEmpty(previous.last_created_at_max);
-    const storeId = FIXED_STORE_ID;
+    const connection = await resolveTiendanubeConnection();
+    const storeId = connection.storeId;
     const baseUrl = 'https://api.tiendanube.com/v1';
     const endpoint = '/orders';
     const requestUrl = `${baseUrl}/${encodeURIComponent(storeId)}${endpoint}`;
     console.log('[ventas-sync-auto] store_id=%s', storeId);
+    console.log('[ventas-sync-auto] store_source=%s', connection.storeSource || 'unknown');
+    console.log('[ventas-sync-auto] token_source=%s', connection.tokenSource || 'unknown');
     console.log('[ventas-sync-auto] base_url=%s', baseUrl);
     console.log('[ventas-sync-auto] endpoint=%s', endpoint);
     console.log('[ventas-sync-auto] request_url=%s', requestUrl);
@@ -83,7 +86,7 @@ export default async function handler(req, res) {
     const code = String(error?.code || '').trim();
     const detailStatus = Number(error?.details?.status || error?.http_status || 500) || 500;
     const detailEndpoint = String(error?.details?.endpoint || '/orders');
-    const detailStoreId = String(error?.details?.store_id || FIXED_STORE_ID).trim();
+    const detailStoreId = String(error?.details?.store_id || process.env.TIENDANUBE_STORE_ID || '').trim();
     if (code) {
       console.log('[ventas-sync-auto] tn_status=%s', detailStatus);
       console.log('[ventas-sync-auto] tn_error=%s', String(error?.message || error));
