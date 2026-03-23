@@ -8,7 +8,6 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 
 <style>
-
 :root{
 --olive:#a7b59e;
 --coffee:#383234;
@@ -246,7 +245,6 @@ margin:12mm;
 }
 
 @media print{
-
 html,body{
 width:216mm;
 height:auto;
@@ -281,34 +279,30 @@ line-height:1.28;
 .bottom{
 grid-template-columns:1fr 126px;
 }
-
 }
-
 </style>
 </head>
 
 <body>
 
 <div class="actions">
-<button class="btn btn-back" onclick="history.back()">Volver</button>
-<button class="btn btn-print" onclick="window.print()">Imprimir vista</button>
-<button id="btnGuardarPdfOficial" class="btn btn-secondary">Guardar PDF oficial</button>
-<button id="btn-view-pdf" class="btn btn-secondary" style="display:none">Ver PDF oficial</button>
-<button id="btn-download-pdf" class="btn btn-secondary" style="display:none">Descargar PDF oficial</button>
-<button id="btn-refresh-pdf" class="btn btn-secondary" style="display:none">Generar PDF oficial</button>
+  <button class="btn btn-back" onclick="history.back()">Volver</button>
+  <button class="btn btn-print" onclick="window.print()">Imprimir vista</button>
+  <button id="btnGuardarPdfOficial" class="btn btn-secondary">Guardar PDF oficial</button>
+  <button id="btn-view-pdf" class="btn btn-secondary" style="display:none">Ver PDF oficial</button>
+  <button id="btn-download-pdf" class="btn btn-secondary" style="display:none">Descargar PDF oficial</button>
 </div>
 
 <div id="pdf-status" class="pdf-status"></div>
 <div id="app"></div>
 
 <script>
-window.HARUJA_APARTADOS_PDF_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzluipdeeGvbOr5NpHkTGsk75Oo6QhzRa0wyXSkqu8rdrp826rAca0T7h7-cmoM1v63/exec";
-</script>
-
-<script>
+function getParams(){
+  return new URLSearchParams(window.location.search);
+}
 
 function getFolioFromPath(){
-  const params = new URLSearchParams(window.location.search);
+  const params = getParams();
   const queryFolio = String(params.get('folio') || '').trim();
   if(queryFolio) return queryFolio;
 
@@ -317,10 +311,8 @@ function getFolioFromPath(){
   return '';
 }
 
-function generarPdfOficial(folio){
-  const url = `/apartado-pdf/${encodeURIComponent(folio)}?autoprint=1`;
-  window.open(url,'_blank','noopener,noreferrer');
-  return url;
+function isAutoExportMode(){
+  return getParams().get('exportPdf') === '1';
 }
 
 function money(v){
@@ -358,7 +350,6 @@ function blobToBase64(blob){
 async function exportTicketPdfBlob(){
   const ticket = document.getElementById('ticket-pdf-source');
   if(!ticket) throw new Error('No se encontró el contenedor del ticket.');
-
   if(!window.html2canvas) throw new Error('No se cargó html2canvas.');
   if(!window.jspdf?.jsPDF) throw new Error('No se cargó jsPDF.');
 
@@ -394,34 +385,22 @@ async function exportTicketPdfBlob(){
   const maxHeight = pageHeight - margin * 2;
 
   const ratio = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
-
   const renderWidth = canvas.width * ratio;
   const renderHeight = canvas.height * ratio;
-
   const x = (pageWidth - renderWidth) / 2;
   const y = margin;
 
   pdf.addImage(imgData, 'JPEG', x, y, renderWidth, renderHeight, undefined, 'FAST');
-
   return pdf.output('blob');
 }
 
-async function guardarPdfTicketWebEnAppsScript({ folio, pdfBlob }){
-  const webAppUrl =
-    window.HARUJA_APARTADOS_PDF_WEBAPP_URL ||
-    localStorage.getItem('HARUJA_APARTADOS_PDF_WEBAPP_URL') ||
-    '';
-
-  if(!webAppUrl){
-    throw new Error('Falta configurar HARUJA_APARTADOS_PDF_WEBAPP_URL');
-  }
-
+async function guardarPdfTicketViaProxy({ folio, pdfBlob }){
   const pdfBase64 = await blobToBase64(pdfBlob);
 
-  const response = await fetch(webAppUrl, {
+  const response = await fetch('/api/core?action=apartados&op=pdf-webapp-proxy', {
     method: 'POST',
     headers: {
-      'Content-Type': 'text/plain;charset=utf-8'
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       action: 'guardar_pdf_ticket_web',
@@ -432,20 +411,24 @@ async function guardarPdfTicketWebEnAppsScript({ folio, pdfBlob }){
     })
   });
 
-  const text = await response.text();
-  let data = null;
-
-  try{
-    data = JSON.parse(text);
-  }catch(err){
-    throw new Error(`Respuesta no válida del Web App: ${text.slice(0, 250)}`);
-  }
-
+  const data = await response.json().catch(() => ({}));
   if(!response.ok || !data?.ok){
-    throw new Error(data?.message || 'No se pudo guardar el PDF en Drive.');
+    throw new Error(data?.details || data?.message || data?.error || 'No se pudo guardar el PDF en Drive.');
   }
 
   return data;
+}
+
+function notifyParentPdfSaved(payload){
+  try{
+    if(window.opener && !window.opener.closed){
+      window.opener.postMessage({
+        source: 'haruja-ticket',
+        type: 'pdf-saved',
+        ...payload
+      }, window.location.origin);
+    }
+  }catch(_){}
 }
 
 async function guardarPdfOficialDesdeVistaWeb(){
@@ -453,6 +436,7 @@ async function guardarPdfOficialDesdeVistaWeb(){
   const viewBtn = document.getElementById('btn-view-pdf');
   const downloadBtn = document.getElementById('btn-download-pdf');
   const folio = getFolioFromPath();
+  const autoMode = isAutoExportMode();
 
   if(!folio){
     setPdfStatus('No se pudo detectar el folio.', true);
@@ -468,28 +452,44 @@ async function guardarPdfOficialDesdeVistaWeb(){
     }
 
     setPdfStatus('Generando PDF oficial...');
-    console.log('pdf:webapp_start', { folio });
+    console.log('pdf:ticket_start', { folio, autoMode });
 
     const pdfBlob = await exportTicketPdfBlob();
 
     if(btn) btn.textContent = 'Guardando en Drive...';
     setPdfStatus('Guardando PDF en Drive...');
 
-    const result = await guardarPdfTicketWebEnAppsScript({ folio, pdfBlob });
+    const result = await guardarPdfTicketViaProxy({ folio, pdfBlob });
 
-    console.log('pdf:webapp_ok', result);
+    console.log('pdf:ticket_ok', result);
     setPdfStatus(`PDF oficial guardado correctamente${result?.updatedAt ? ` · Actualizado: ${result.updatedAt}` : ''}`);
 
     if(result?.pdfUrl){
       viewBtn.style.display = 'inline-block';
       downloadBtn.style.display = 'inline-block';
-
       viewBtn.onclick = () => window.open(result.pdfUrl, '_blank', 'noopener');
       downloadBtn.onclick = () => window.open(result.pdfUrl, '_blank', 'noopener');
     }
+
+    notifyParentPdfSaved({
+      folio,
+      pdfUrl: result?.pdfUrl || '',
+      fileId: result?.fileId || '',
+      updatedAt: result?.updatedAt || new Date().toISOString()
+    });
+
+    if(autoMode){
+      setTimeout(() => {
+        try { window.close(); } catch(_) {}
+      }, 1200);
+    }
   }catch(error){
-    console.error('pdf:webapp_error', error);
+    console.error('pdf:ticket_error', error);
     setPdfStatus(error?.message || 'No se pudo guardar el PDF oficial.', true);
+    notifyParentPdfSaved({
+      folio,
+      error: error?.message || 'No se pudo guardar el PDF oficial.'
+    });
   }finally{
     if(btn){
       btn.disabled = false;
@@ -499,11 +499,10 @@ async function guardarPdfOficialDesdeVistaWeb(){
 }
 
 async function loadTicket(){
-
   const folio = getFolioFromPath();
 
   if(!folio){
-    document.getElementById('app').innerHTML = "Folio inválido";
+    document.getElementById('app').innerHTML = 'Folio inválido';
     return;
   }
 
@@ -512,46 +511,39 @@ async function loadTicket(){
   const data = payload?.data || payload;
 
   renderTicket(data);
-  await syncPdfUi(folio);
+  await syncPdfUi(data?.apartado || data);
 }
 
-async function syncPdfUi(folio){
+async function syncPdfUi(apartado){
   const statusEl = document.getElementById('pdf-status');
   const viewBtn = document.getElementById('btn-view-pdf');
   const downloadBtn = document.getElementById('btn-download-pdf');
-  const refreshBtn = document.getElementById('btn-refresh-pdf');
+  const folio = String(apartado?.folio || getFolioFromPath() || '').trim();
+  if(!statusEl || !viewBtn || !downloadBtn || !folio) return;
 
-  if(!statusEl || !viewBtn || !downloadBtn || !refreshBtn || !folio) return;
+  const pdfUrl = String(
+    apartado?.pdfDriveUrl ||
+    apartado?.pdfUrlPersistido ||
+    apartado?.pdfUrl ||
+    ''
+  ).trim();
 
-  const applyPdf = (pdfUrl, updatedAt) => {
-    if(pdfUrl){
-      viewBtn.style.display = 'inline-block';
-      downloadBtn.style.display = 'inline-block';
-      viewBtn.onclick = () => window.open(pdfUrl,'_blank','noopener');
-      downloadBtn.onclick = () => window.open(pdfUrl,'_blank','noopener');
-      statusEl.textContent = `PDF oficial disponible${updatedAt ? ` · Actualizado: ${updatedAt}` : ''}`;
-    }else{
-      viewBtn.style.display = 'none';
-      downloadBtn.style.display = 'none';
-      statusEl.textContent = 'Genera el PDF oficial con el botón para descargarlo.';
-    }
-  };
+  const updatedAt = String(apartado?.pdfUpdatedAt || '').trim();
 
-  refreshBtn.style.display = 'inline-block';
-  refreshBtn.onclick = () => {
-    const pdfUrl = generarPdfOficial(folio);
+  if(pdfUrl){
     viewBtn.style.display = 'inline-block';
     downloadBtn.style.display = 'inline-block';
-    viewBtn.onclick = () => window.open(pdfUrl,'_blank','noopener');
-    downloadBtn.onclick = () => window.open(pdfUrl,'_blank','noopener');
-    statusEl.textContent = 'Abriendo PDF oficial…';
-  };
-
-  applyPdf('','');
+    viewBtn.onclick = () => window.open(pdfUrl, '_blank', 'noopener');
+    downloadBtn.onclick = () => window.open(pdfUrl, '_blank', 'noopener');
+    statusEl.textContent = `PDF oficial disponible${updatedAt ? ` · Actualizado: ${updatedAt}` : ''}`;
+  }else{
+    viewBtn.style.display = 'none';
+    downloadBtn.style.display = 'none';
+    statusEl.textContent = 'Genera el PDF oficial con el botón para descargarlo.';
+  }
 }
 
 function renderTicket(payload){
-
   const a = payload.apartado || payload;
   const items = a.productos || [];
 
@@ -566,87 +558,81 @@ function renderTicket(payload){
 `).join('') : `<tr><td colspan="5" class="ta-center">No hay productos</td></tr>`;
 
   document.getElementById('app').innerHTML = `
-
 <div class="card" id="ticket-pdf-source" data-folio="${esc(a.folio)}">
 
-<div class="logo-wrap">
-<img class="logo" src="/assets/haruja-logo.png" alt="HarujaGdl">
-</div>
+  <div class="logo-wrap">
+    <img class="logo" src="/assets/haruja-logo.png" alt="HarujaGdl">
+  </div>
 
-<hr class="top-line">
+  <hr class="top-line">
 
-<div class="top-row">
-<div class="title">Ticket de apartado</div>
-<div class="folio">#${esc(a.folio)}</div>
-</div>
+  <div class="top-row">
+    <div class="title">Ticket de apartado</div>
+    <div class="folio">#${esc(a.folio)}</div>
+  </div>
 
-<div class="meta">
-<b>Fecha:</b><div>${esc(a.fecha)}</div>
-<b>Cliente:</b><div>${esc(a.cliente)}</div>
-<b>Contacto:</b><div>${esc(a.telefono || a.contacto)}</div>
-</div>
+  <div class="meta">
+    <b>Fecha:</b><div>${esc(a.fecha)}</div>
+    <b>Cliente:</b><div>${esc(a.cliente)}</div>
+    <b>Contacto:</b><div>${esc(a.telefono || a.contacto)}</div>
+  </div>
 
-<div class="section-title">Detalle</div>
+  <div class="section-title">Detalle</div>
 
-<table>
-<thead>
-<tr>
-<th>Código</th>
-<th>Descripción</th>
-<th class="ta-center">Cant</th>
-<th class="ta-right">P.U.</th>
-<th class="ta-right">Importe</th>
-</tr>
-</thead>
-<tbody>${rows}</tbody>
-</table>
+  <table>
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Descripción</th>
+        <th class="ta-center">Cant</th>
+        <th class="ta-right">P.U.</th>
+        <th class="ta-right">Importe</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
 
-<div class="totals">
-<div class="totals-row"><b>Subtotal:</b><span>${money(a.subtotal)}</span></div>
-<div class="totals-row"><b>Anticipo:</b><span>${money(a.anticipo)}</span></div>
-<div class="totals-row"><b>Descuento:</b><span>${money(a.descuento)}</span></div>
-<div class="totals-row totals-grand"><b>TOTAL</b><span>${money(a.total)}</span></div>
-</div>
+  <div class="totals">
+    <div class="totals-row"><b>Subtotal:</b><span>${money(a.subtotal)}</span></div>
+    <div class="totals-row"><b>Anticipo:</b><span>${money(a.anticipo)}</span></div>
+    <div class="totals-row"><b>Descuento:</b><span>${money(a.descuento)}</span></div>
+    <div class="totals-row totals-grand"><b>TOTAL</b><span>${money(a.total)}</span></div>
+  </div>
 
-<div class="legal">
+  <div class="legal">
+    <p><strong>Gracias por tu compra en HarujaGdl</strong></p>
+    <p>Todos nuestros productos pasan por inspección para garantizar calidad, talla solicitada y que estén libres de defectos.</p>
 
-<p><strong>Gracias por tu compra en HarujaGdl</strong></p>
+    <h4>CAMBIOS</h4>
+    <p>Solicítalo dentro de 7 días naturales de recibir tu compra.</p>
+    <p>La prenda debe estar nueva, sin uso, sin lavar y con etiquetas originales.</p>
+    <p>No aplican cambios en: prendas tejidas, bordadas, con aplicaciones, accesorios, prendas de ropa íntima, trajes de baño, rebajas o compras con cupón.</p>
+    <p>Los gastos de envío corren por cuenta del cliente.</p>
+    <p>Solicita tu cambio por WhatsApp al 33 3033 6506 indicando motivo, prenda y talla deseada.</p>
 
-<p>Todos nuestros productos pasan por inspección para garantizar calidad, talla solicitada y que estén libres de defectos.</p>
+    <h4>APARTADOS</h4>
+    <p>Puedes apartar con 25% de anticipo.</p>
+    <p>Plazo máximo para recoger: 30 días.</p>
+    <p>Pasado ese tiempo, la prenda vuelve a venta y el anticipo queda como saldo a favor por 3 meses a partir de la fecha inicial del apartado.</p>
+    <p>No aplican cambios ni devoluciones en apartados.</p>
+    <p>No realizamos devoluciones de dinero. Todos los cambios son por producto de igual o mayor valor.</p>
 
-<h4>CAMBIOS</h4>
-<p>Solicítalo dentro de 7 días naturales de recibir tu compra.</p>
-<p>La prenda debe estar nueva, sin uso, sin lavar y con etiquetas originales.</p>
-<p>No aplican cambios en: prendas tejidas, bordadas, con aplicaciones, accesorios, prendas de ropa íntima, trajes de baño, rebajas o compras con cupón.</p>
-<p>Los gastos de envío corren por cuenta del cliente.</p>
-<p>Solicita tu cambio por WhatsApp al 33 3033 6506 indicando motivo, prenda y talla deseada.</p>
+    <p><strong>Gracias por elegirnos</strong></p>
+  </div>
 
-<h4>APARTADOS</h4>
-<p>Puedes apartar con 25% de anticipo.</p>
-<p>Plazo máximo para recoger: 30 días.</p>
-<p>Pasado ese tiempo, la prenda vuelve a venta y el anticipo queda como saldo a favor por 3 meses a partir de la fecha inicial del apartado.</p>
-<p>No aplican cambios ni devoluciones en apartados.</p>
-<p>No realizamos devoluciones de dinero. Todos los cambios son por producto de igual o mayor valor.</p>
+  <div class="bottom">
+    <div class="meta">
+      <b>Pedido:</b><div>${esc(a.folio)}</div>
+      <b>Fecha:</b><div>${esc(a.fecha)}</div>
+      <b>Cliente:</b><div>${esc(a.cliente)}</div>
+      <b>Contacto:</b><div>${esc(a.telefono || a.contacto)}</div>
+    </div>
 
-<p><strong>Gracias por elegirnos</strong></p>
-
-</div>
-
-<div class="bottom">
-
-<div class="meta">
-<b>Pedido:</b><div>${esc(a.folio)}</div>
-<b>Fecha:</b><div>${esc(a.fecha)}</div>
-<b>Cliente:</b><div>${esc(a.cliente)}</div>
-<b>Contacto:</b><div>${esc(a.telefono || a.contacto)}</div>
-</div>
-
-<div class="qr-box">
-<canvas id="qr"></canvas>
-<div class="qr-caption">Escanea para ver tu apartado</div>
-</div>
-
-</div>
+    <div class="qr-box">
+      <canvas id="qr"></canvas>
+      <div class="qr-caption">Escanea para ver tu apartado</div>
+    </div>
+  </div>
 
 </div>
 `;
@@ -662,8 +648,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-loadTicket();
+window.addEventListener('load', () => {
+  if(isAutoExportMode()){
+    setTimeout(() => {
+      guardarPdfOficialDesdeVistaWeb();
+    }, 900);
+  }
+});
 
+loadTicket();
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
