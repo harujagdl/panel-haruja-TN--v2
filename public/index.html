@@ -2842,29 +2842,44 @@ Errores: 0</pre>
       } from "/shared/adminAuth.js";
       import { loadBaseRowsFromSheets } from "/shared/sheets-adapter.js";
       import { loadDictionariesFromSheets } from "/shared/dictionaries-adapter.js";
-      import { generateHarujaCode, normalizeCodeBase } from "/shared/code-generator.js";
+      import { normalizeCodeBase } from "/shared/code-generator.js";
       import { generarDescripcionSimple } from "/shared/dictionary-utils.js";
       import { processCorrectionsFileRows } from "/shared/corrections-adapter.js";
 
-      // Carga dinámica temporalmente desactivada: faltan adaptadores de prendas en /public/shared.
-      const missingSharedModuleError = (featureName) => {
-        const message = `${featureName} temporalmente deshabilitado: falta módulo compartido en /public/shared.`;
-        console.warn(message);
-        return new Error(message);
+      const callPrendasSheetsApi = async ({ action, method = "GET", payload = null, query = {} } = {}) => {
+        const params = new URLSearchParams({ action, ...query });
+        const response = await fetch(`/api/core?${params.toString()}`, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: payload && method !== "GET" ? JSON.stringify(payload) : undefined
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data?.ok) {
+          throw new Error(data?.message || `Error en ${action}`);
+        }
+        return data?.data;
       };
-      const createPrendaInSheets = async () => {
-        throw missingSharedModuleError("Alta de prenda");
-      };
-      const deletePrendaInSheets = async () => {
-        throw missingSharedModuleError("Eliminación de prenda");
-      };
-      const archivePrendaInSheets = async () => {
-        throw missingSharedModuleError("Archivado de prenda");
-      };
-      const restorePrendaInSheets = async () => {
-        throw missingSharedModuleError("Restauración de prenda");
-      };
-      const loadArchivedPrendas = async () => [];
+      const createPrendaInSheets = async (payload = {}) => callPrendasSheetsApi({
+        action: "prendas-create",
+        method: "POST",
+        payload
+      });
+      const deletePrendaInSheets = async (payload = {}) => callPrendasSheetsApi({
+        action: "prendas-delete",
+        method: "POST",
+        payload
+      });
+      const archivePrendaInSheets = async (payload = {}) => callPrendasSheetsApi({
+        action: "prendas-archive",
+        method: "POST",
+        payload
+      });
+      const restorePrendaInSheets = async (payload = {}) => callPrendasSheetsApi({
+        action: "prendas-restore",
+        method: "POST",
+        payload
+      });
+      const loadArchivedPrendas = async () => callPrendasSheetsApi({ action: "prendas-archived-list" });
 
       const firebaseConfig = {
         apiKey: "AIzaSyAK5_MuMseQm58AeRZlrPtGyEZ216-Xkno",
@@ -7669,34 +7684,23 @@ const createPrendaRow = (item) => {
       }
 
       async function generarCodigo() {
-        console.log("[generarCodigo] START");
         const proveedorCodigo = extraerCodigo(registroProveedor.value);
         const tipoCodigo = extraerCodigo(registroProducto.value);
         const colorCodigo = extraerCodigo(registroColor.value);
         const tallaCodigo = extraerCodigo(registroTalla.value);
-
-        console.log("[generarCodigo] providerCode:", proveedorCodigo);
-        console.log("[generarCodigo] typeCode:", tipoCodigo);
-        console.log("[generarCodigo] colorCode:", colorCodigo);
-        console.log("[generarCodigo] tallaCode:", tallaCodigo);
-        console.log("[generarCodigo] isReuseMode:", registroState.isReuseMode);
-        console.log("[generarCodigo] codigoBaseInterno antes:", registroState.codigoBaseInterno);
-        console.log("[generarCodigo] codigoBase visual:", registroBaseCodeInput?.value || "");
-
-        const baseRows = prendasState.baseRows?.length ? prendasState.baseRows : await loadBaseRows();
-        const baseCodigos = (Array.isArray(baseRows) ? baseRows : [])
-          .map((row) => safeString(row?.codigo || row?.["Código"] || "").trim().toUpperCase())
-          .filter(Boolean);
         const reuseCodeBase = registroState.codigoBaseInterno && registroState.isReuseMode === true
           ? registroState.codigoBaseInterno
           : null;
-        const resultado = generateHarujaCode({
-          proveedor: proveedorCodigo,
-          tipo: tipoCodigo,
-          color: colorCodigo,
-          talla: tallaCodigo,
-          baseCodigos,
-          codigoBase: reuseCodeBase
+        const resultado = await callPrendasSheetsApi({
+          action: "prendas-generar-codigo",
+          method: "POST",
+          payload: {
+            proveedor: proveedorCodigo,
+            tipo: tipoCodigo,
+            color: colorCodigo,
+            talla: tallaCodigo,
+            codigoBase: reuseCodeBase
+          }
         });
 
         registroState.codigoBaseInterno = resultado.codigoBase;
@@ -7710,18 +7714,6 @@ const createPrendaRow = (item) => {
         registroBaseCode = resultado.codigoBase;
         registroCodigo.textContent = resultado.codigo;
         registroSave.disabled = false;
-
-        console.log("[CodeGen]", {
-          proveedor: proveedorCodigo,
-          tipo: tipoCodigo,
-          color: colorCodigo,
-          talla: tallaCodigo,
-          codigoBase: reuseCodeBase,
-          prefix: resultado.prefix,
-          matches: Array.isArray(resultado.codigosCoincidentes) ? resultado.codigosCoincidentes.length : 0,
-          maxConsecutivo: resultado.maxConsecutivo,
-          codigoFinal: resultado.codigo
-        });
         return {
           providerCode: proveedorCodigo,
           typeCode: tipoCodigo,
@@ -7737,23 +7729,21 @@ const createPrendaRow = (item) => {
       }
 
       const findCodigoExistente = async (codigoValue) => {
-        await ensureFirebaseSession();
         const raw = safeString(codigoValue).trim().toUpperCase();
         if (!raw) return null;
-        const docId = safeDocId(raw);
-        const candidates = isAdminMode
-          ? [PRENDAS_ADMIN_COLLECTION, activePrendasPublicCollection]
-          : [activePrendasPublicCollection];
-        for (const collectionName of candidates) {
-          const docRef = doc(db, collectionName, docId);
-          const snap = await safeGetDoc(docRef, `findCodigoExistente:${collectionName}`);
-          if (snap.exists()) {
-            const data = snap.data() || {};
-            const codigo = safeString(data.codigo || raw).trim().toUpperCase();
-            return { codigo, baseCode: parseBaseCode(data.codigoBase || data.baseCode || codigo), data, collectionName };
-          }
-        }
-        return null;
+        const baseRows = prendasState.baseRows?.length ? prendasState.baseRows : await loadBaseRows();
+        const foundRow = (Array.isArray(baseRows) ? baseRows : []).find((row) => {
+          const codigo = safeString(row?.codigo || row?.["Código"] || "").trim().toUpperCase();
+          return codigo === raw;
+        });
+        if (!foundRow) return null;
+        const codigo = safeString(foundRow?.codigo || raw).trim().toUpperCase();
+        return {
+          codigo,
+          baseCode: parseBaseCode(foundRow?.codigoBase || foundRow?.baseCode || codigo),
+          data: foundRow,
+          collectionName: "Sheets"
+        };
       };
 
       const setLocked = (el, locked) => {
@@ -7915,7 +7905,6 @@ const createPrendaRow = (item) => {
         }
         try {
           registroSearchExistingButton.disabled = true;
-          await ensureFirebaseSession();
           const found = await findCodigoExistente(raw);
           console.log("[buscarCodigoExistente] resultado:", found);
           if (!found) {
@@ -7972,15 +7961,16 @@ const createPrendaRow = (item) => {
       };
 
       const handleRegistroSubmit = async (event) => {
-        console.log("[handleRegistroSubmit] submit click en Generar código");
+        console.log("[registro-prendas] submit click en Generar código");
         event.preventDefault();
         setRegistroStatus("");
 
         try {
-          await ensureFirebaseSession();
+          console.log("[registro-prendas] usando Apps Script / Sheets");
           registroSubmit.disabled = true;
           registroPreview = await buildRegistroPreview();
           if (!registroPreview) return;
+          console.log("[registro-prendas] respuesta generarCodigo:", registroPreview);
           registroCodigo.textContent = registroPreview.codigo;
           registroResult.classList.remove("hidden");
           setRegistroStatus("Preview generado. Ahora puedes guardar la prenda.", "success");
@@ -7998,15 +7988,12 @@ const createPrendaRow = (item) => {
 
       const handleRegistroSave = async () => {
         try {
-          await ensureFirebaseSession();
+          console.log("[registro-prendas] usando Apps Script / Sheets");
           const preview = registroPreview || await buildRegistroPreview();
           if (!preview) return;
 
           registroSave.disabled = true;
           registroSubmit.disabled = true;
-
-          console.log("[auth] currentUser uid:", auth.currentUser?.uid);
-          console.log("[auth] currentUser email:", auth.currentUser?.email);
           const getSelectedCode = (selectEl) => {
             const option = selectEl?.options?.[selectEl.selectedIndex];
             return safeString(option?.value || selectEl?.value || "").trim().toUpperCase();

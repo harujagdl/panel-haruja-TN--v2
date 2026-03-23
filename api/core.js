@@ -4,6 +4,7 @@ import {
   assignVentaSeller,
   createPrenda,
   deletePrenda,
+  generarCodigoPrenda,
   getCatalogos,
   getMetaVsVentaData,
   getVentasComisiones,
@@ -255,6 +256,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'prendas-list') return sendOk(res, await listPrendas());
+    if (action === 'prendas-generar-codigo') return sendOk(res, await generarCodigoPrenda(req.body || {}));
     if (action === 'prendas-create') return sendOk(res, await createPrenda(req.body || {}));
 
     if (action === 'prendas-delete') {
