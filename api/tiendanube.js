@@ -1,5 +1,6 @@
 import {
   fetchTiendanubeOrderById,
+  fetchTiendanubeVariantById,
   getVentasConfig,
   saveTiendanubeOAuthConfig,
   syncVentasFromTiendanube,
@@ -95,6 +96,18 @@ export default async function handler(req, res) {
         return json(res, 400, { ok: false, message: 'Tiendanube no está configurado.' });
       }
       const data = await fetchTiendanubeOrderById(config.store_id, config.access_token, orderId);
+      return json(res, 200, { ok: true, data });
+    }
+
+    if (action === 'variant') {
+      if (req.method !== 'GET') return json(res, 405, { ok: false, message: 'Method not allowed.' });
+      const variantId = String(req.query?.variantId || req.query?.variant_id || '').trim();
+      if (!variantId) return json(res, 400, { ok: false, message: 'variantId es obligatorio.' });
+      const config = await getVentasConfig();
+      if (!config?.store_id || !config?.access_token) {
+        return json(res, 400, { ok: false, message: 'Tiendanube no está configurado.' });
+      }
+      const data = await fetchTiendanubeVariantById(config.store_id, config.access_token, variantId);
       return json(res, 200, { ok: true, data });
     }
 

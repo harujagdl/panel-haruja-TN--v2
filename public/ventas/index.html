@@ -89,7 +89,8 @@
           <input id="storeId" type="text" value="6432936" readonly />
         </div>
         <button id="btnLoad" class="btn btn-secondary">Ver detalle</button>
-        <button id="btnCsv" class="btn btn-secondary">Export CSV</button>
+        <button id="btnCsvResumen" class="btn btn-secondary">Exportar resumen</button>
+        <button id="btnCsvDetalle" class="btn btn-secondary">Exportar detalle</button>
         <a href="/api/tiendanube?action=connect" class="btn btn-secondary">Conectar Tiendanube</a>
         <button id="btnSync" class="btn btn-primary">Forzar sincronización</button>
       </div>
@@ -142,8 +143,12 @@
     const lastWebhookEventEl = document.getElementById("lastWebhookEvent");
     const lastWebhookOrderEl = document.getElementById("lastWebhookOrder");
     const btnSync = document.getElementById("btnSync");
+    const btnCsvResumen = document.getElementById("btnCsvResumen");
+    const btnCsvDetalle = document.getElementById("btnCsvDetalle");
     let ventasActuales = [];
     let lastFullReloadAt = 0;
+    const orderCache = new Map();
+    const variantCache = new Map();
 
     const setStatus = (txt = "", type = "info") => {
       statusEl.textContent = txt;
@@ -340,27 +345,133 @@
       return match ? match[1] : "";
     };
 
-    const normalizeItem = (item = {}) => {
-      const cantidad = Number(item?.cantidad ?? item?.quantity ?? item?.qty ?? 1) || 1;
-      const precioUnitario = Number(item?.precio_unitario ?? item?.unit_price ?? item?.price ?? 0) || 0;
-      const subtotal = Number(item?.subtotal ?? item?.total ?? (cantidad * precioUnitario)) || 0;
-      return {
-        nombre: item?.nombre ?? item?.name ?? item?.title ?? "",
-        sku: item?.sku ?? item?.variant_sku ?? "",
-        cantidad,
-        precioUnitario,
-        subtotal,
-      };
+    const extraerTallaDesdeNombre = (name = "") => {
+      const clean = String(name).trim().toUpperCase();
+      if (!clean) return "";
+      const wrapped = ` ${clean} `;
+      const sizeToken = wrapped.match(/\b(XXL|XL|L|M|S|XS|CH|MED|GDE)\b/);
+      if (sizeToken) return sizeToken[1];
+      const numericToken = wrapped.match(/\b(\d{2})\b/);
+      return numericToken ? numericToken[1] : "";
     };
 
-    const exportCsv = () => {
+    const parseNumeric = (value, fallback = 0) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    };
+
+    const downloadCsv = ({ headers = [], rows = [], fileName = "ventas.csv" } = {}) => {
+      const csv = [headers, ...rows]
+        .map((row) => row.map(escapeCsvValue).join(","))
+        .join("\n");
+      const blob = new Blob(["\uFEFF", csv], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+
+    const exportResumenCsv = () => {
       if (!ventasActuales.length) return setStatus('No hay ventas para exportar.');
       const headers = [
         "fecha",
         "ticket",
         "order_id",
         "cliente",
+        "total",
+        "estado",
+        "vendedora",
+      ];
+      const rows = ventasActuales.map((venta) => ([
+        formatDate(venta.created_at),
+        ticketText(venta),
+        venta.order_id || "",
+        venta.customer_name || "",
+        Number(venta.total || 0).toFixed(2),
+        formatEstado(venta),
+        venta.seller || "",
+      ]));
+      downloadCsv({
+        headers,
+        rows,
+        fileName: `ventas-resumen-${monthKey() || 'mes'}.csv`,
+      });
+      setStatus(`Resumen exportado (${rows.length} filas).`);
+    };
+
+    const getOrderById = async (orderId) => {
+      const key = String(orderId || "").trim();
+      if (!key) return null;
+      if (orderCache.has(key)) return orderCache.get(key);
+      const payload = await safeJson(await fetch('/api/tiendanube?action=import-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: key }),
+      }), `No se pudo consultar order_id ${key}`);
+      const order = payload?.data || null;
+      orderCache.set(key, order);
+      return order;
+    };
+
+    const getVariantById = async (variantId) => {
+      const key = String(variantId || "").trim();
+      if (!key) return null;
+      if (variantCache.has(key)) return variantCache.get(key);
+      try {
+        const payload = await safeJson(await fetch(`/api/tiendanube?action=variant&variantId=${encodeURIComponent(key)}`), `No se pudo consultar variant_id ${key}`);
+        const variant = payload?.data || null;
+        variantCache.set(key, variant);
+        return variant;
+      } catch (_error) {
+        variantCache.set(key, null);
+        return null;
+      }
+    };
+
+    const resolveSku = async (item = {}) => {
+      const rawSku = String(item.sku || item.variant_sku || item?.variant?.sku || "").trim();
+      if (rawSku) return rawSku;
+      const variantId = String(item.variant_id || item?.variant?.id || "").trim();
+      if (!variantId) return "";
+      const variant = await getVariantById(variantId);
+      return String(variant?.sku || variant?.product_sku || "").trim();
+    };
+
+    const extractOrderItems = (order = {}) => {
+      const products = Array.isArray(order?.products) ? order.products : [];
+      const lineItems = Array.isArray(order?.line_items) ? order.line_items : [];
+      const source = products.length ? products : lineItems;
+      return source.map((item) => {
+        const quantity = parseNumeric(item?.quantity ?? item?.qty ?? 1, 1);
+        const unitPrice = parseNumeric(item?.price ?? item?.price_per_unit ?? item?.unit_price ?? 0, 0);
+        const subtotal = parseNumeric(item?.subtotal ?? item?.total ?? (unitPrice * quantity), unitPrice * quantity);
+        return {
+          productName: String(item?.name || item?.title || item?.product_name || "").trim(),
+          productId: String(item?.product_id || item?.id || "").trim(),
+          variantId: String(item?.variant_id || item?.variant?.id || "").trim(),
+          quantity,
+          unitPrice,
+          subtotal,
+          rawItem: item,
+        };
+      });
+    };
+
+    const exportDetalleCsv = async () => {
+      if (!ventasActuales.length) return setStatus('No hay ventas para exportar.');
+      btnCsvDetalle.disabled = true;
+      btnCsvDetalle.textContent = 'Exportando...';
+      setStatus('Generando detalle por artículo desde Tiendanube...');
+
+      const headers = [
+        "fecha",
+        "ticket",
+        "order_id",
+        "cliente",
         "producto",
+        "product_id",
+        "variant_id",
         "sku",
         "talla",
         "cantidad",
@@ -370,9 +481,19 @@
         "vendedora",
       ];
       const rows = [];
+      let processed = 0;
 
       for (const venta of ventasActuales) {
-        const items = Array.isArray(venta?.items) ? venta.items : [];
+        processed += 1;
+        setStatus(`Consultando Tiendanube (${processed}/${ventasActuales.length})...`);
+        let order = null;
+        try {
+          order = await getOrderById(venta.order_id);
+        } catch (_error) {
+          order = null;
+        }
+
+        const items = extractOrderItems(order || {});
         if (!items.length) {
           rows.push([
             formatDate(venta.created_at),
@@ -382,29 +503,32 @@
             "",
             "",
             "",
-            1,
-            0,
-            Number(venta.total || 0).toFixed(2),
+            "",
+            "",
+            "",
+            "",
+            "",
             formatEstado(venta),
             venta.seller || "",
           ]);
           continue;
         }
 
-        for (const rawItem of items) {
-          const item = normalizeItem(rawItem);
-          const sku = item.sku || "";
-          const talla = extraerTallaDesdeSku(sku);
+        for (const item of items) {
+          const sku = await resolveSku(item.rawItem || {});
+          const talla = extraerTallaDesdeSku(sku) || extraerTallaDesdeNombre(item.productName);
           rows.push([
             formatDate(venta.created_at),
             ticketText(venta),
             venta.order_id || "",
             venta.customer_name || "",
-            item.nombre || "",
+            item.productName || "",
+            item.productId || "",
+            item.variantId || "",
             sku,
             talla,
-            item.cantidad,
-            Number(item.precioUnitario || 0).toFixed(2),
+            item.quantity,
+            Number(item.unitPrice || 0).toFixed(2),
             Number(item.subtotal || 0).toFixed(2),
             formatEstado(venta),
             venta.seller || "",
@@ -412,20 +536,24 @@
         }
       }
 
-      const csv = [headers, ...rows]
-        .map((row) => row.map(escapeCsvValue).join(","))
-        .join("\r\n");
-      const blob = new Blob(["\uFEFF", csv], { type: 'text/csv;charset=utf-8;' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `ventas-detalle-${monthKey() || 'mes'}.csv`;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      downloadCsv({
+        headers,
+        rows,
+        fileName: `ventas-detalle-${monthKey() || 'mes'}.csv`,
+      });
+      setStatus(`Detalle exportado (${rows.length} filas).`);
+      btnCsvDetalle.disabled = false;
+      btnCsvDetalle.textContent = 'Exportar detalle';
     };
 
     document.getElementById('btnLoad').addEventListener('click', () => loadVentasFull().catch((e) => setStatus(e.message || String(e), 'error')));
     document.getElementById('btnSync').addEventListener('click', () => forceSyncVentas().catch((e) => setStatus(e.message || String(e), 'error')));
-    document.getElementById('btnCsv').addEventListener('click', exportCsv);
+    btnCsvResumen.addEventListener('click', exportResumenCsv);
+    btnCsvDetalle.addEventListener('click', () => exportDetalleCsv().catch((e) => {
+      btnCsvDetalle.disabled = false;
+      btnCsvDetalle.textContent = 'Exportar detalle';
+      setStatus(e.message || String(e), 'error');
+    }));
     searchInput.addEventListener('input', () => renderTabla(ventasActuales));
     monthInput.addEventListener('change', () => loadVentasFull().catch((e) => setStatus(e.message || String(e), 'error')));
 
