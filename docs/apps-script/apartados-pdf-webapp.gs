@@ -14,26 +14,32 @@ function doPost(e) {
   try {
     const payload = parseRequestBody_(e);
     if (payload.action !== 'generar_pdf_apartado') {
-      return jsonResponse_({ ok: false, message: 'Operación inválida' });
+      return jsonResponse_({ ok: false, message: 'Operación inválida', details: 'action debe ser generar_pdf_apartado' });
     }
 
     const folio = normalize_(payload.folio);
-    if (!folio) return jsonResponse_({ ok: false, message: 'Folio inválido' });
+    if (!folio) return jsonResponse_({ ok: false, message: 'Folio inválido', details: 'folio es obligatorio' });
+
+    Logger.log('pdf_generate:start %s', JSON.stringify({ folio: folio }));
 
     const apartadoData = getApartadoByFolio_(folio);
     if (!apartadoData) {
-      return jsonResponse_({ ok: false, message: 'Apartado no encontrado' });
+      return jsonResponse_({ ok: false, message: 'Apartado no encontrado', details: `No existe folio ${folio}` });
     }
+    Logger.log('pdf_generate:sheet_ok %s', JSON.stringify({ folio: folio, rowIndex: apartadoData.rowIndex }));
 
     const pdfFile = generateAndStorePdf_(folio, apartadoData);
     const pdfUrl = `https://drive.google.com/file/d/${pdfFile.getId()}/view`;
+    const updatedAt = new Date().toISOString();
 
     updateApartadoPdfMetadata_(apartadoData.rowIndex, {
       pdfFileId: pdfFile.getId(),
       pdfUrl,
-      pdfUpdatedAt: new Date().toISOString(),
+      pdfUpdatedAt: updatedAt,
       hasOfficialPdf: true,
     });
+    Logger.log('pdf_generate:metadata_saved %s', JSON.stringify({ folio: folio, fileId: pdfFile.getId() }));
+    Logger.log('pdf_generate:done %s', JSON.stringify({ folio: folio, fileId: pdfFile.getId() }));
 
     return jsonResponse_({
       ok: true,
@@ -41,8 +47,13 @@ function doPost(e) {
       fileId: pdfFile.getId(),
       folderId: DRIVE_FOLDER_ID,
       pdfUrl,
+      updatedAt,
     });
   } catch (error) {
+    Logger.log('pdf_generate:error %s', JSON.stringify({
+      message: error && error.message ? error.message : String(error),
+      stack: error && error.stack ? error.stack : '',
+    }));
     return jsonResponse_({
       ok: false,
       message: 'No se pudo generar el PDF',
@@ -53,7 +64,11 @@ function doPost(e) {
 
 function parseRequestBody_(e) {
   const raw = e && e.postData && e.postData.contents ? e.postData.contents : '{}';
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw || '{}');
+  } catch (error) {
+    throw new Error(`JSON inválido: ${error.message}`);
+  }
 }
 
 function normalize_(value) {
@@ -163,13 +178,18 @@ function formatMoney_(value) {
 function generateAndStorePdf_(folio, apartado) {
   const blob = generarPdfDesdeDoc_(apartado).setName(`${folio}.pdf`);
   const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+  const folderId = folder.getId();
 
   const existing = folder.getFilesByName(`${folio}.pdf`);
   while (existing.hasNext()) {
-    existing.next().setTrashed(true);
+    const previous = existing.next();
+    previous.setTrashed(true);
+    Logger.log('pdf_generate:file_deleted_previous %s', JSON.stringify({ folio: folio, previousFileId: previous.getId(), folderId: folderId }));
   }
 
-  return folder.createFile(blob);
+  const created = folder.createFile(blob);
+  Logger.log('pdf_generate:file_created %s', JSON.stringify({ folio: folio, fileId: created.getId(), folderId: folderId }));
+  return created;
 }
 
 function generarPdfDesdeDoc_(apartado) {

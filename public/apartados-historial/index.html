@@ -89,24 +89,54 @@
     let debounceTimer = null;
     let currentController = null;
 
-    async function generateOfficialPdfViaApi(folio) {
-      const resp = await fetch('/api/core?action=apartados&op=pdf-refresh', {
+    function logPdfEvent(eventName, payload = {}) {
+      console.log(eventName, payload);
+    }
+
+    function resolveApartadosPdfWebAppUrl() {
+      const runtime = window.__HARUJA_RUNTIME_CONFIG__ || window.__RUNTIME_CONFIG__ || window.RUNTIME_CONFIG || {};
+      const candidates = [
+        window.HARUJA_APARTADOS_PDF_WEBAPP_URL,
+        runtime.HARUJA_APARTADOS_PDF_WEBAPP_URL,
+        window.__HARUJA_APARTADOS_PDF_WEBAPP_URL,
+        window.__ENV__?.HARUJA_APARTADOS_PDF_WEBAPP_URL,
+        localStorage.getItem('HARUJA_APARTADOS_PDF_WEBAPP_URL'),
+      ];
+
+      const value = candidates.find((candidate) => String(candidate || '').trim());
+      return String(value || '').trim().replace(/\/$/, '');
+    }
+
+    async function generateOfficialPdfViaWebApp(folio) {
+      const webAppUrl = resolveApartadosPdfWebAppUrl();
+      if (!webAppUrl) {
+        throw new Error('Falta configurar HARUJA_APARTADOS_PDF_WEBAPP_URL. Define window.HARUJA_APARTADOS_PDF_WEBAPP_URL o localStorage[HARUJA_APARTADOS_PDF_WEBAPP_URL].');
+      }
+
+      logPdfEvent('pdf:webapp_start', { folio, webAppUrl });
+      const resp = await fetch(webAppUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folio }),
+        body: JSON.stringify({ action: 'generar_pdf_apartado', folio }),
       });
+
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || !data?.ok) {
         const message = data?.details || data?.message || data?.error || `HTTP ${resp.status}`;
         throw new Error(message || 'No se pudo generar PDF oficial.');
       }
-      return data;
+
+      const validated = validateOfficialPdfPayload(data);
+      logPdfEvent('pdf:webapp_ok', { folio, fileId: validated.fileId, pdfUrl: validated.pdfUrl });
+      return { ...data, ...validated };
     }
 
     function validateOfficialPdfPayload(payload = {}) {
       const pdfUrl = String(payload?.pdfUrl || '').trim();
       const fileId = String(payload?.fileId || '').trim();
-      if (!pdfUrl || !fileId) throw new Error(String(payload?.message || 'No se devolvió la metadata oficial del PDF (pdfUrl/fileId).'));
+      if (!payload?.ok || !pdfUrl || !fileId) {
+        throw new Error(String(payload?.message || 'No se devolvió metadata oficial válida (ok, pdfUrl y fileId).'));
+      }
       return { pdfUrl, fileId };
     }
 
@@ -206,15 +236,23 @@
       btn.disabled = true;
       btn.textContent = 'Generando PDF...';
       try {
-        const data = await generateOfficialPdfViaApi(folio);
-        const validated = validateOfficialPdfPayload(data);
+        const data = await generateOfficialPdfViaWebApp(folio);
+        const updatedAt = String(data?.updatedAt || new Date().toISOString()).trim();
         state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase()
-          ? { ...item, pdfDriveUrl: validated.pdfUrl, pdfUrl: validated.pdfUrl, pdfFileId: validated.fileId, hasOfficialPdf: true }
+          ? {
+            ...item,
+            pdfDriveUrl: data.pdfUrl,
+            pdfUrl: data.pdfUrl,
+            pdfFileId: data.fileId,
+            pdfUpdatedAt: updatedAt,
+            hasOfficialPdf: true,
+          }
           : item);
         renderRows();
         statusEl.textContent = `PDF oficial guardado correctamente en Drive para ${folio}.`;
         statusEl.className = 'status muted';
       } catch (error) {
+        logPdfEvent('pdf:webapp_error', { folio, message: error?.message || 'Error desconocido' });
         statusEl.textContent = error.message || 'Error al generar PDF oficial.';
         statusEl.className = 'status err';
       } finally {
