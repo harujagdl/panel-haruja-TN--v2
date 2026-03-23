@@ -50,6 +50,11 @@ cursor:pointer;
 font-size:14px;
 }
 
+.btn:disabled{
+opacity:.65;
+cursor:not-allowed;
+}
+
 .btn-back{
 background:#efe8dd;
 color:var(--coffee);
@@ -72,6 +77,7 @@ max-width:216mm;
 margin:0 auto 10px;
 font-size:12px;
 color:#5b5457;
+min-height:18px;
 }
 
 .card{
@@ -286,6 +292,7 @@ grid-template-columns:1fr 126px;
 <div class="actions">
 <button class="btn btn-back" onclick="history.back()">Volver</button>
 <button class="btn btn-print" onclick="window.print()">Imprimir vista</button>
+<button id="btnGuardarPdfOficial" class="btn btn-secondary">Guardar PDF oficial</button>
 <button id="btn-view-pdf" class="btn btn-secondary" style="display:none">Ver PDF oficial</button>
 <button id="btn-download-pdf" class="btn btn-secondary" style="display:none">Descargar PDF oficial</button>
 <button id="btn-refresh-pdf" class="btn btn-secondary" style="display:none">Generar PDF oficial</button>
@@ -295,108 +302,272 @@ grid-template-columns:1fr 126px;
 <div id="app"></div>
 
 <script>
+window.HARUJA_APARTADOS_PDF_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzluipdeeGvbOr5NpHkTGsk75Oo6QhzRa0wyXSkqu8rdrp826rAca0T7h7-cmoM1v63/exec";
+</script>
+
+<script>
 
 function getFolioFromPath(){
-const params=new URLSearchParams(window.location.search)
-const queryFolio=String(params.get('folio')||'').trim()
-if(queryFolio) return queryFolio
-const parts=window.location.pathname.split('/').filter(Boolean)
-if(parts[0]==='ticket' && parts[1]) return decodeURIComponent(parts[1]).trim()
-return''
+  const params = new URLSearchParams(window.location.search);
+  const queryFolio = String(params.get('folio') || '').trim();
+  if(queryFolio) return queryFolio;
+
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  if(parts[0] === 'ticket' && parts[1]) return decodeURIComponent(parts[1]).trim();
+  return '';
 }
 
-
 function generarPdfOficial(folio){
-const url=`/apartado-pdf/${encodeURIComponent(folio)}?autoprint=1`
-window.open(url,'_blank','noopener,noreferrer')
-return url
+  const url = `/apartado-pdf/${encodeURIComponent(folio)}?autoprint=1`;
+  window.open(url,'_blank','noopener,noreferrer');
+  return url;
 }
 
 function money(v){
-const n=Number(v||0)
-return '$'+n.toLocaleString('es-MX',{minimumFractionDigits:2})
+  const n = Number(v || 0);
+  return '$' + n.toLocaleString('es-MX',{minimumFractionDigits:2});
 }
 
 function esc(v){
-return String(v??'')
-.replaceAll('&','&amp;')
-.replaceAll('<','&lt;')
-.replaceAll('>','&gt;')
+  return String(v ?? '')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;');
+}
+
+function setPdfStatus(message, isError = false){
+  const statusEl = document.getElementById('pdf-status');
+  if(!statusEl) return;
+  statusEl.textContent = message || '';
+  statusEl.style.color = isError ? '#b42318' : '#5b5457';
+}
+
+function blobToBase64(blob){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = String(reader.result || '');
+      const base64 = result.split(',')[1] || '';
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function exportTicketPdfBlob(){
+  const ticket = document.getElementById('ticket-pdf-source');
+  if(!ticket) throw new Error('No se encontró el contenedor del ticket.');
+
+  if(!window.html2canvas) throw new Error('No se cargó html2canvas.');
+  if(!window.jspdf?.jsPDF) throw new Error('No se cargó jsPDF.');
+
+  const originalScrollY = window.scrollY;
+  window.scrollTo(0, 0);
+
+  const canvas = await window.html2canvas(ticket, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: '#ffffff',
+    logging: false,
+    windowWidth: document.documentElement.scrollWidth,
+    windowHeight: document.documentElement.scrollHeight
+  });
+
+  window.scrollTo(0, originalScrollY);
+
+  const imgData = canvas.toDataURL('image/jpeg', 0.95);
+  const { jsPDF } = window.jspdf;
+
+  const pdf = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'letter',
+    compress: true
+  });
+
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+
+  const margin = 20;
+  const maxWidth = pageWidth - margin * 2;
+  const maxHeight = pageHeight - margin * 2;
+
+  const ratio = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
+
+  const renderWidth = canvas.width * ratio;
+  const renderHeight = canvas.height * ratio;
+
+  const x = (pageWidth - renderWidth) / 2;
+  const y = margin;
+
+  pdf.addImage(imgData, 'JPEG', x, y, renderWidth, renderHeight, undefined, 'FAST');
+
+  return pdf.output('blob');
+}
+
+async function guardarPdfTicketWebEnAppsScript({ folio, pdfBlob }){
+  const webAppUrl =
+    window.HARUJA_APARTADOS_PDF_WEBAPP_URL ||
+    localStorage.getItem('HARUJA_APARTADOS_PDF_WEBAPP_URL') ||
+    '';
+
+  if(!webAppUrl){
+    throw new Error('Falta configurar HARUJA_APARTADOS_PDF_WEBAPP_URL');
+  }
+
+  const pdfBase64 = await blobToBase64(pdfBlob);
+
+  const response = await fetch(webAppUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8'
+    },
+    body: JSON.stringify({
+      action: 'guardar_pdf_ticket_web',
+      folio,
+      fileName: `${folio}.pdf`,
+      mimeType: 'application/pdf',
+      pdfBase64
+    })
+  });
+
+  const text = await response.text();
+  let data = null;
+
+  try{
+    data = JSON.parse(text);
+  }catch(err){
+    throw new Error(`Respuesta no válida del Web App: ${text.slice(0, 250)}`);
+  }
+
+  if(!response.ok || !data?.ok){
+    throw new Error(data?.message || 'No se pudo guardar el PDF en Drive.');
+  }
+
+  return data;
+}
+
+async function guardarPdfOficialDesdeVistaWeb(){
+  const btn = document.getElementById('btnGuardarPdfOficial');
+  const viewBtn = document.getElementById('btn-view-pdf');
+  const downloadBtn = document.getElementById('btn-download-pdf');
+  const folio = getFolioFromPath();
+
+  if(!folio){
+    setPdfStatus('No se pudo detectar el folio.', true);
+    return;
+  }
+
+  const previousText = btn?.textContent || 'Guardar PDF oficial';
+
+  try{
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = 'Generando PDF...';
+    }
+
+    setPdfStatus('Generando PDF oficial...');
+    console.log('pdf:webapp_start', { folio });
+
+    const pdfBlob = await exportTicketPdfBlob();
+
+    if(btn) btn.textContent = 'Guardando en Drive...';
+    setPdfStatus('Guardando PDF en Drive...');
+
+    const result = await guardarPdfTicketWebEnAppsScript({ folio, pdfBlob });
+
+    console.log('pdf:webapp_ok', result);
+    setPdfStatus(`PDF oficial guardado correctamente${result?.updatedAt ? ` · Actualizado: ${result.updatedAt}` : ''}`);
+
+    if(result?.pdfUrl){
+      viewBtn.style.display = 'inline-block';
+      downloadBtn.style.display = 'inline-block';
+
+      viewBtn.onclick = () => window.open(result.pdfUrl, '_blank', 'noopener');
+      downloadBtn.onclick = () => window.open(result.pdfUrl, '_blank', 'noopener');
+    }
+  }catch(error){
+    console.error('pdf:webapp_error', error);
+    setPdfStatus(error?.message || 'No se pudo guardar el PDF oficial.', true);
+  }finally{
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = previousText;
+    }
+  }
 }
 
 async function loadTicket(){
 
-const folio=getFolioFromPath()
+  const folio = getFolioFromPath();
 
-if(!folio){
-document.getElementById('app').innerHTML="Folio inválido"
-return
+  if(!folio){
+    document.getElementById('app').innerHTML = "Folio inválido";
+    return;
+  }
+
+  const res = await fetch(`/api/core?action=apartados&op=detail&folio=${encodeURIComponent(folio)}`);
+  const payload = await res.json();
+  const data = payload?.data || payload;
+
+  renderTicket(data);
+  await syncPdfUi(folio);
 }
-
-const res=await fetch(`/api/core?action=apartados&op=detail&folio=${encodeURIComponent(folio)}`)
-const payload=await res.json()
-const data=payload?.data||payload
-
-renderTicket(data)
-await syncPdfUi(folio)
-
-}
-
 
 async function syncPdfUi(folio){
-const statusEl=document.getElementById('pdf-status')
-const viewBtn=document.getElementById('btn-view-pdf')
-const downloadBtn=document.getElementById('btn-download-pdf')
-const refreshBtn=document.getElementById('btn-refresh-pdf')
-if(!statusEl||!viewBtn||!downloadBtn||!refreshBtn||!folio) return
+  const statusEl = document.getElementById('pdf-status');
+  const viewBtn = document.getElementById('btn-view-pdf');
+  const downloadBtn = document.getElementById('btn-download-pdf');
+  const refreshBtn = document.getElementById('btn-refresh-pdf');
 
-const applyPdf=(pdfUrl,updatedAt)=>{
-if(pdfUrl){
-viewBtn.style.display='inline-block'
-downloadBtn.style.display='inline-block'
-viewBtn.onclick=()=>window.open(pdfUrl,'_blank','noopener')
-downloadBtn.onclick=()=>window.open(pdfUrl,'_blank','noopener')
-statusEl.textContent=`PDF oficial disponible${updatedAt?` · Actualizado: ${updatedAt}`:''}`
-}else{
-viewBtn.style.display='none'
-downloadBtn.style.display='none'
-statusEl.textContent='Genera el PDF oficial con el botón para descargarlo.'
-}
-}
+  if(!statusEl || !viewBtn || !downloadBtn || !refreshBtn || !folio) return;
 
-refreshBtn.style.display='inline-block'
-refreshBtn.onclick=()=>{
-const pdfUrl=generarPdfOficial(folio)
-viewBtn.style.display='inline-block'
-downloadBtn.style.display='inline-block'
-viewBtn.onclick=()=>window.open(pdfUrl,'_blank','noopener')
-downloadBtn.onclick=()=>window.open(pdfUrl,'_blank','noopener')
-statusEl.textContent='Abriendo PDF oficial…'
-}
-applyPdf('','')
+  const applyPdf = (pdfUrl, updatedAt) => {
+    if(pdfUrl){
+      viewBtn.style.display = 'inline-block';
+      downloadBtn.style.display = 'inline-block';
+      viewBtn.onclick = () => window.open(pdfUrl,'_blank','noopener');
+      downloadBtn.onclick = () => window.open(pdfUrl,'_blank','noopener');
+      statusEl.textContent = `PDF oficial disponible${updatedAt ? ` · Actualizado: ${updatedAt}` : ''}`;
+    }else{
+      viewBtn.style.display = 'none';
+      downloadBtn.style.display = 'none';
+      statusEl.textContent = 'Genera el PDF oficial con el botón para descargarlo.';
+    }
+  };
+
+  refreshBtn.style.display = 'inline-block';
+  refreshBtn.onclick = () => {
+    const pdfUrl = generarPdfOficial(folio);
+    viewBtn.style.display = 'inline-block';
+    downloadBtn.style.display = 'inline-block';
+    viewBtn.onclick = () => window.open(pdfUrl,'_blank','noopener');
+    downloadBtn.onclick = () => window.open(pdfUrl,'_blank','noopener');
+    statusEl.textContent = 'Abriendo PDF oficial…';
+  };
+
+  applyPdf('','');
 }
 
 function renderTicket(payload){
 
-const a=payload.apartado||payload
+  const a = payload.apartado || payload;
+  const items = a.productos || [];
 
-const items=a.productos||[]
-
-const rows=items.length?items.map(i=>`
-
+  const rows = items.length ? items.map(i => `
 <tr>
 <td>${esc(i.codigo)}</td>
 <td>${esc(i.descripcion)}</td>
-<td class="ta-center">${esc(i.cantidad||1)}</td>
+<td class="ta-center">${esc(i.cantidad || 1)}</td>
 <td class="ta-right">${money(i.precio)}</td>
 <td class="ta-right">${money(i.subtotal)}</td>
 </tr>
+`).join('') : `<tr><td colspan="5" class="ta-center">No hay productos</td></tr>`;
 
-`).join(''):`<tr><td colspan="5" class="ta-center">No hay productos</td></tr>`
+  document.getElementById('app').innerHTML = `
 
-document.getElementById('app').innerHTML=`
-
-<div class="card">
+<div class="card" id="ticket-pdf-source" data-folio="${esc(a.folio)}">
 
 <div class="logo-wrap">
 <img class="logo" src="/assets/haruja-logo.png" alt="HarujaGdl">
@@ -412,7 +583,7 @@ document.getElementById('app').innerHTML=`
 <div class="meta">
 <b>Fecha:</b><div>${esc(a.fecha)}</div>
 <b>Cliente:</b><div>${esc(a.cliente)}</div>
-<b>Contacto:</b><div>${esc(a.telefono||a.contacto)}</div>
+<b>Contacto:</b><div>${esc(a.telefono || a.contacto)}</div>
 </div>
 
 <div class="section-title">Detalle</div>
@@ -467,7 +638,7 @@ document.getElementById('app').innerHTML=`
 <b>Pedido:</b><div>${esc(a.folio)}</div>
 <b>Fecha:</b><div>${esc(a.fecha)}</div>
 <b>Cliente:</b><div>${esc(a.cliente)}</div>
-<b>Contacto:</b><div>${esc(a.telefono||a.contacto)}</div>
+<b>Contacto:</b><div>${esc(a.telefono || a.contacto)}</div>
 </div>
 
 <div class="qr-box">
@@ -478,17 +649,25 @@ document.getElementById('app').innerHTML=`
 </div>
 
 </div>
-`
+`;
 
-const urlStatus=`${window.location.origin}/apartado/${encodeURIComponent(a.folio||'')}`
-
-QRCode.toCanvas(document.getElementById('qr'),urlStatus,{width:106,margin:1})
-
+  const urlStatus = `${window.location.origin}/apartado/${encodeURIComponent(a.folio || '')}`;
+  QRCode.toCanvas(document.getElementById('qr'), urlStatus, { width:106, margin:1 });
 }
 
-loadTicket()
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('btnGuardarPdfOficial');
+  if(btn){
+    btn.addEventListener('click', guardarPdfOficialDesdeVistaWeb);
+  }
+});
+
+loadTicket();
 
 </script>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
 </body>
 </html>
