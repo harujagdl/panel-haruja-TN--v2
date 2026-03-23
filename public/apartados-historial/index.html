@@ -79,23 +79,7 @@
     </div>
   </div>
 
-  <script>
-/**
- * CONFIG GLOBAL PARA PDF
- * Aquí defines la URL del Apps Script Web App
- */
-window.HARUJA_APARTADOS_PDF_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzluipdeeGvbOr5NpHkTGsk75Oo6QhzRa0wyXSkqu8rdrp826rAca0T7h7-cmoM1v63/exec";
-
-/**
- * También lo guardamos en localStorage como fallback
- */
-localStorage.setItem(
-  "HARUJA_APARTADOS_PDF_WEBAPP_URL",
-  window.HARUJA_APARTADOS_PDF_WEBAPP_URL
-);
-
-console.log("PDF WebApp URL:", window.HARUJA_APARTADOS_PDF_WEBAPP_URL);
-</script>
+  
   
   <script>
     const state = { apartados: [] };
@@ -110,33 +94,13 @@ console.log("PDF WebApp URL:", window.HARUJA_APARTADOS_PDF_WEBAPP_URL);
     function logPdfEvent(eventName, payload = {}) {
       console.log(eventName, payload);
     }
-
-    function resolveApartadosPdfWebAppUrl() {
-      const runtime = window.__HARUJA_RUNTIME_CONFIG__ || window.__RUNTIME_CONFIG__ || window.RUNTIME_CONFIG || {};
-      const candidates = [
-        window.HARUJA_APARTADOS_PDF_WEBAPP_URL,
-        runtime.HARUJA_APARTADOS_PDF_WEBAPP_URL,
-        window.__HARUJA_APARTADOS_PDF_WEBAPP_URL,
-        window.__ENV__?.HARUJA_APARTADOS_PDF_WEBAPP_URL,
-        localStorage.getItem('HARUJA_APARTADOS_PDF_WEBAPP_URL'),
-      ];
-
-      const value = candidates.find((candidate) => String(candidate || '').trim());
-      return String(value || '').trim().replace(/\/$/, '');
-    }
-
     async function generateOfficialPdfViaWebApp(folio) {
-      const webAppUrl = resolveApartadosPdfWebAppUrl();
-      if (!webAppUrl) {
-        throw new Error('Falta configurar HARUJA_APARTADOS_PDF_WEBAPP_URL. Define window.HARUJA_APARTADOS_PDF_WEBAPP_URL o localStorage[HARUJA_APARTADOS_PDF_WEBAPP_URL].');
-      }
-
-      logPdfEvent('pdf:webapp_start', { folio, webAppUrl });
-    const resp = await fetch('/api/pdf-webapp-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'generar_pdf_apartado', folio }),
-    });
+      logPdfEvent('pdf:webapp_start', { folio });
+      const resp = await fetch('/api/core?action=apartados&op=pdf-webapp-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generar_pdf_apartado', folio }),
+      });
 
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || !data?.ok) {
