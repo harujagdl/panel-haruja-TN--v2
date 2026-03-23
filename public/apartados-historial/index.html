@@ -132,11 +132,11 @@ console.log("PDF WebApp URL:", window.HARUJA_APARTADOS_PDF_WEBAPP_URL);
       }
 
       logPdfEvent('pdf:webapp_start', { folio, webAppUrl });
-      const resp = await fetch(webAppUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'generar_pdf_apartado', folio }),
-      });
+    const resp = await fetch('/api/pdf-webapp-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'generar_pdf_apartado', folio }),
+    });
 
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || !data?.ok) {
