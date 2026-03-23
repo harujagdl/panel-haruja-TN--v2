@@ -93,34 +93,6 @@
       console.log(eventName, payload);
     }
 
-    async function generateOfficialPdfViaWebApp(folio) {
-      logPdfEvent('pdf:webapp_start', { folio, proxy: '/api/core?action=apartados&op=pdf-webapp-proxy' });
-      const resp = await fetch('/api/core?action=apartados&op=pdf-webapp-proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folio }),
-      });
-
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok || !data?.ok) {
-        const message = data?.details || data?.message || data?.error || `HTTP ${resp.status}`;
-        throw new Error(message || 'No se pudo generar PDF oficial.');
-      }
-
-      const validated = validateOfficialPdfPayload(data);
-      logPdfEvent('pdf:webapp_ok', { folio, fileId: validated.fileId, pdfUrl: validated.pdfUrl });
-      return { ...data, ...validated };
-    }
-
-    function validateOfficialPdfPayload(payload = {}) {
-      const pdfUrl = String(payload?.pdfUrl || '').trim();
-      const fileId = String(payload?.fileId || '').trim();
-      if (!payload?.ok || !pdfUrl || !fileId) {
-        throw new Error(String(payload?.message || 'No se devolvió metadata oficial válida (ok, pdfUrl y fileId).'));
-      }
-      return { pdfUrl, fileId };
-    }
-
     function formatMoney(value) {
       const amount = Number(value || 0);
       return amount.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
@@ -210,37 +182,71 @@
       statusEl.className = 'status err';
     }
 
+    function openTicketForPdfGeneration(folio) {
+      const url = `/ticket/${encodeURIComponent(folio)}?exportPdf=1&source=historial`;
+      const popup = window.open(url, '_blank', 'noopener,noreferrer,width=1200,height=900');
+      if (!popup) {
+        throw new Error('Tu navegador bloqueó la ventana emergente. Permite popups para generar el PDF.');
+      }
+      return popup;
+    }
+
     async function regeneratePdf(btn) {
       const folio = String(btn?.dataset?.folio || '').trim();
       if (!folio) return;
+
       const original = btn.textContent;
       btn.disabled = true;
-      btn.textContent = 'Generando PDF...';
+      btn.textContent = 'Abriendo ticket...';
+
       try {
-        const data = await generateOfficialPdfViaWebApp(folio);
-        const updatedAt = String(data?.updatedAt || new Date().toISOString()).trim();
-        state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase()
-          ? {
-            ...item,
-            pdfDriveUrl: data.pdfUrl,
-            pdfUrl: data.pdfUrl,
-            pdfFileId: data.fileId,
-            pdfUpdatedAt: updatedAt,
-            hasOfficialPdf: true,
-          }
-          : item);
-        renderRows();
-        statusEl.textContent = `PDF oficial guardado correctamente en Drive para ${folio}.`;
+        openTicketForPdfGeneration(folio);
+        logPdfEvent('pdf:open_ticket', { folio });
+        statusEl.textContent = `Abriendo ticket para generar PDF oficial de ${folio}...`;
         statusEl.className = 'status muted';
       } catch (error) {
-        logPdfEvent('pdf:webapp_error', { folio, message: error?.message || 'Error desconocido' });
-        statusEl.textContent = error.message || 'Error al generar PDF oficial.';
+        logPdfEvent('pdf:open_ticket_error', { folio, message: error?.message || 'Error desconocido' });
+        statusEl.textContent = error.message || 'No se pudo abrir el ticket para generar PDF.';
         statusEl.className = 'status err';
-      } finally {
         btn.disabled = false;
         btn.textContent = original;
       }
     }
+
+    function markPdfReady({ folio, pdfUrl, fileId, updatedAt }) {
+      state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === String(folio || '').toUpperCase()
+        ? {
+            ...item,
+            pdfDriveUrl: pdfUrl,
+            pdfUrl,
+            pdfFileId: fileId,
+            pdfUpdatedAt: updatedAt,
+            hasOfficialPdf: true,
+          }
+        : item);
+
+      renderRows();
+      statusEl.textContent = `PDF oficial guardado correctamente en Drive para ${folio}.`;
+      statusEl.className = 'status muted';
+    }
+
+    window.addEventListener('message', (event) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data || {};
+      if (data?.source !== 'haruja-ticket' || data?.type !== 'pdf-saved') return;
+
+      if (data?.error) {
+        logPdfEvent('pdf:message_error', data);
+        statusEl.textContent = data.error;
+        statusEl.className = 'status err';
+        return;
+      }
+
+      if (data?.folio && data?.pdfUrl && data?.fileId) {
+        logPdfEvent('pdf:message_ok', data);
+        markPdfReady(data);
+      }
+    });
 
     function buildListUrl() {
       const url = new URL('/api/core', window.location.origin);
