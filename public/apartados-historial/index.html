@@ -106,7 +106,7 @@
     function validateOfficialPdfPayload(payload = {}) {
       const pdfUrl = String(payload?.pdfUrl || '').trim();
       const fileId = String(payload?.fileId || '').trim();
-      if (!pdfUrl) throw new Error(String(payload?.message || 'No se devolvió la URL del PDF oficial.'));
+      if (!pdfUrl || !fileId) throw new Error(String(payload?.message || 'No se devolvió la metadata oficial del PDF (pdfUrl/fileId).'));
       return { pdfUrl, fileId };
     }
 
@@ -209,7 +209,7 @@
         const data = await generateOfficialPdfViaApi(folio);
         const validated = validateOfficialPdfPayload(data);
         state.apartados = state.apartados.map((item) => String(item.folio || '').toUpperCase() === folio.toUpperCase()
-          ? { ...item, pdfDriveUrl: validated.pdfUrl, pdfFileId: validated.fileId }
+          ? { ...item, pdfDriveUrl: validated.pdfUrl, pdfUrl: validated.pdfUrl, pdfFileId: validated.fileId, hasOfficialPdf: true }
           : item);
         renderRows();
         statusEl.textContent = `PDF oficial guardado correctamente en Drive para ${folio}.`;
