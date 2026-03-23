@@ -80,6 +80,24 @@
   </div>
 
   <script>
+/**
+ * CONFIG GLOBAL PARA PDF
+ * Aquí defines la URL del Apps Script Web App
+ */
+window.HARUJA_APARTADOS_PDF_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzluipdeeGvbOr5NpHkTGsk75Oo6QhzRa0wyXSkqu8rdrp826rAca0T7h7-cmoM1v63/exec";
+
+/**
+ * También lo guardamos en localStorage como fallback
+ */
+localStorage.setItem(
+  "HARUJA_APARTADOS_PDF_WEBAPP_URL",
+  window.HARUJA_APARTADOS_PDF_WEBAPP_URL
+);
+
+console.log("PDF WebApp URL:", window.HARUJA_APARTADOS_PDF_WEBAPP_URL);
+</script>
+  
+  <script>
     const state = { apartados: [] };
     const statusEl = document.getElementById('status');
     const rowsEl = document.getElementById('rows');
