@@ -1,4 +1,4 @@
-import { FIXED_STORE_ID, fetchTiendanubeOrderById, getVentasConfig, processTiendanubeWebhook } from '../../lib/api/core.js';
+import { fetchTiendanubeOrderById, processTiendanubeWebhook, resolveTiendanubeConnection } from '../../lib/api/core.js';
 import { verifyTiendanubeWebhook } from '../../lib/tiendanube/verifyWebhook.js';
 import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
 import {
@@ -61,8 +61,11 @@ export default async function handler(req, res) {
     }
 
     const payload = JSON.parse(rawBody || '{}');
+    const connection = await resolveTiendanubeConnection();
+    const resolvedStoreId = String(connection?.storeId || '').trim();
     const storeId = getStoreId(payload, req);
-    if (storeId && storeId !== FIXED_STORE_ID) {
+    if (storeId && resolvedStoreId && storeId !== resolvedStoreId) {
+      console.log('[ventas-webhook] ignored_store_mismatch incoming=%s configured=%s', storeId, resolvedStoreId);
       return res.status(200).json({ ok: true, ignored: 'store_mismatch' });
     }
 
@@ -90,10 +93,9 @@ export default async function handler(req, res) {
     }
     lockAcquired = true;
 
-    const configVentas = await getVentasConfig();
     const enrichedPayload = { ...payload };
-    if (!enrichedPayload.order && configVentas?.access_token) {
-      enrichedPayload.order = await fetchTiendanubeOrderById(FIXED_STORE_ID, configVentas.access_token, orderId);
+    if (!enrichedPayload.order && resolvedStoreId && connection?.accessToken) {
+      enrichedPayload.order = await fetchTiendanubeOrderById(resolvedStoreId, connection.accessToken, orderId);
     }
 
     const result = await processTiendanubeWebhook(enrichedPayload, req);
