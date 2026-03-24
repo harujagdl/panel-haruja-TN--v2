@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getLatestWebhookEvent } from '../lib/ventas/dedupeWebhookEvent.js';
 import {
   archivePrenda,
@@ -43,6 +44,92 @@ const sendErr = (res, status, message, error) =>
     message,
     ...(error ? { error: String(error?.message || error) } : {}),
   });
+
+const HARUJA_ADMIN_COOKIE = 'HARUJA_ADMIN_SESSION';
+const ADMIN_ALLOWLIST = [
+  'yair.tenorio.silva@gmail.com',
+  'harujagdl@gmail.com',
+  'harujagdl.ventas@gmail.com',
+].map((email) => String(email || '').trim().toLowerCase());
+const ADMIN_ALLOWLIST_SET = new Set(ADMIN_ALLOWLIST);
+const ADMIN_SESSION_SECRET = String(
+  process.env.HARUJA_ADMIN_SESSION_SECRET || process.env.CORE_ADMIN_SESSION_SECRET || 'haruja-admin-session-v1'
+);
+const SESSION_MAX_AGE = 60 * 60 * 12;
+
+const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
+const isAllowedAdminEmail = (email) => ADMIN_ALLOWLIST_SET.has(normalizeEmail(email));
+
+const parseCookies = (req) => {
+  const raw = String(req?.headers?.cookie || '');
+  if (!raw) return {};
+  return raw.split(';').reduce((acc, part) => {
+    const [k, ...rest] = part.split('=');
+    const key = String(k || '').trim();
+    if (!key) return acc;
+    acc[key] = decodeURIComponent(rest.join('=').trim());
+    return acc;
+  }, {});
+};
+
+const buildSessionToken = (email) => {
+  const payload = Buffer.from(
+    JSON.stringify({
+      email: normalizeEmail(email),
+      iat: Date.now(),
+    }),
+    'utf8'
+  ).toString('base64url');
+  const signature = createHmac('sha256', ADMIN_SESSION_SECRET).update(payload).digest('hex');
+  return `${payload}.${signature}`;
+};
+
+const readAdminSession = (req) => {
+  const cookies = parseCookies(req);
+  const token = String(cookies[HARUJA_ADMIN_COOKIE] || '').trim();
+  if (!token || !token.includes('.')) return null;
+  const [payload, signature] = token.split('.');
+  if (!payload || !signature) return null;
+  const expected = createHmac('sha256', ADMIN_SESSION_SECRET).update(payload).digest('hex');
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    const email = normalizeEmail(decoded?.email);
+    if (!email) return null;
+    return {
+      authenticated: true,
+      email,
+      isAdmin: isAllowedAdminEmail(email),
+    };
+  } catch (_error) {
+    return null;
+  }
+};
+
+const setAdminSessionCookie = (res, email) => {
+  const token = buildSessionToken(email);
+  const secure = process.env.NODE_ENV === 'production';
+  res.setHeader(
+    'Set-Cookie',
+    `${HARUJA_ADMIN_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE};${secure ? ' Secure;' : ''}`
+  );
+};
+
+const clearAdminSessionCookie = (res) => {
+  const secure = process.env.NODE_ENV === 'production';
+  res.setHeader(
+    'Set-Cookie',
+    `${HARUJA_ADMIN_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0;${secure ? ' Secure;' : ''}`
+  );
+};
+
+const requireAdminSession = (req) => {
+  const session = readAdminSession(req);
+  if (!session?.authenticated || !session?.isAdmin) return null;
+  return session;
+};
 
 function getBaseUrl(reqLike = {}) {
   const configured = String(process.env.APP_URL || '').trim().replace(/\/$/, '');
@@ -125,6 +212,10 @@ async function proxyApartadoPdfWebApp(req, res) {
 
 async function handlePrendas(req, res) {
   const op = String(req.query?.op || req.body?.op || req.query?.mode || '').trim();
+  const isSensitiveOp = ['create', 'delete', 'archive', 'restore', 'import-corrections'].includes(op);
+  if (isSensitiveOp && !requireAdminSession(req)) {
+    return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
+  }
 
   if (req.method === 'GET' && (!op || op === 'list')) return sendOk(res, await listPrendas());
   if (req.method === 'GET' && op === 'archived') return sendOk(res, await listArchivedPrendas());
@@ -149,6 +240,44 @@ async function handlePrendas(req, res) {
   }
 
   return sendErr(res, 400, 'Operación inválida para action=prendas.');
+}
+
+async function handleAdminSession(req, res) {
+  const op = String(req.query?.op || req.body?.op || '').trim();
+  if (req.method === 'GET' && op === 'status') {
+    const session = readAdminSession(req);
+    return res.status(200).json({
+      ok: true,
+      authenticated: Boolean(session?.authenticated),
+      email: session?.email || null,
+      isAdmin: Boolean(session?.isAdmin),
+    });
+  }
+
+  if (req.method === 'POST' && op === 'login') {
+    const email = normalizeEmail(req.body?.email);
+    if (!isAllowedAdminEmail(email)) {
+      clearAdminSessionCookie(res);
+      return res.status(403).json({
+        ok: false,
+        message: 'Correo no autorizado para modo admin.',
+      });
+    }
+    setAdminSessionCookie(res, email);
+    return res.status(200).json({
+      ok: true,
+      authenticated: true,
+      email,
+      isAdmin: true,
+    });
+  }
+
+  if (req.method === 'POST' && op === 'logout') {
+    clearAdminSessionCookie(res);
+    return res.status(200).json({ ok: true });
+  }
+
+  return sendErr(res, 400, 'Operación inválida para action=admin-session.');
 }
 
 async function handleApartados(req, res) {
@@ -232,15 +361,20 @@ export default async function handler(req, res) {
 
     if (action === 'prendas-list') return sendOk(res, await listPrendas());
     if (action === 'prendas-generar-codigo') return sendOk(res, await generarCodigoPrenda(req.body || {}));
-    if (action === 'prendas-create') return sendOk(res, await createPrenda(req.body || {}));
+    if (action === 'prendas-create') {
+      if (!requireAdminSession(req)) return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
+      return sendOk(res, await createPrenda(req.body || {}));
+    }
 
     if (action === 'prendas-delete') {
+      if (!requireAdminSession(req)) return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
       const result = await deletePrenda(req.body || {});
       if (result?.status) return res.status(result.status).json(result.body);
       return sendOk(res, result);
     }
 
     if (action === 'prendas-archive') {
+      if (!requireAdminSession(req)) return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
       const result = await archivePrenda(req.body || {});
       if (result?.status) return res.status(result.status).json(result.body);
       return sendOk(res, result);
@@ -249,19 +383,26 @@ export default async function handler(req, res) {
     if (action === 'prendas-archived-list') return sendOk(res, await listArchivedPrendas());
 
     if (action === 'prendas-restore') {
+      if (!requireAdminSession(req)) return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
       const result = await restorePrenda(req.body || {});
       if (result?.status) return res.status(result.status).json(result.body);
       return sendOk(res, result);
     }
 
-    if (action === 'prendas-import-corrections') return sendOk(res, await importCorrections(req.body || {}));
+    if (action === 'prendas-import-corrections') {
+      if (!requireAdminSession(req)) return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
+      return sendOk(res, await importCorrections(req.body || {}));
+    }
 
     if (action === 'prendas') return await handlePrendas(req, res);
 
     if (action === 'prendas-admin') {
+      if (!requireAdminSession(req)) return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
       if (req.method === 'GET') return sendOk(res, await listArchivedPrendas());
       return sendOk(res, await importCorrections(req.body || {}));
     }
+
+    if (action === 'admin-session') return await handleAdminSession(req, res);
 
     if (action === 'apartados') return await handleApartados(req, res);
 
