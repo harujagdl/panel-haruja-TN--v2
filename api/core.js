@@ -194,36 +194,11 @@ async function handleApartados(req, res) {
     return proxyApartadoPdfWebApp(req, res);
   }
 
-  // ✅ Mantener este flujo por compatibilidad si todavía lo usas en otro lado
-  if (req.method === 'POST' && op === 'pdf-refresh') {
-    if (!folio) return sendErr(res, 400, 'folio es obligatorio.');
-    try {
-      const result = await regenerateApartadoPdf(folio, {
-        ...(req.body || {}),
-      });
-
-      if (result?.status) {
-        return res.status(result.status).json(
-          result.body || { ok: false, message: 'No se pudo generar el PDF oficial.' }
-        );
-      }
-
-      return res.status(200).json(result);
-    } catch (err) {
-      console.error('PDF OFICIAL ERROR', {
-        point: 'handleApartados:pdf-refresh:webapp',
-        action,
-        folio,
-        message: err?.message,
-        stack: err?.stack,
-      });
-
-      return res.status(500).json({
-        ok: false,
-        message: err?.message || 'Error interno al generar PDF oficial',
-      });
-    }
-  }
+  // 🔥 FORZAR SIEMPRE Apps Script (sin service account)
+if (req.method === 'POST' && op === 'pdf-refresh') {
+  console.log('pdf_refresh_redirect_to_webapp');
+  return proxyApartadoPdfWebApp(req, res);
+}
 
   if (req.method === 'POST' && op === 'pdf-drive-test') {
     const result = await runApartadoPdfDriveWriteTest();
