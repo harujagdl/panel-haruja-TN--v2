@@ -2821,16 +2821,6 @@ Errores: 0</pre>
         persistentMultipleTabManager,
         memoryLocalCache
       } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
-      import {
-        getAuth,
-        GoogleAuthProvider,
-        onAuthStateChanged,
-        signInAnonymously,
-        signInWithPopup,
-        signInWithRedirect,
-        getRedirectResult,
-        signOut
-      } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
       import { ajustarDesdePrecioConIVA } from "/shared/priceRules.js";
       import {
         emptyMonths
@@ -2838,6 +2828,7 @@ Errores: 0</pre>
       import {
         adminSignIn,
         adminSignOut,
+        getAdminSession,
         isAdminUser
       } from "/shared/adminAuth.js";
       import { loadBaseRowsFromSheets } from "/shared/sheets-adapter.js";
@@ -2880,7 +2871,6 @@ Errores: 0</pre>
         payload
       });
       const loadArchivedPrendas = async () => callPrendasSheetsApi({ action: "prendas-archived-list" });
-
       const firebaseConfig = {
         apiKey: "AIzaSyAK5_MuMseQm58AeRZlrPtGyEZ216-Xkno",
         authDomain: "haruja-tiendanube.firebaseapp.com",
@@ -2889,49 +2879,7 @@ Errores: 0</pre>
         messagingSenderId: "396461447684",
         appId: "1:396461447684:web:770dc3bc9bbb40a2873351"
       };
-      console.log("[Firebase] projectId:", firebaseConfig.projectId);
-
       const app = initializeApp(firebaseConfig);
-      const auth = getAuth(app);
-      let firebaseReadyPromise = null;
-      const ensureFirebaseSession = async () => {
-        if (auth.currentUser) {
-          return auth.currentUser;
-        }
-        if (firebaseReadyPromise) {
-          return firebaseReadyPromise;
-        }
-
-        firebaseReadyPromise = new Promise((resolve, reject) => {
-          let signInAttempted = false;
-          const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-              console.log("[auth] usuario listo:", user.uid);
-              unsubscribe();
-              resolve(user);
-              return;
-            }
-
-            if (signInAttempted) return;
-            signInAttempted = true;
-
-            try {
-              console.log("[auth] sin usuario, intentando signInAnonymously...");
-              await signInAnonymously(auth);
-            } catch (error) {
-              console.error("[auth] error en signInAnonymously:", error);
-              unsubscribe();
-              reject(error);
-            }
-          });
-        }).catch((error) => {
-          firebaseReadyPromise = null;
-          throw error;
-        });
-
-        return firebaseReadyPromise;
-      };
-      const googleProvider = new GoogleAuthProvider();
       const debugMode = new URLSearchParams(window.location.search).get("debug") === "1";
       function isEmbedded() {
         try {
@@ -2971,6 +2919,7 @@ Errores: 0</pre>
           return false;
         }
       };
+      const ensureFirebaseSession = async () => null;
       const toSerializableError = (error) => ({
         name: error?.name,
         message: error?.message || String(error || ""),
@@ -3038,23 +2987,6 @@ Errores: 0</pre>
         copyBtn?.addEventListener("click", () => copyFatalDetails(error));
       };
       window.__LAST_FATAL_ERROR__ = null;
-      const authRedirectResultPromise = getRedirectResult(auth)
-        .then((result) => result?.user || null)
-        .catch((error) => {
-          console.error("[Auth] Error procesando redirect:", error);
-          return null;
-        });
-      const signInWithGoogleForContext = async () => {
-        // IMPORTANTE:
-        // Para login Google en Vercel, agregar el dominio del deploy
-        // en Firebase Console > Authentication > Settings > Authorized domains
-        if (isEmbeddedApp) {
-          await signInWithRedirect(auth, googleProvider);
-          return null;
-        }
-        const response = await signInWithPopup(auth, googleProvider);
-        return response?.user || null;
-      };
       let db;
       try {
         db = initializeFirestore(app, {
@@ -3578,10 +3510,10 @@ Errores: 0</pre>
       };
 
       const monthKey = (year, month) => `${year}-${String(month).padStart(2, "0")}`;
-      const isMetaAdmin = () => isAdminUser(auth?.currentUser) && isAllowlistedAdmin(safeString(auth?.currentUser?.email).toLowerCase());
+      const isMetaAdmin = () => Boolean(adminSession?.isAdmin) && isAdminUser(adminSession);
 
       const syncMetaAccessUi = () => {
-        const user = auth?.currentUser || null;
+        const user = adminSession?.authenticated ? adminSession : null;
         const metaAdminEnabled = isMetaAdmin();
         if (metaRoleChip) {
           if (!user) metaRoleChip.textContent = "Público";
@@ -3743,7 +3675,18 @@ Errores: 0</pre>
 
         metaAdminLoginBtn?.addEventListener("click", async () => {
           try {
-            await adminSignIn(auth);
+            const email = window.prompt("Ingresa tu correo admin:", adminSession?.email || "") || "";
+            if (!email.trim()) return;
+            const session = await adminSignIn(email);
+            adminSession = {
+              authenticated: Boolean(session?.authenticated),
+              email: session?.email || null,
+              isAdmin: Boolean(session?.isAdmin)
+            };
+            prendasState.adminByAuth = Boolean(adminSession?.isAdmin);
+            prendasState.adminEmail = safeString(adminSession?.email).trim().toLowerCase();
+            applyAdminUI({ refresh: true });
+            syncMetaAccessUi();
             if (metaAdminMessage) {
               metaAdminMessage.textContent = "Sesión admin iniciada ✅";
               metaAdminMessage.classList.remove("hidden", "error");
@@ -3760,7 +3703,12 @@ Errores: 0</pre>
 
         metaAdminLogoutBtn?.addEventListener("click", async () => {
           try {
-            await adminSignOut(auth);
+            await adminSignOut();
+            adminSession = { authenticated: false, email: null, isAdmin: false };
+            prendasState.adminByAuth = false;
+            prendasState.adminEmail = "";
+            applyAdminUI({ refresh: true });
+            syncMetaAccessUi();
             if (metaAdminMessage) {
               metaAdminMessage.textContent = "Sesión cerrada.";
               metaAdminMessage.classList.remove("hidden", "error");
@@ -4361,7 +4309,7 @@ Errores: 0</pre>
       const PRENDAS_COLLECTION_CANDIDATES = [
         PRENDAS_PUBLIC_COLLECTION
       ];
-      const API_BASE = `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net`;
+      const API_BASE = window.location.origin;
       const SPLIT_FUNCTION_NAME = "migrateSplitCollections";
       const SPLIT_FUNCTION_URL = `${API_BASE}/${SPLIT_FUNCTION_NAME}`;
       const ADMIN_ALLOWLIST = new Set([
@@ -4543,10 +4491,11 @@ Errores: 0</pre>
       prendasState.editing = null;
       let isBooting = true;
       let isAdminMode = false;
+      let adminSession = { authenticated: false, email: null, isAdmin: false };
 
       const resolveActivePrendasCollection = ({ isAdmin = false } = {}) => {
         const embedded = isEmbedded();
-        const authEmail = safeString(auth?.currentUser?.email).trim().toLowerCase();
+        const authEmail = safeString(adminSession?.email).trim().toLowerCase();
         const hasRuntimeAdminAuth = Boolean(prendasState?.adminByAuth) && isAllowlistedAdmin(authEmail);
 
         if (isAdmin && hasRuntimeAdminAuth) {
@@ -4572,8 +4521,8 @@ Errores: 0</pre>
         }
         prendasRef = collection(db, activePrendasPublicCollection);
         prendasPublicRef = collection(db, activePrendasPublicCollection);
-        console.log("[Firebase][Registro] projectId:", firebaseConfig?.projectId, "collection:", activePrendasPublicCollection);
-        console.log("[Firebase][Listado] projectId:", firebaseConfig?.projectId, "collection:", activePrendasPublicCollection);
+        console.log("[Prendas][Registro] collection:", activePrendasPublicCollection);
+        console.log("[Prendas][Listado] collection:", activePrendasPublicCollection);
         console.log("[Prendas] ✅ Usando colección:", activePrendasPublicCollection);
       };
 
@@ -7146,21 +7095,19 @@ const createPrendaRow = (item) => {
       };
 
       const ensureAdminSession = async () => {
-        let user = auth.currentUser;
-        if (!user) {
-          user = await signInWithGoogleForContext();
-        }
-        if (!user) {
-          throw new Error("Iniciando autenticación por redirect...");
-        }
-        const email = safeString(user?.email).trim().toLowerCase();
+        const session = adminSession?.authenticated ? adminSession : await getAdminSession().catch(() => null);
+        const email = safeString(session?.email).trim().toLowerCase();
         if (!isAllowlistedAdmin(email)) {
-          if (user) {
-            await signOut(auth);
-          }
           throw new Error("Usuario no autorizado para editar.");
         }
-        return user;
+        adminSession = {
+          authenticated: true,
+          email,
+          isAdmin: true
+        };
+        prendasState.adminByAuth = true;
+        prendasState.adminEmail = email;
+        return { email };
       };
 
       const saveEdit = async () => {
@@ -8525,23 +8472,26 @@ const createPrendaRow = (item) => {
           adminLoginButton.disabled = true;
         }
         try {
-          if (isEmbeddedApp) {
-            setAdminLoginStatus("Conectando con Google...", "warning");
-          }
-          const user = await signInWithGoogleForContext();
-          if (!user) {
-            return;
-          }
-          const email = safeString(user?.email).trim().toLowerCase();
-          if (!isAllowlistedAdmin(email)) {
-            setAdminLoginStatus("Tu cuenta no está permitida como admin.", "error");
-            await signOut(auth);
+          const suggestedEmail = adminSession?.email || prendasState.adminEmail || "";
+          const emailInput = window.prompt("Ingresa tu correo admin:", suggestedEmail) || "";
+          const normalizedEmail = safeString(emailInput).trim().toLowerCase();
+          if (!normalizedEmail) return;
+          const session = await adminSignIn(normalizedEmail);
+          adminSession = {
+            authenticated: Boolean(session?.authenticated),
+            email: safeString(session?.email).trim().toLowerCase() || null,
+            isAdmin: Boolean(session?.isAdmin)
+          };
+          prendasState.adminEmail = safeString(adminSession?.email).trim().toLowerCase();
+          prendasState.adminByAuth = Boolean(adminSession?.isAdmin);
+          if (!prendasState.adminByAuth) {
+            setAdminLoginStatus("Correo no autorizado para modo admin.", "error");
             return;
           }
           setAdminMode(true);
         } catch (error) {
           console.error(error);
-          setAdminLoginStatus("No se pudo iniciar sesión con Google.", "error");
+          setAdminLoginStatus(error?.message || "No se pudo iniciar sesión admin.", "error");
         } finally {
           if (adminLoginButton) {
             adminLoginButton.disabled = false;
@@ -8552,9 +8502,16 @@ const createPrendaRow = (item) => {
       const handleAdminLogout = async () => {
         try {
           isAdminMode = false;
-          await signOut(auth);
+          await adminSignOut();
         } catch (error) {
           console.error(error);
+        } finally {
+          adminSession = { authenticated: false, email: null, isAdmin: false };
+          prendasState.adminByAuth = false;
+          prendasState.adminEmail = "";
+          setAdminViewEnabled(false);
+          applyAdminUI({ refresh: true });
+          syncMetaAccessUi();
         }
       };
 
@@ -8674,23 +8631,10 @@ const createPrendaRow = (item) => {
           adminSplitButton.disabled = true;
         }
         try {
-          let user = auth.currentUser;
-          if (!user) {
-            if (isEmbeddedApp) {
-              setAdminLoginStatus("Conectando con Google...", "warning");
-            }
-            user = await signInWithGoogleForContext();
-          }
-          if (!user) {
+          if (!adminSession?.isAdmin) {
+            setAdminLoginStatus("Sesión admin requerida.", "error");
             return;
           }
-          const email = safeString(user?.email).trim().toLowerCase();
-          if (!isAllowlistedAdmin(email)) {
-            setAdminLoginStatus("Tu cuenta no está permitida como admin.", "error");
-            await signOut(auth);
-            return;
-          }
-          const idToken = await user.getIdToken(true);
           setAdminLoginStatus("Migrando datos por lotes...", "warning");
 
           let totalProcessed = 0;
@@ -8704,7 +8648,7 @@ const createPrendaRow = (item) => {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${idToken}`
+                "X-Haruja-Admin": "1"
               },
               body: JSON.stringify({
                 batchSize: 300,
@@ -8747,26 +8691,26 @@ const createPrendaRow = (item) => {
           }
         }
       };
-
-      onAuthStateChanged(auth, async (user) => {
-        const email = safeString(user?.email).trim().toLowerCase();
-        prendasState.adminUser = user || null;
-        prendasState.adminEmail = email;
-        prendasState.adminByAuth = Boolean(user) && isAllowlistedAdmin(email);
-        if (!prendasState.adminByAuth) {
+      const refreshAdminSession = async () => {
+        try {
+          const session = await getAdminSession();
+          adminSession = {
+            authenticated: Boolean(session?.authenticated),
+            email: safeString(session?.email).trim().toLowerCase() || null,
+            isAdmin: Boolean(session?.isAdmin)
+          };
+          prendasState.adminEmail = adminSession.email || "";
+          prendasState.adminByAuth = Boolean(adminSession.isAdmin);
+          if (!prendasState.adminByAuth) setAdminViewEnabled(false);
+        } catch (error) {
+          adminSession = { authenticated: false, email: null, isAdmin: false };
+          prendasState.adminEmail = "";
+          prendasState.adminByAuth = false;
           setAdminViewEnabled(false);
-          if (user) {
-            setAdminLoginStatus("Sesión activa sin permisos de admin.", "warning");
-          }
         }
         applyAdminUI();
-        const view = typeof currentView !== "undefined" && currentView ? currentView : "panel";
         syncMetaAccessUi();
-        if (view === "meta-vs-venta") {
-          metaState.initialized = false;
-          await loadMetaVsVenta({ force: true });
-        }
-      });
+      };
 
       const handleTabChange = (hash) => {
         if (hash === DB_TAB_HASH) {
@@ -9268,28 +9212,7 @@ document.addEventListener("keydown", (event) => {
           }
 
           registroSubmit.disabled = !dictionaryReady;
-
-          try {
-            console.log("[auth] currentUser:", auth.currentUser ? auth.currentUser.uid : null);
-            if (isEmbeddedApp) {
-              setAdminLoginStatus("Conectando...", "warning");
-            }
-            debugLog("init firebase/auth");
-            const redirectUser = await authRedirectResultPromise;
-            if (redirectUser) {
-              const email = safeString(redirectUser?.email).trim().toLowerCase();
-              if (isAllowlistedAdmin(email)) {
-                setAdminLoginStatus(`Admin autenticado: ${email}`, "success");
-                setAdminViewEnabled(true);
-              } else {
-                setAdminLoginStatus("Sesión iniciada, pero sin permisos de admin.", "warning");
-                await signOut(auth);
-              }
-            }
-          } catch (authError) {
-            console.warn("[auth] inicialización admin deshabilitada:", authError);
-            setAdminLoginStatus("Admin no disponible en este entorno.", "warning");
-          }
+          await refreshAdminSession();
         } catch (error) {
           setRegistroStatus("No pudimos cargar el diccionario.", "error");
           registroSubmit.disabled = true;
