@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { getLatestWebhookEvent } from '../lib/ventas/dedupeWebhookEvent.js';
 import {
   archivePrenda,
@@ -54,9 +55,13 @@ const ADMIN_ALLOWLIST = [
 ].map((email) => String(email || '').trim().toLowerCase());
 const ADMIN_ALLOWLIST_SET = new Set(ADMIN_ALLOWLIST);
 const ADMIN_SESSION_SECRET = String(
-  process.env.HARUJA_ADMIN_SESSION_SECRET || process.env.CORE_ADMIN_SESSION_SECRET || 'haruja-admin-session-v1'
+  process.env.ADMIN_SESSION_SECRET ||
+    process.env.HARUJA_ADMIN_SESSION_SECRET ||
+    process.env.CORE_ADMIN_SESSION_SECRET ||
+    'haruja-admin-session-v1'
 );
-const SESSION_MAX_AGE = 60 * 60 * 12;
+const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim();
+const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 const ADMIN_SESSION_REQUIRED_MESSAGE = 'Sesión admin requerida para esta operación.';
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
@@ -74,44 +79,51 @@ const parseCookies = (req) => {
   }, {});
 };
 
-const buildSessionToken = (email) => {
-  const payload = Buffer.from(
-    JSON.stringify({
-      email: normalizeEmail(email),
-      iat: Date.now(),
-    }),
-    'utf8'
-  ).toString('base64url');
-  const signature = createHmac('sha256', ADMIN_SESSION_SECRET).update(payload).digest('hex');
-  return `${payload}.${signature}`;
+const googleOAuthClient = new OAuth2Client();
+
+const buildSessionToken = (payload = {}) => {
+  const now = Date.now();
+  const sessionPayload = {
+    email: normalizeEmail(payload.email),
+    sub: String(payload.sub || '').trim() || null,
+    isAdmin: true,
+    iat: now,
+    exp: now + SESSION_MAX_AGE * 1000,
+  };
+  const encodedPayload = Buffer.from(JSON.stringify(sessionPayload), 'utf8').toString('base64url');
+  const signature = createHmac('sha256', ADMIN_SESSION_SECRET).update(encodedPayload).digest('hex');
+  return `${encodedPayload}.${signature}`;
 };
 
-const readAdminSession = (req) => {
-  const cookies = parseCookies(req);
-  const token = String(cookies[HARUJA_ADMIN_COOKIE] || '').trim();
+const decodeAdminSessionToken = (token = '') => {
   if (!token || !token.includes('.')) return null;
-  const [payload, signature] = token.split('.');
-  if (!payload || !signature) return null;
-  const expected = createHmac('sha256', ADMIN_SESSION_SECRET).update(payload).digest('hex');
+  const [encodedPayload, signature] = token.split('.');
+  if (!encodedPayload || !signature) return null;
+  const expected = createHmac('sha256', ADMIN_SESSION_SECRET).update(encodedPayload).digest('hex');
   const a = Buffer.from(signature);
   const b = Buffer.from(expected);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+
   try {
-    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    const email = normalizeEmail(decoded?.email);
-    if (!email) return null;
+    const parsed = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+    const email = normalizeEmail(parsed?.email);
+    const exp = Number(parsed?.exp || 0);
+    if (!email || !exp || Date.now() > exp) return null;
     return {
       authenticated: true,
       email,
-      isAdmin: isAllowedAdminEmail(email),
+      sub: String(parsed?.sub || '').trim() || null,
+      isAdmin: Boolean(parsed?.isAdmin) && isAllowedAdminEmail(email),
+      issuedAt: Number(parsed?.iat || 0),
+      expiresAt: exp,
     };
   } catch (_error) {
     return null;
   }
 };
 
-const setAdminSessionCookie = (res, email) => {
-  const token = buildSessionToken(email);
+const createAdminSession = (res, payload = {}) => {
+  const token = buildSessionToken(payload);
   const secure = process.env.NODE_ENV === 'production';
   res.setHeader(
     'Set-Cookie',
@@ -119,7 +131,13 @@ const setAdminSessionCookie = (res, email) => {
   );
 };
 
-const clearAdminSessionCookie = (res) => {
+const readAdminSession = (req) => {
+  const cookies = parseCookies(req);
+  const token = String(cookies[HARUJA_ADMIN_COOKIE] || '').trim();
+  return decodeAdminSessionToken(token);
+};
+
+const clearAdminSession = (res) => {
   const secure = process.env.NODE_ENV === 'production';
   res.setHeader(
     'Set-Cookie',
@@ -131,6 +149,27 @@ const requireAdminSession = (req) => {
   const session = readAdminSession(req);
   if (!session?.authenticated || !session?.isAdmin) return null;
   return session;
+};
+
+const verifyGoogleIdToken = async (credential) => {
+  const idToken = String(credential || '').trim();
+  if (!idToken) throw new Error('Credencial de Google requerida.');
+  if (!GOOGLE_CLIENT_ID) throw new Error('Falta GOOGLE_CLIENT_ID en variables de entorno.');
+
+  const ticket = await googleOAuthClient.verifyIdToken({
+    idToken,
+    audience: GOOGLE_CLIENT_ID,
+  });
+
+  const payload = ticket.getPayload() || {};
+  return {
+    email: normalizeEmail(payload.email),
+    email_verified: payload.email_verified === true,
+    sub: String(payload.sub || '').trim(),
+    aud: String(payload.aud || '').trim(),
+    name: String(payload.name || '').trim() || null,
+    picture: String(payload.picture || '').trim() || null,
+  };
 };
 
 function getBaseUrl(reqLike = {}) {
@@ -253,29 +292,41 @@ async function handleAdminSession(req, res) {
       authenticated: Boolean(session?.authenticated),
       email: session?.email || null,
       isAdmin: Boolean(session?.isAdmin),
+      googleClientId: GOOGLE_CLIENT_ID || null,
     });
   }
 
-  if (req.method === 'POST' && op === 'login') {
-    const email = normalizeEmail(req.body?.email);
-    if (!isAllowedAdminEmail(email)) {
-      clearAdminSessionCookie(res);
-      return res.status(403).json({
-        ok: false,
-        message: 'Correo no autorizado para modo admin.',
+  if (req.method === 'POST' && op === 'google-login') {
+    try {
+      const verified = await verifyGoogleIdToken(req.body?.credential);
+      const email = normalizeEmail(verified?.email);
+      const emailVerified = verified?.email_verified === true;
+      const aud = String(verified?.aud || '').trim();
+      const isAdmin = isAllowedAdminEmail(email);
+
+      if (!emailVerified || !email || aud !== GOOGLE_CLIENT_ID || !isAdmin) {
+        clearAdminSession(res);
+        return res.status(403).json({
+          ok: false,
+          message: 'Correo no autorizado para modo admin.',
+        });
+      }
+
+      createAdminSession(res, { email, sub: verified?.sub });
+      return res.status(200).json({
+        ok: true,
+        authenticated: true,
+        email,
+        isAdmin: true,
       });
+    } catch (error) {
+      clearAdminSession(res);
+      return sendErr(res, 401, 'No se pudo validar la cuenta de Google.', error, 'GOOGLE_AUTH_FAILED');
     }
-    setAdminSessionCookie(res, email);
-    return res.status(200).json({
-      ok: true,
-      authenticated: true,
-      email,
-      isAdmin: true,
-    });
   }
 
   if (req.method === 'POST' && op === 'logout') {
-    clearAdminSessionCookie(res);
+    clearAdminSession(res);
     return res.status(200).json({ ok: true });
   }
 
@@ -364,6 +415,7 @@ export default async function handler(req, res) {
     if (action === 'prendas-list') return sendOk(res, await listPrendas());
     if (action === 'prendas-generar-codigo') return sendOk(res, await generarCodigoPrenda(req.body || {}));
     if (action === 'prendas-create') {
+      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
       return sendOk(res, await createPrenda(req.body || {}));
     }
 

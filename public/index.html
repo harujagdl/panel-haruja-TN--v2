@@ -2796,37 +2796,13 @@ Errores: 0</pre>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script type="module">
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-      import {
-        getFirestore,
-        initializeFirestore,
-        collection,
-        doc,
-        getDoc,
-        getDocs,
-        query,
-        orderBy,
-        documentId,
-        serverTimestamp,
-        setDoc,
-        updateDoc,
-        deleteDoc,
-        deleteField,
-        startAfter,
-        where,
-        limit,
-        runTransaction,
-        writeBatch,
-        persistentLocalCache,
-        persistentMultipleTabManager,
-        memoryLocalCache
-      } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
       import { ajustarDesdePrecioConIVA } from "/shared/priceRules.js";
       import {
         emptyMonths
       } from "/shared/salesTotals.js";
       import {
-        adminSignIn,
+        googleAdminSignIn,
+        loadGoogleIdentity,
         adminSignOut,
         getAdminSession,
         isAdminUser
@@ -2876,15 +2852,6 @@ Errores: 0</pre>
         payload
       });
       const loadArchivedPrendas = async () => callPrendasSheetsApi({ action: "prendas-archived-list" });
-      const firebaseConfig = {
-        apiKey: "AIzaSyAK5_MuMseQm58AeRZlrPtGyEZ216-Xkno",
-        authDomain: "haruja-tiendanube.firebaseapp.com",
-        projectId: "haruja-tiendanube",
-        storageBucket: "haruja-tiendanube.firebasestorage.app",
-        messagingSenderId: "396461447684",
-        appId: "1:396461447684:web:770dc3bc9bbb40a2873351"
-      };
-      const app = initializeApp(firebaseConfig);
       const debugMode = new URLSearchParams(window.location.search).get("debug") === "1";
       function isEmbedded() {
         try {
@@ -2924,7 +2891,34 @@ Errores: 0</pre>
           return false;
         }
       };
-      const ensureFirebaseSession = async () => null;
+      const warmupAuthFlow = async () => loadGoogleIdentity().catch(() => null);
+      const firestoreDisabledError = () => new Error("Firestore quedó deshabilitado en este módulo. Usa /api/core + Sheets.");
+      const initializeFirestore = () => null;
+      const collection = (...parts) => ({ __type: "collection", parts });
+      const doc = (...parts) => ({ __type: "doc", parts });
+      const query = (...parts) => ({ __type: "query", parts });
+      const orderBy = (...parts) => ({ __type: "orderBy", parts });
+      const where = (...parts) => ({ __type: "where", parts });
+      const limit = (...parts) => ({ __type: "limit", parts });
+      const startAfter = (...parts) => ({ __type: "startAfter", parts });
+      const documentId = () => "__name__";
+      const serverTimestamp = () => new Date().toISOString();
+      const deleteField = () => null;
+      const getDoc = async () => { throw firestoreDisabledError(); };
+      const getDocs = async () => { throw firestoreDisabledError(); };
+      const setDoc = async () => { throw firestoreDisabledError(); };
+      const updateDoc = async () => { throw firestoreDisabledError(); };
+      const deleteDoc = async () => { throw firestoreDisabledError(); };
+      const runTransaction = async () => { throw firestoreDisabledError(); };
+      const writeBatch = () => ({
+        set: () => { throw firestoreDisabledError(); },
+        update: () => { throw firestoreDisabledError(); },
+        delete: () => { throw firestoreDisabledError(); },
+        commit: async () => { throw firestoreDisabledError(); }
+      });
+      const persistentLocalCache = () => null;
+      const persistentMultipleTabManager = () => null;
+      const memoryLocalCache = () => null;
       const toSerializableError = (error) => ({
         name: error?.name,
         message: error?.message || String(error || ""),
@@ -2992,22 +2986,9 @@ Errores: 0</pre>
         copyBtn?.addEventListener("click", () => copyFatalDetails(error));
       };
       window.__LAST_FATAL_ERROR__ = null;
-      let db;
-      try {
-        db = initializeFirestore(app, {
-          localCache: persistentLocalCache({
-            tabManager: persistentMultipleTabManager()
-          })
-        });
-      } catch (error) {
-        console.warn(
-          "[Firestore] Persistencia multi-tab no disponible, usando caché en memoria",
-          error?.code || error?.message
-        );
-        db = initializeFirestore(app, {
-          localCache: memoryLocalCache()
-        });
-      }
+      const db = initializeFirestore(null, {
+        localCache: memoryLocalCache()
+      });
 
       window.addEventListener("unhandledrejection", (event) => {
         const details = {
@@ -3040,7 +3021,7 @@ Errores: 0</pre>
       });
 
       const COL_PRENDAS_PUBLIC = "HarujaPrendas_2025_public";
-      let prendasRef = collection(db, COL_PRENDAS_PUBLIC);
+      let prendasRef = null;
       const registroForm = document.getElementById("registro-form");
       const registroStatus = document.getElementById("registro-status");
       const registroResult = document.getElementById("registro-result");
@@ -3680,9 +3661,7 @@ Errores: 0</pre>
 
         metaAdminLoginBtn?.addEventListener("click", async () => {
           try {
-            const email = window.prompt("Ingresa tu correo admin:", adminSession?.email || "") || "";
-            if (!email.trim()) return;
-            const session = await adminSignIn(email);
+            const session = await googleAdminSignIn();
             adminSession = {
               authenticated: Boolean(session?.authenticated),
               email: session?.email || null,
@@ -3699,7 +3678,7 @@ Errores: 0</pre>
           } catch (error) {
             console.error("[MetaVsVenta] login admin", error);
             if (metaAdminMessage) {
-              metaAdminMessage.textContent = error?.message || "No se pudo iniciar sesión admin.";
+              metaAdminMessage.textContent = error?.message || "Tu cuenta Google no está autorizada para modo admin.";
               metaAdminMessage.classList.remove("hidden");
               metaAdminMessage.classList.add("error");
             }
@@ -4545,7 +4524,7 @@ Errores: 0</pre>
       };
 
       const loadCategoryEntries = async (category, collectionName) => {
-        await ensureFirebaseSession();
+        await warmupAuthFlow();
         const snapshot = await safeGetDocs(collection(db, collectionName), `loadCategoryEntries:${collectionName}`);
         if (snapshot.empty) {
           return { category, entries: [], empty: true };
@@ -4572,7 +4551,7 @@ Errores: 0</pre>
       };
 
       const loadCategoryEntriesFromFallback = async (category) => {
-        await ensureFirebaseSession();
+        await warmupAuthFlow();
         const snapshot = await safeGetDocs(
           collection(db, DICTIONARY_FALLBACK_COLLECTION),
           `loadCategoryEntriesFromFallback:${category}`
@@ -4603,7 +4582,7 @@ Errores: 0</pre>
       };
 
       const resolvePrendasCollection = async () => {
-        await ensureFirebaseSession();
+        await warmupAuthFlow();
         const probe = await Promise.all(
           PRENDAS_COLLECTION_CANDIDATES.map(async (collectionName) => {
             try {
@@ -4647,7 +4626,7 @@ Errores: 0</pre>
       };
 
       const loadDictionariesOnce = async () => {
-        await ensureFirebaseSession();
+        await warmupAuthFlow();
         if (prendasState.dictsLoaded) {
           return prendasState.dicts;
         }
@@ -5837,7 +5816,7 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
       };
 
       const backfillPrendasPublicCollection = async ({ docIds = [], dryRun = true, limitDocs = 300 } = {}) => {
-        await ensureFirebaseSession();
+        await warmupAuthFlow();
         const collectionRef = collection(db, COL_PRENDAS_PUBLIC);
         const ids = Array.isArray(docIds)
           ? docIds.map((value) => safeString(value).trim()).filter(Boolean)
@@ -8480,11 +8459,7 @@ const createPrendaRow = (item) => {
           adminLoginButton.disabled = true;
         }
         try {
-          const suggestedEmail = adminSession?.email || prendasState.adminEmail || "";
-          const emailInput = window.prompt("Ingresa tu correo admin:", suggestedEmail) || "";
-          const normalizedEmail = safeString(emailInput).trim().toLowerCase();
-          if (!normalizedEmail) return;
-          const session = await adminSignIn(normalizedEmail);
+          const session = await googleAdminSignIn();
           adminSession = {
             authenticated: Boolean(session?.authenticated),
             email: safeString(session?.email).trim().toLowerCase() || null,
@@ -8499,7 +8474,7 @@ const createPrendaRow = (item) => {
           setAdminMode(true);
         } catch (error) {
           console.error(error);
-          setAdminLoginStatus(error?.message || "No se pudo iniciar sesión admin.", "error");
+          setAdminLoginStatus(error?.message || "Tu cuenta Google no está autorizada para modo admin.", "error");
         } finally {
           if (adminLoginButton) {
             adminLoginButton.disabled = false;
