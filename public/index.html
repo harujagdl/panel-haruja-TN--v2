@@ -2781,6 +2781,18 @@ Errores: 0</pre>
   </div>
 </div>
 
+<div id="adminSessionExpiredModal" class="edit-modal hidden" aria-hidden="true">
+  <div class="edit-modal-overlay"></div>
+  <div class="edit-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="adminSessionExpiredTitle">
+    <h3 id="adminSessionExpiredTitle" style="margin:0 0 8px;">Sesión admin expirada</h3>
+    <p style="margin:0; color:#475467;">Tu sesión admin expiró. Vuelve a autenticarte con Google.</p>
+    <p id="adminSessionExpiredMessage" class="status warning" style="margin:10px 0 0;"></p>
+    <div class="edit-modal-actions">
+      <button id="adminSessionReauthBtn" type="button">Reingresar con Google</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script type="module">
@@ -2815,6 +2827,7 @@ Errores: 0</pre>
           error.status = response.status;
           error.code = data?.code || "";
           error.payload = data;
+          handleAdminSessionApiError(error);
           throw error;
         }
         return data?.data;
@@ -3120,6 +3133,9 @@ Errores: 0</pre>
       const correctionsProcessBtn = document.getElementById("correctionsProcess");
       const correctionsCloseBtn = document.getElementById("correctionsClose");
       const correctionsResults = document.getElementById("correctionsResults");
+      const adminSessionExpiredModal = document.getElementById("adminSessionExpiredModal");
+      const adminSessionReauthBtn = document.getElementById("adminSessionReauthBtn");
+      const adminSessionExpiredMessage = document.getElementById("adminSessionExpiredMessage");
       const VIEWS = ["panel", "registro", "codigos", "meta-vs-venta"];
 
       const ENABLE_DESC_BETTER_UI = true;
@@ -3582,11 +3598,7 @@ Errores: 0</pre>
         metaAdminLoginBtn?.addEventListener("click", async () => {
           try {
             const session = await googleAdminSignIn();
-            adminSession = {
-              authenticated: Boolean(session?.authenticated),
-              email: session?.email || null,
-              isAdmin: Boolean(session?.isAdmin)
-            };
+            setAdminSession(session || {});
             prendasState.adminByAuth = Boolean(adminSession?.isAdmin);
             prendasState.adminEmail = safeString(adminSession?.email).trim().toLowerCase();
             applyAdminUI({ refresh: true });
@@ -3608,9 +3620,7 @@ Errores: 0</pre>
         metaAdminLogoutBtn?.addEventListener("click", async () => {
           try {
             await adminSignOut();
-            adminSession = { authenticated: false, email: null, isAdmin: false };
-            prendasState.adminByAuth = false;
-            prendasState.adminEmail = "";
+            clearAdminSession();
             applyAdminUI({ refresh: true });
             syncMetaAccessUi();
             if (metaAdminMessage) {
@@ -4397,7 +4407,86 @@ Errores: 0</pre>
       prendasState.editing = null;
       let isBooting = true;
       let isAdminMode = false;
-      let adminSession = { authenticated: false, email: null, isAdmin: false };
+      const EMPTY_ADMIN_SESSION = { authenticated: false, email: null, isAdmin: false, expiresAt: null, now: null };
+      let adminSession = { ...EMPTY_ADMIN_SESSION };
+      let adminSessionWatchdogId = null;
+
+      const setAdminSession = (session = {}) => {
+        adminSession = {
+          authenticated: Boolean(session?.authenticated),
+          email: safeString(session?.email).trim().toLowerCase() || null,
+          isAdmin: Boolean(session?.isAdmin),
+          expiresAt: Number(session?.expiresAt || 0) || null,
+          now: Number(session?.now || 0) || Date.now()
+        };
+        return adminSession;
+      };
+
+      const clearAdminSession = () => {
+        adminSession = { ...EMPTY_ADMIN_SESSION };
+        prendasState.adminByAuth = false;
+        prendasState.adminEmail = "";
+        setAdminViewEnabled(false);
+      };
+
+      const getAdminRemainingMs = (session = adminSession) => {
+        const expiresAt = Number(session?.expiresAt || 0);
+        if (!expiresAt) return 0;
+        return Math.max(0, expiresAt - Date.now());
+      };
+
+      const isAdminSessionExpired = (session = adminSession) => {
+        if (!session?.authenticated || !session?.isAdmin) return true;
+        return getAdminRemainingMs(session) <= 0;
+      };
+
+      const hideAdminSessionExpiredModal = () => {
+        if (!adminSessionExpiredModal) return;
+        adminSessionExpiredModal.classList.add("hidden");
+        adminSessionExpiredModal.setAttribute("aria-hidden", "true");
+      };
+
+      const showAdminSessionExpiredModal = (message = "") => {
+        if (!adminSessionExpiredModal) return;
+        if (adminSessionExpiredMessage) {
+          adminSessionExpiredMessage.textContent = message || "";
+        }
+        adminSessionExpiredModal.classList.remove("hidden");
+        adminSessionExpiredModal.setAttribute("aria-hidden", "false");
+      };
+
+      const expireAdminSessionFrontend = ({ reason = "timeout", message = "Tu sesión admin expiró. Vuelve a autenticarte con Google." } = {}) => {
+        if (!prendasState.adminByAuth && !adminSession?.authenticated) return;
+        console.warn("[admin-session] expired in frontend", reason);
+        clearAdminSession();
+        closeEditModal();
+        window.closeCorrectionsModal?.();
+        applyAdminUI({ refresh: false });
+        syncMetaAccessUi();
+        showAdminSessionExpiredModal(message);
+        setPrendasAlert(message);
+      };
+
+      const startAdminSessionWatchdog = () => {
+        if (adminSessionWatchdogId) window.clearInterval(adminSessionWatchdogId);
+        adminSessionWatchdogId = window.setInterval(() => {
+          if (!prendasState.adminByAuth || !adminSession?.authenticated) return;
+          if (isAdminSessionExpired(adminSession)) {
+            expireAdminSessionFrontend({ reason: "watchdog" });
+          }
+        }, 15000);
+      };
+
+      const handleAdminSessionApiError = (error, fallbackMessage = "La sesión admin expiró. Vuelve a autenticarte con Google.") => {
+        const status = Number(error?.status || 0);
+        const code = safeString(error?.code).trim();
+        const message = safeString(error?.message).trim();
+        const isExpired = status === 401 || status === 403 || code === "ADMIN_SESSION_REQUIRED" || /sesi[oó]n admin/i.test(message);
+        if (!isExpired) return false;
+        console.warn("[admin-session] reauth required");
+        expireAdminSessionFrontend({ reason: "backend-rejected", message: message || fallbackMessage });
+        return true;
+      };
 
       const resolveActivePrendasCollection = ({ isAdmin = false } = {}) => {
         const embedded = isEmbedded();
@@ -7035,14 +7124,11 @@ const createPrendaRow = (item) => {
       const ensureAdminSession = async () => {
         const session = adminSession?.authenticated ? adminSession : await getAdminSession().catch(() => null);
         const email = safeString(session?.email).trim().toLowerCase();
-        if (!isAllowlistedAdmin(email)) {
-          throw new Error("Usuario no autorizado para editar.");
+        setAdminSession(session || {});
+        if (!isAllowlistedAdmin(email) || isAdminSessionExpired(adminSession)) {
+          expireAdminSessionFrontend({ reason: "ensure-admin-session" });
+          throw new Error("La sesión admin expiró. Vuelve a autenticarte con Google.");
         }
-        adminSession = {
-          authenticated: true,
-          email,
-          isAdmin: true
-        };
         prendasState.adminByAuth = true;
         prendasState.adminEmail = email;
         return { email };
@@ -8327,17 +8413,15 @@ const createPrendaRow = (item) => {
         }
         try {
           const session = await googleAdminSignIn();
-          adminSession = {
-            authenticated: Boolean(session?.authenticated),
-            email: safeString(session?.email).trim().toLowerCase() || null,
-            isAdmin: Boolean(session?.isAdmin)
-          };
+          setAdminSession(session || {});
           prendasState.adminEmail = safeString(adminSession?.email).trim().toLowerCase();
           prendasState.adminByAuth = Boolean(adminSession?.isAdmin);
           if (!prendasState.adminByAuth) {
             setAdminLoginStatus("Correo no autorizado para modo admin.", "error");
             return;
           }
+          console.log("[admin-session] reauth success");
+          hideAdminSessionExpiredModal();
           setAdminMode(true);
         } catch (error) {
           console.error(error);
@@ -8356,10 +8440,8 @@ const createPrendaRow = (item) => {
         } catch (error) {
           console.error(error);
         } finally {
-          adminSession = { authenticated: false, email: null, isAdmin: false };
-          prendasState.adminByAuth = false;
-          prendasState.adminEmail = "";
-          setAdminViewEnabled(false);
+          clearAdminSession();
+          hideAdminSessionExpiredModal();
           applyAdminUI({ refresh: true });
           syncMetaAccessUi();
         }
@@ -8544,18 +8626,18 @@ const createPrendaRow = (item) => {
       const refreshAdminSession = async () => {
         try {
           const session = await getAdminSession();
-          adminSession = {
-            authenticated: Boolean(session?.authenticated),
-            email: safeString(session?.email).trim().toLowerCase() || null,
-            isAdmin: Boolean(session?.isAdmin)
-          };
+          setAdminSession(session || {});
           prendasState.adminEmail = adminSession.email || "";
-          prendasState.adminByAuth = Boolean(adminSession.isAdmin);
-          if (!prendasState.adminByAuth) setAdminViewEnabled(false);
+          prendasState.adminByAuth = Boolean(adminSession.isAdmin) && !isAdminSessionExpired(adminSession);
+          if (prendasState.adminByAuth) {
+            hideAdminSessionExpiredModal();
+          } else if (adminSession?.authenticated || adminSession?.expiresAt) {
+            expireAdminSessionFrontend({ reason: "status" });
+          } else {
+            setAdminViewEnabled(false);
+          }
         } catch (error) {
-          adminSession = { authenticated: false, email: null, isAdmin: false };
-          prendasState.adminEmail = "";
-          prendasState.adminByAuth = false;
+          clearAdminSession();
           setAdminViewEnabled(false);
         }
         applyAdminUI();
@@ -8807,6 +8889,31 @@ const createPrendaRow = (item) => {
       }
       if (correctionsModalOverlay) {
         correctionsModalOverlay.addEventListener("click", window.closeCorrectionsModal);
+      }
+      if (adminSessionReauthBtn) {
+        adminSessionReauthBtn.addEventListener("click", async () => {
+          adminSessionReauthBtn.disabled = true;
+          try {
+            const session = await googleAdminSignIn();
+            setAdminSession(session || {});
+            prendasState.adminEmail = safeString(adminSession?.email).trim().toLowerCase();
+            prendasState.adminByAuth = Boolean(adminSession?.isAdmin) && !isAdminSessionExpired(adminSession);
+            if (!prendasState.adminByAuth) {
+              throw new Error("Tu cuenta Google no está autorizada para modo admin.");
+            }
+            console.log("[admin-session] reauth success");
+            hideAdminSessionExpiredModal();
+            applyAdminUI({ refresh: true });
+            syncMetaAccessUi();
+          } catch (error) {
+            const message = error?.message || "No se pudo reautenticar con Google.";
+            if (adminSessionExpiredMessage) adminSessionExpiredMessage.textContent = message;
+            clearAdminSession();
+            applyAdminUI({ refresh: false });
+          } finally {
+            adminSessionReauthBtn.disabled = false;
+          }
+        });
       }
       if (correctionsProcessBtn) {
         correctionsProcessBtn.addEventListener("click", async () => {
@@ -9063,6 +9170,7 @@ document.addEventListener("keydown", (event) => {
 
           registroSubmit.disabled = !dictionaryReady;
           await refreshAdminSession();
+          startAdminSessionWatchdog();
         } catch (error) {
           setRegistroStatus("No pudimos cargar el diccionario.", "error");
           registroSubmit.disabled = true;
