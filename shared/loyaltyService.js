@@ -11,6 +11,12 @@
   const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
   const safeLower = (value) => normalizeText(value).toLowerCase();
   const nowIso = () => new Date().toISOString();
+  const LOYALTY_LEVEL_DEBUG =
+    global?.localStorage?.getItem('haruja_loyalty_level_debug') === '1' ||
+    global?.location?.search?.includes('debugLoyaltyLevel=1');
+  const debugLevel = (...args) => {
+    if (LOYALTY_LEVEL_DEBUG) console.debug('[loyalty-level]', ...args);
+  };
 
   const buildSearchIndex = ({ clientId = '', name = '', phone = '', instagram = '', email = '' }) => {
     return [clientId, name, phone, instagram, email]
@@ -33,6 +39,29 @@
       if (minDiff !== 0) return minDiff;
       return normalizeText(a.name).localeCompare(normalizeText(b.name));
     });
+  };
+
+  const readLevelNumber = (level = {}, keys = []) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(level, key) && level[key] !== '' && level[key] !== null && level[key] !== undefined) {
+        const value = Number(level[key]);
+        if (!Number.isNaN(value)) return value;
+      }
+    }
+    return null;
+  };
+
+  const normalizeLevelRange = (level = {}) => {
+    const min = readLevelNumber(level, ['minPoints', 'minPts', 'min', 'puntosMin', 'rangoMin']);
+    const max = readLevelNumber(level, ['maxPoints', 'maxPts', 'max', 'puntosMax', 'rangoMax']);
+    const priority = readLevelNumber(level, ['priority', 'prioridad']) ?? 0;
+
+    return {
+      ...level,
+      minPoints: min ?? 0,
+      maxPoints: max ?? Number.MAX_SAFE_INTEGER,
+      priority
+    };
   };
 
   const normalizeBenefits = (benefits) => {
@@ -73,20 +102,34 @@
     return { name, minPoints, maxPoints, color, active, priority, benefits };
   };
 
-  const resolveLevel = (points, levels = []) => {
-    const pts = Number(points || 0);
-    const activeLevels = sortLevels((levels || []).filter((level) => level && level.active !== false));
+  const getNivelPorPuntos = (points, levels = []) => {
+    const pts = Number(points);
+    if (Number.isNaN(pts)) return null;
+    const activeLevels = sortLevels(
+      (levels || [])
+        .filter((level) => level && level.active !== false)
+        .map((level) => normalizeLevelRange(level))
+        .filter((level) => level.maxPoints >= level.minPoints)
+    );
     if (!activeLevels.length) return null;
 
-    const inRange = activeLevels.find((level) => pts >= Number(level.minPoints || 0) && pts <= Number(level.maxPoints || 0));
-    if (inRange) return inRange;
+    const inRange = activeLevels.filter((level) => pts >= Number(level.minPoints) && pts <= Number(level.maxPoints));
+    if (inRange.length) {
+      return [...inRange].sort((a, b) => {
+        const spanDiff = Number(a.maxPoints - a.minPoints) - Number(b.maxPoints - b.minPoints);
+        if (spanDiff !== 0) return spanDiff;
+        const priorityDiff = Number(a.priority || 0) - Number(b.priority || 0);
+        if (priorityDiff !== 0) return priorityDiff;
+        return Number(b.minPoints || 0) - Number(a.minPoints || 0);
+      })[0];
+    }
 
     const reached = [...activeLevels]
-      .filter((level) => pts >= Number(level.minPoints || 0))
-      .sort((a, b) => Number(b.minPoints || 0) - Number(a.minPoints || 0));
+      .filter((level) => pts >= Number(level.minPoints))
+      .sort((a, b) => Number(b.maxPoints || 0) - Number(a.maxPoints || 0));
     if (reached.length) return reached[0];
 
-    return activeLevels[0] || null;
+    return null;
   };
 
   const listLevels = async () => {
@@ -164,24 +207,33 @@
   const resolveLevelFields = async (points, fallbackLevel = 'Bronce') => {
     try {
       const activeLevels = await getActiveLevels();
-      const level = resolveLevel(points, activeLevels.items);
+      const level = getNivelPorPuntos(points, activeLevels.items);
       if (!level) {
         return {
           level: fallbackLevel,
           levelId: '',
-          levelBenefits: []
+          levelBenefits: [],
+          levelName: fallbackLevel,
+          levelColor: '',
+          levelPriority: 0
         };
       }
       return {
         level: level.name,
         levelId: level.id,
-        levelBenefits: normalizeBenefits(level.benefits)
+        levelBenefits: normalizeBenefits(level.benefits),
+        levelName: level.name,
+        levelColor: normalizeText(level.color),
+        levelPriority: Number(level.priority || 0)
       };
     } catch (_err) {
       return {
         level: fallbackLevel,
         levelId: '',
-        levelBenefits: []
+        levelBenefits: [],
+        levelName: fallbackLevel,
+        levelColor: '',
+        levelPriority: 0
       };
     }
   };
@@ -210,7 +262,10 @@
     email: data.email || '',
     points: Number(data.points || 0),
     level: data.level || 'Bronce',
+    levelName: data.levelName || data.nivelNombre || data.level || 'Bronce',
     levelId: data.levelId || '',
+    levelColor: data.levelColor || data.nivelColor || '',
+    levelPriority: Number(data.levelPriority || data.nivelPrioridad || 0),
     levelBenefits: normalizeBenefits(data.levelBenefits),
     totalPurchases: Number(data.totalPurchases || 0),
     visits: Number(data.visits || 0),
@@ -265,6 +320,53 @@
     return defaultClientShape(snap.id, snap.data());
   };
 
+  const getClientLevelSnapshot = (client = {}) => ({
+    levelId: normalizeText(client.levelId || client.nivelId || client.tierId),
+    levelName: normalizeText(client.levelName || client.nivelNombre || client.level || client.nivel || client.tierName),
+    levelColor: normalizeText(client.levelColor || client.nivelColor),
+    levelPriority: Number(client.levelPriority || client.nivelPrioridad || 0)
+  });
+
+  const persistClientLevelIfChanged = async (client, points, levels = null) => {
+    const fb = ensureFirebase();
+    if (!client?.id) return client;
+
+    const resolvedLevels = Array.isArray(levels) ? levels : (await getActiveLevels()).items;
+    const level = getNivelPorPuntos(points, resolvedLevels);
+    const prev = getClientLevelSnapshot(client);
+
+    debugLevel('cliente', client.clientId || client.id, 'puntos', points, 'niveles', resolvedLevels.length);
+    debugLevel('nivel previo', prev, 'nivel por rango', level ? { id: level.id, name: level.name } : null);
+
+    if (!level) return client;
+
+    const next = {
+      level: level.name,
+      levelName: level.name,
+      levelId: level.id,
+      levelColor: normalizeText(level.color),
+      levelPriority: Number(level.priority || 0),
+      levelBenefits: normalizeBenefits(level.benefits),
+      updatedAt: nowIso(),
+      serverUpdatedAt: fb.serverTimestamp()
+    };
+
+    const changed =
+      prev.levelId !== next.levelId ||
+      prev.levelName !== next.levelName ||
+      prev.levelColor !== next.levelColor ||
+      Number(prev.levelPriority || 0) !== Number(next.levelPriority || 0);
+
+    if (!changed) {
+      debugLevel('sin cambios de nivel, no se escribe firestore');
+      return { ...client, ...next };
+    }
+
+    await fb.updateDoc(fb.doc(fb.db, 'loyalty_customers', client.id), next);
+    debugLevel('nivel actualizado en firestore', { clientId: client.clientId, ...next });
+    return { ...client, ...next };
+  };
+
   const getClientByClientId = async (clientId) => {
     const fb = ensureFirebase();
     const q = fb.query(fb.collection(fb.db, 'loyalty_customers'), fb.where('clientId', '==', normalizeText(clientId)), fb.limit(1));
@@ -307,6 +409,11 @@
     if (clientId) client = await getClientByClientId(clientId);
     if (!client && phone) client = await getClientByPhone(phone);
     if (!client && token) client = await getClientByToken(token);
+    if (client) {
+      const points = Number(client.points || 0);
+      const activeLevels = await getActiveLevels();
+      client = await persistClientLevelIfChanged(client, points, activeLevels.items);
+    }
 
     return { ok: true, client };
   };
@@ -315,7 +422,13 @@
     const fb = ensureFirebase();
     const q = fb.query(fb.collection(fb.db, 'loyalty_customers'), fb.orderBy('createdAt', 'desc'), fb.limit(Number(maxItems || 80)));
     const snap = await fb.getDocs(q);
-    const items = snap.docs.map((d) => defaultClientShape(d.id, d.data()));
+    const levels = await getActiveLevels();
+    const items = [];
+    for (const docSnap of snap.docs) {
+      const client = defaultClientShape(docSnap.id, docSnap.data());
+      const synced = await persistClientLevelIfChanged(client, Number(client.points || 0), levels.items);
+      items.push(synced);
+    }
     return { ok: true, items };
   };
 
@@ -729,6 +842,7 @@
   };
 
   global.loyaltyService = {
+    getNivelPorPuntos,
     getCustomer,
     getSummary: async (clientId) => getCustomer({ clientId }),
     getHistory,
@@ -758,6 +872,6 @@
     toggleLevel,
     getLevelById,
     getActiveLevels,
-    resolveLevel
+    resolveLevel: getNivelPorPuntos
   };
 })(window);

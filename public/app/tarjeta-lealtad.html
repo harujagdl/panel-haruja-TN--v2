@@ -838,11 +838,16 @@
           c?.montoAcumulado ??
           0
         );
-        const puntos = calcularPuntosDesdeCompras(totalCompras);
+        const puntos = toNumberSafe(
+          c?.points ??
+          c?.puntos ??
+          c?.pointsTotal ??
+          calcularPuntosDesdeCompras(totalCompras)
+        );
 
         document.getElementById("nombreCliente").textContent = c?.name || c?.nombre || "Cliente Haruja";
         document.getElementById("puntosCliente").innerHTML = `${puntos} <span>pts</span>`;
-        document.getElementById("nivelCliente").textContent = c?.level || c?.nivelNombre || c?.nivel || "Nuevo";
+        document.getElementById("nivelCliente").textContent = c?.levelName || c?.level || c?.nivelNombre || c?.nivel || "Nuevo";
         document.getElementById("comprasCliente").textContent = money(totalCompras);
 
         let promotions = [];
