@@ -2691,7 +2691,7 @@ body.haruja-col-resizing{
     <div class="edit-modal-grid">
       <div>
         <label for="editDescripcion">Descripción</label>
-        <input id="editDescripcion" type="text" placeholder="Ej. Coral M / Blusa Coral M / ..." />
+        <input id="editDescripcion" type="text" placeholder="Ej. Coral M / Blusa Coral M / ..." disabled />
       </div>
       <div>
         <label for="editPVenta">Precio de venta personalizado (vacío = usar público)</label>
@@ -2703,11 +2703,11 @@ body.haruja-col-resizing{
       </div>
       <div>
         <label for="editQtyAvailable">Existencias</label>
-        <input id="editQtyAvailable" type="number" min="0" step="1" />
+        <input id="editQtyAvailable" type="number" min="0" step="1" disabled />
       </div>
       <div>
         <label for="editManualOverride">Control de inventario</label>
-        <select id="editManualOverride">
+        <select id="editManualOverride" disabled>
           <option value="false">Automático (según existencias)</option>
           <option value="true">Manual</option>
         </select>
@@ -2729,11 +2729,11 @@ body.haruja-col-resizing{
       </div>
       <div>
         <label for="editColor">Color</label>
-        <select id="editColor" aria-label="Editar color"></select>
+        <select id="editColor" aria-label="Editar color" disabled></select>
       </div>
       <div>
         <label for="editTalla">Talla</label>
-        <select id="editTalla" aria-label="Editar talla"></select>
+        <select id="editTalla" aria-label="Editar talla" disabled></select>
       </div>
     </div>
     <div class="edit-modal-meta">
@@ -2743,7 +2743,7 @@ body.haruja-col-resizing{
       <div>Base sin IVA: <strong id="editBaseSinIvaPreview">--</strong></div>
       <div>IVA: <strong id="editIvaPreview">--</strong></div>
     </div>
-    <p class="edit-modal-code-preview">Código resultante: <strong id="editCodigoPreview">--</strong></p>
+    <p class="edit-modal-code-preview">Código actual: <strong id="editCodigoPreview">--</strong></p>
     <p id="editModalError" class="status error hidden" style="margin:10px 0 0;"></p>
     <div class="edit-modal-actions">
       <button id="editModalCancel" type="button" class="secondary">Cancelar</button>
@@ -6937,13 +6937,8 @@ const createPrendaRow = (item) => {
         if (editBaseSinIvaPreview) editBaseSinIvaPreview.textContent = ajusteOverride ? moneyFmt(ajusteOverride.precioSinIVA) : "--";
         if (editIvaPreview) editIvaPreview.textContent = ajusteOverride ? moneyFmt(ajusteOverride.iva) : "--";
 
-        const baseCode = parseBaseCode(prendasState.editing?.codigoBase || prendasState.editing?.codigo || "");
-        const colorCode = safeString(editColorInput?.value || prendasState.editing?.colorCode).trim().toUpperCase();
-        const tallaCode = safeString(editTallaInput?.value || prendasState.editing?.tallaCode).trim().toUpperCase();
         if (editCodigoPreview) {
-          editCodigoPreview.textContent = (baseCode && colorCode && tallaCode)
-            ? `${baseCode}/${colorCode}-${tallaCode}`
-            : "--";
+          editCodigoPreview.textContent = safeString(prendasState.editing?.codigo).trim() || "--";
         }
       };
 
@@ -6970,9 +6965,8 @@ const createPrendaRow = (item) => {
         const pVentaOverride = toNumber(rowData.pVentaOverride);
         const colorCode = safeString(rowData.colorCode || rowData.color).trim().toUpperCase();
         const tallaCode = safeString(rowData.tallaCode || rowData.talla).trim().toUpperCase();
-        const manualOverride = Boolean(rowData.manualOverride);
-        const statusManual = (rowData.statusManual || "Disponible").trim();
-        const disponibilidadManual = (rowData.disponibilidadManual || "Disponible").trim();
+        const statusManual = safeString(rowData.statusManual || rowData.status || "Disponible").trim();
+        const disponibilidadManual = safeString(rowData.disponibilidadManual || rowData.disponibilidad || "Disponible").trim();
         prendasState.editing = {
           docId: safeString(rowData.docId || rowData.id).trim(),
           codigo: safeString(rowData.codigo).trim(),
@@ -6988,14 +6982,20 @@ const createPrendaRow = (item) => {
         if (editDescripcionInput) editDescripcionInput.value = safeString(rowData.descripcion).trim();
         if (editColorInput) editColorInput.value = colorCode;
         if (editTallaInput) editTallaInput.value = tallaCode;
-        if (editManualOverride) editManualOverride.value = manualOverride ? "true" : "false";
+        if (editManualOverride) editManualOverride.value = "true";
         if (editStatusManual) editStatusManual.value = statusManual;
         if (editDisponibilidadManual) editDisponibilidadManual.value = disponibilidadManual;
-        setManualControlsEnabled(manualOverride);
+        if (editColorInput) editColorInput.disabled = true;
+        if (editTallaInput) editTallaInput.disabled = true;
+        if (editDescripcionInput) editDescripcionInput.disabled = true;
+        if (editQtyAvailableInput) editQtyAvailableInput.disabled = true;
+        if (editManualOverride) editManualOverride.disabled = true;
+        setManualControlsEnabled(true);
         if (editModalError) {
           editModalError.textContent = "";
           editModalError.classList.add("hidden");
         }
+        console.log("[admin-edit] limited mode active");
         updateEditPreview();
         editModal.classList.remove("hidden");
         editModal.setAttribute("aria-hidden", "false");
@@ -7053,92 +7053,41 @@ const createPrendaRow = (item) => {
           if (!ensureAdminMode()) return;
           if (!prendasState.editing?.docId) return;
           const oldDocId = prendasState.editing.docId;
+          const preservedCode = safeString(prendasState.editing?.codigo).trim().toUpperCase();
           const pVentaOverrideIngresado = toNumber(editPVentaInput?.value);
           const costo = toNumber(editCostoInput?.value);
-          const qtyAvailableInput = safeString(editQtyAvailableInput?.value).trim();
-          const qtyAvailable = qtyAvailableInput === "" ? null : clampInt(qtyAvailableInput, 0, 9999, 0);
-          const descripcion = safeString(editDescripcionInput?.value).trim();
-          const colorCode = safeString(editColorInput?.value).trim().toUpperCase();
-          const tallaCode = safeString(editTallaInput?.value).trim().toUpperCase();
-          const didStructuralFieldsChange = (originalRow, editedValues) => {
-            const originalColor = safeString(originalRow?.colorCode || originalRow?.color).trim().toUpperCase();
-            const originalTalla = safeString(originalRow?.tallaCode || originalRow?.talla).trim().toUpperCase();
-            const editedColor = safeString(editedValues?.colorCode).trim().toUpperCase();
-            const editedTalla = safeString(editedValues?.tallaCode).trim().toUpperCase();
-            return originalColor !== editedColor || originalTalla !== editedTalla;
-          };
-          const structuralChange = didStructuralFieldsChange(prendasState.editing, { colorCode, tallaCode });
-          console.log(`[admin-edit] structuralChange: ${structuralChange}`);
-          const colorName = resolveColorName(colorCode) || colorCode;
-          const tallaName = resolveTallaName(tallaCode) || tallaCode;
-          const codigoBase = parseBaseCode(prendasState.editing?.codigoBase || prendasState.editing?.codigo || "");
-          let newCodigo = safeString(prendasState.editing?.codigo).trim().toUpperCase();
-          if (structuralChange) {
-            console.log("[admin-edit] recalculating code");
-            if (!codigoBase || !colorCode || !tallaCode) {
-              throw new Error("Color y talla solo son obligatorios si vas a modificar la identidad del producto.");
-            }
-            newCodigo = `${codigoBase}/${colorCode}-${tallaCode}`;
-          } else {
-            console.log("[admin-edit] preserving existing code");
-            if (!newCodigo) {
-              newCodigo = `${codigoBase}/${colorCode}-${tallaCode}`;
-            }
-          }
-          const newDocId = safeDocId(newCodigo);
+          const newDocId = oldDocId;
+          const newCodigo = preservedCode;
+          console.log("[admin-edit] preserving existing code");
+          console.log("[admin-edit] no structural recalculation");
           const ajusteOverride = Number.isFinite(pVentaOverrideIngresado)
             ? ajustarDesdePrecioConIVA(pVentaOverrideIngresado)
             : null;
-          const useManual = (editManualOverride?.value === "true");
-          const pickedStatus = (editStatusManual?.value || "").trim();
-          const pickedDisp = (editDisponibilidadManual?.value || "").trim();
-          const autoAvailability = qtyAvailable === null
-            ? { status: "No definido", disponibilidad: "No definido" }
-            : qtyAvailable > 0
-              ? { status: "Disponible", disponibilidad: "Disponible" }
-              : { status: "Vendido", disponibilidad: "No disponible" };
-          const finalAvailability = useManual
-            ? {
-                status: pickedStatus || autoAvailability.status,
-                disponibilidad: pickedDisp || autoAvailability.disponibilidad
-              }
-            : autoAvailability;
+          const pickedStatus = safeString(editStatusManual?.value || prendasState.editing?.rowDataSnapshot?.status || "Disponible").trim();
+          const pickedDisp = safeString(editDisponibilidadManual?.value || prendasState.editing?.rowDataSnapshot?.disponibilidad || "Disponible").trim();
+          const finalAvailability = {
+            status: pickedStatus || "Disponible",
+            disponibilidad: pickedDisp || "Disponible"
+          };
           if (Number.isFinite(pVentaOverrideIngresado) && pVentaOverrideIngresado < 0) {
             throw new Error("P.Venta debe ser mayor o igual a 0.");
           }
           if (Number.isFinite(costo) && costo < 0) {
             throw new Error("Costo debe ser mayor o igual a 0.");
           }
-          if (!descripcion) {
-            throw new Error("Descripción requerida.");
-          }
           editModalSaveButton.disabled = true;
           const user = await ensureAdminSession();
           const userEmail = safeString(user?.email).trim().toLowerCase();
           const oldPublicRef = doc(db, activePrendasPublicCollection, oldDocId);
           const nextPublicPayload = {
-            docId: newDocId,
-            codigo: newCodigo,
-            code: newCodigo,
-            codigoBase,
-            baseCode: codigoBase,
-            color: colorCode,
-            colorCode,
-            colorName,
-            talla: tallaCode,
-            tallaCode,
-            tallaName,
-            descripcion,
-            qtyAvailable,
-            manualOverride: useManual,
-            statusManual: useManual ? finalAvailability.status : deleteField(),
-            disponibilidadManual: useManual ? finalAvailability.disponibilidad : deleteField(),
             status: finalAvailability.status,
             disponibilidad: finalAvailability.disponibilidad,
+            statusManual: finalAvailability.status,
+            disponibilidadManual: finalAvailability.disponibilidad,
             updatedAt: serverTimestamp(),
             updatedBy: userEmail
           };
-          console.log("[admin-edit] save payload ready", { docId: newDocId, codigo: newCodigo, structuralChange });
+          console.log("[admin-edit] save payload fields:", Object.keys(nextPublicPayload));
           if (ajusteOverride) {
             nextPublicPayload.pVenta = ajusteOverride.precioConIVA;
             nextPublicPayload.precioConIva = ajusteOverride.precioConIVA;
@@ -7151,32 +7100,12 @@ const createPrendaRow = (item) => {
             nextPublicPayload.priceOverride = ajusteOverride.precioConIVA;
             nextPublicPayload.priceOverrideRaw = pVentaOverrideIngresado;
           }
-
-          if (newDocId === oldDocId) {
-            await updateDoc(oldPublicRef, nextPublicPayload);
-          } else {
-            const nextPublicRef = doc(db, activePrendasPublicCollection, newDocId);
-            const nextPublicSnap = await getDoc(nextPublicRef);
-            if (nextPublicSnap.exists()) {
-              throw new Error("Ya existe ese código.");
-            }
-            const oldSnap = await getDoc(oldPublicRef);
-            if (!oldSnap.exists()) {
-              throw new Error("La prenda original ya no existe.");
-            }
-            await setDoc(nextPublicRef, {
-              ...oldSnap.data(),
-              ...nextPublicPayload,
-              migratedFrom: safeString(prendasState.editing?.codigo || oldDocId).trim()
-            });
-            await deleteDoc(oldPublicRef);
-          }
+          await updateDoc(oldPublicRef, nextPublicPayload);
 
           const pVentaVisible = ajusteOverride?.precioConIVA ?? toNumber(prendasState.editing?.publicPVenta);
           const { utilidad, margenPct } = computeMarginUtility(pVentaVisible, costo);
           const oldAdminRef = doc(db, PRENDAS_ADMIN_COLLECTION, oldDocId);
-          const nextAdminRef = doc(db, PRENDAS_ADMIN_COLLECTION, newDocId);
-          await setDoc(nextAdminRef, {
+          await setDoc(oldAdminRef, {
             docId: newDocId,
             codigo: newCodigo,
             costo: Number.isFinite(costo) ? costo : deleteField(),
@@ -7191,19 +7120,13 @@ const createPrendaRow = (item) => {
             priceOverrideRaw: ajusteOverride ? pVentaOverrideIngresado : deleteField(),
             utilidad: (Number.isFinite(pVentaVisible) && Number.isFinite(costo)) ? utilidad : deleteField(),
             margen: (Number.isFinite(pVentaVisible) && Number.isFinite(costo)) ? margenPct : deleteField(),
-            qtyAvailable,
-            manualOverride: useManual,
-            statusManual: useManual ? finalAvailability.status : deleteField(),
-            disponibilidadManual: useManual ? finalAvailability.disponibilidad : deleteField(),
+            statusManual: finalAvailability.status,
+            disponibilidadManual: finalAvailability.disponibilidad,
             status: finalAvailability.status,
             disponibilidad: finalAvailability.disponibilidad,
             updatedAt: serverTimestamp(),
             updatedBy: userEmail
           }, { merge: true });
-          if (newDocId !== oldDocId) {
-            await deleteDoc(oldAdminRef);
-            prendasState.adminMap.delete(oldDocId);
-          }
 
           prendasState.adminMap.set(newDocId, {
             costo: Number.isFinite(costo) ? costo : null,
@@ -7214,32 +7137,12 @@ const createPrendaRow = (item) => {
 
           const nextPVenta = ajusteOverride?.precioConIVA ?? toNumber(prendasState.editing?.publicPVenta);
           const hasMarginData = Number.isFinite(nextPVenta) && Number.isFinite(costo);
-          if (newDocId !== oldDocId) {
-            const removeFrom = (rows = []) => {
-              const idx = rows.findIndex((row) => safeString(row.docId || row.id).trim() === oldDocId);
-              if (idx >= 0) rows.splice(idx, 1);
-            };
-            removeFrom(prendasState.baseRows);
-            removeFrom(prendasState.rowsAfterAll);
-            removeFrom(prendasState.rowsAfterGlobal);
-            removeFrom(prendasState.filtered);
-          }
           updateRowInMemory(newDocId, {
             docId: newDocId,
             id: newDocId,
             codigo: newCodigo,
-            codigoBase,
-            color: colorName,
-            colorCode,
-            colorName,
-            talla: tallaName,
-            tallaCode,
-            tallaName,
-            descripcion,
-            qtyAvailable,
-            manualOverride: useManual,
-            statusManual: useManual ? finalAvailability.status : null,
-            disponibilidadManual: useManual ? finalAvailability.disponibilidad : null,
+            statusManual: finalAvailability.status,
+            disponibilidadManual: finalAvailability.disponibilidad,
             status: finalAvailability.status,
             statusCanon: finalAvailability.status,
             disponibilidad: finalAvailability.disponibilidad,
