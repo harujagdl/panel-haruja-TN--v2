@@ -2532,20 +2532,8 @@ body.haruja-col-resizing{
               <label for="registro-base-code">Código base (reutilizable)</label>
               <input id="registro-base-code" name="baseCode" type="text" placeholder="Se llena al buscar" readonly />
             </div>
-            <div id="adminCreateFields" class="admin-create-card hidden" aria-hidden="true">
-              <div class="admin-create-title">Admin (opcional)</div>
-              <div class="admin-create-grid">
-                <div>
-                  <label for="adminCreateCosto">Costo</label>
-                  <input id="adminCreateCosto" type="number" step="0.01" min="0" placeholder="Costo (admin)" />
-                </div>
-                <div>
-                  <label for="adminCreatePVenta">P.Venta override (opcional)</label>
-                  <input id="adminCreatePVenta" type="number" step="0.01" min="0" placeholder="P.Venta override (admin)" />
-                </div>
-              </div>
-              <small>Solo en Modo Admin</small>
-            </div>
+            <input id="adminCreateCosto" type="hidden" />
+            <input id="adminCreatePVenta" type="hidden" />
             <div class="result-actions">
               <button type="submit">Generar código</button>
               <button type="button" id="registro-save" class="secondary">Guardar prenda</button>
@@ -8004,6 +7992,7 @@ const createPrendaRow = (item) => {
             orden: nextOrden,
             codigo: codigoFinal,
             descripcion,
+            detalles,
             tipo: typeName,
             color: colorName,
             talla: tallaName,
