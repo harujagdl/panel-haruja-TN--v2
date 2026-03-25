@@ -3232,9 +3232,15 @@ Errores: 0</pre>
         return chunks;
       };
 
-      const loadAdminCostMap = async () => new Map();
+      const loadAdminCostMap = async () => {
+        console.log("[admin-table] Firestore path neutralized");
+        return new Map();
+      };
 
-      const mergeAdminFields = async (rows = []) => rows;
+      const mergeAdminFields = async (rows = []) => {
+        console.log("[admin-table] mergeAdminFields skipped");
+        return rows;
+      };
 
       const loadBaseRows = async () => {
         const cacheKey = "sheets";
@@ -3243,9 +3249,8 @@ Errores: 0</pre>
           return prendasState.baseRows;
         }
 
-        console.log("[Sheets] cargando baseRows desde /api/core?action=prendas-list");
-
         const rows = await loadBaseRowsFromSheets();
+        console.log(`[admin-table] baseRows loaded: ${Array.isArray(rows) ? rows.length : 0}`);
 
         const orderedRows = [...rows].sort(compareItemsByOrdenAsc);
 
@@ -6676,7 +6681,11 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
 
           prendasState.filtered = items;
 
-          await mergeAdminFields(items);
+          try {
+            await mergeAdminFields(items);
+          } catch (error) {
+            console.warn("[admin-table] mergeAdminFields failed (non-blocking)", error);
+          }
 
           prendasState.pageIndex = safePageIndex;
           prendasState.hasNextPage = safePageIndex < totalPages - 1;
@@ -7386,6 +7395,7 @@ const createPrendaRow = (item) => {
 
       const renderDocs = async (rows) => {
         const safeRows = Array.isArray(rows) ? rows : [];
+        console.log(`[admin-table] rendering rows: ${safeRows.length}`);
         prendasState.renderToken += 1;
         const token = prendasState.renderToken;
         const showingTotal = Number.isFinite(prendasState.showingTotal)
@@ -7446,7 +7456,11 @@ const createPrendaRow = (item) => {
         try {
           const result = await fetchBySku(rawUpper);
           const items = result ? [result] : [];
-          await mergeAdminFields(items);
+          try {
+            await mergeAdminFields(items);
+          } catch (error) {
+            console.warn("[admin-table] mergeAdminFields failed (non-blocking)", error);
+          }
           prendasState.filtered = items;
           prendasState.showingTotal = items.length;
           prendasState.pageIndex = 0;
