@@ -7030,13 +7030,31 @@ const createPrendaRow = (item) => {
           const descripcion = safeString(editDescripcionInput?.value).trim();
           const colorCode = safeString(editColorInput?.value).trim().toUpperCase();
           const tallaCode = safeString(editTallaInput?.value).trim().toUpperCase();
+          const didStructuralFieldsChange = (originalRow, editedValues) => {
+            const originalColor = safeString(originalRow?.colorCode || originalRow?.color).trim().toUpperCase();
+            const originalTalla = safeString(originalRow?.tallaCode || originalRow?.talla).trim().toUpperCase();
+            const editedColor = safeString(editedValues?.colorCode).trim().toUpperCase();
+            const editedTalla = safeString(editedValues?.tallaCode).trim().toUpperCase();
+            return originalColor !== editedColor || originalTalla !== editedTalla;
+          };
+          const structuralChange = didStructuralFieldsChange(prendasState.editing, { colorCode, tallaCode });
+          console.log(`[admin-edit] structuralChange: ${structuralChange}`);
           const colorName = resolveColorName(colorCode) || colorCode;
           const tallaName = resolveTallaName(tallaCode) || tallaCode;
           const codigoBase = parseBaseCode(prendasState.editing?.codigoBase || prendasState.editing?.codigo || "");
-          if (!codigoBase || !colorCode || !tallaCode) {
-            throw new Error("Color y talla son requeridos para calcular el código.");
+          let newCodigo = safeString(prendasState.editing?.codigo).trim().toUpperCase();
+          if (structuralChange) {
+            console.log("[admin-edit] recalculating code");
+            if (!codigoBase || !colorCode || !tallaCode) {
+              throw new Error("Color y talla solo son obligatorios si vas a modificar la identidad del producto.");
+            }
+            newCodigo = `${codigoBase}/${colorCode}-${tallaCode}`;
+          } else {
+            console.log("[admin-edit] preserving existing code");
+            if (!newCodigo) {
+              newCodigo = `${codigoBase}/${colorCode}-${tallaCode}`;
+            }
           }
-          const newCodigo = `${codigoBase}/${colorCode}-${tallaCode}`;
           const newDocId = safeDocId(newCodigo);
           const ajusteOverride = Number.isFinite(pVentaOverrideIngresado)
             ? ajustarDesdePrecioConIVA(pVentaOverrideIngresado)
@@ -7090,6 +7108,7 @@ const createPrendaRow = (item) => {
             updatedAt: serverTimestamp(),
             updatedBy: userEmail
           };
+          console.log("[admin-edit] save payload ready", { docId: newDocId, codigo: newCodigo, structuralChange });
           if (ajusteOverride) {
             nextPublicPayload.pVenta = ajusteOverride.precioConIVA;
             nextPublicPayload.precioConIva = ajusteOverride.precioConIVA;
