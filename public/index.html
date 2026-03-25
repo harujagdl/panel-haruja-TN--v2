@@ -2880,7 +2880,6 @@ Errores: 0</pre>
         }
       };
       const warmupAuthFlow = async () => loadGoogleIdentity().catch(() => null);
-      const firestoreDisabledError = () => new Error("Firestore quedó deshabilitado en este módulo. Usa /api/core + Sheets.");
       const initializeFirestore = () => null;
       const collection = (...parts) => ({ __type: "collection", parts });
       const doc = (...parts) => ({ __type: "doc", parts });
@@ -2892,17 +2891,17 @@ Errores: 0</pre>
       const documentId = () => "__name__";
       const serverTimestamp = () => new Date().toISOString();
       const deleteField = () => null;
-      const getDoc = async () => { throw firestoreDisabledError(); };
-      const getDocs = async () => { throw firestoreDisabledError(); };
-      const setDoc = async () => { throw firestoreDisabledError(); };
-      const updateDoc = async () => { throw firestoreDisabledError(); };
-      const deleteDoc = async () => { throw firestoreDisabledError(); };
-      const runTransaction = async () => { throw firestoreDisabledError(); };
+      const getDoc = async () => ({ exists: () => false, data: () => ({}) });
+      const getDocs = async () => ({ docs: [], size: 0, forEach: () => {} });
+      const setDoc = async () => null;
+      const updateDoc = async () => null;
+      const deleteDoc = async () => null;
+      const runTransaction = async () => null;
       const writeBatch = () => ({
-        set: () => { throw firestoreDisabledError(); },
-        update: () => { throw firestoreDisabledError(); },
-        delete: () => { throw firestoreDisabledError(); },
-        commit: async () => { throw firestoreDisabledError(); }
+        set: () => null,
+        update: () => null,
+        delete: () => null,
+        commit: async () => null
       });
       const persistentLocalCache = () => null;
       const persistentMultipleTabManager = () => null;
@@ -3233,81 +3232,9 @@ Errores: 0</pre>
         return chunks;
       };
 
-      const loadAdminCostMap = async (rows = []) => {
-        const map = new Map();
-        const rowDocIds = rows
-          .map((row) => safeString(row.docId || row.id).trim())
-          .filter(Boolean);
+      const loadAdminCostMap = async () => new Map();
 
-        if (!rowDocIds.length) {
-          return map;
-        }
-
-        const ids = [...new Set(rowDocIds)];
-        const chunks = chunkArray(ids, 30);
-
-        for (const chunk of chunks) {
-          const snap = await getDocs(
-            query(collection(db, PRENDAS_ADMIN_COLLECTION), where("docId", "in", chunk))
-          );
-
-          snap.docs.forEach((docSnap) => {
-            const data = docSnap.data() || {};
-            const lookupId = safeString(data.docId || docSnap.id).trim();
-            if (!lookupId) return;
-
-            map.set(lookupId, {
-              costo: toNumberOrNull(data.costo),
-              pVentaOverride: toNumberOrNull(data.pVentaOverride ?? data.pVenta),
-              margen: toNumberOrNull(data.margen),
-              utilidad: toNumberOrNull(data.utilidad),
-            });
-          });
-        }
-
-        return map;
-      };
-
-      const mergeAdminFields = async (rows = []) => {
-        if (!(isAdminViewEnabled() && rows.length)) {
-          return rows;
-        }
-
-        const adminCostMap = await loadAdminCostMap(rows);
-
-        rows.forEach((row) => {
-          const lookupId = safeString(row.docId || row.id).trim();
-          const adminExtra = adminCostMap.get(lookupId);
-          if (!adminExtra) return;
-
-          const costo = toNumberOrNull(adminExtra.costo);
-          const utilidadFromAdmin = toNumberOrNull(adminExtra.utilidad);
-          const margenFromAdmin = toNumberOrNull(adminExtra.margen);
-          const pVentaOverride = toNumberOrNull(adminExtra.pVentaOverride);
-
-          row.costo = Number.isFinite(costo) ? costo : null;
-          row.pVentaOverride = Number.isFinite(pVentaOverride) ? pVentaOverride : null;
-
-          const precioVisible = Number.isFinite(row.pVentaOverride)
-            ? row.pVentaOverride
-            : (Number.isFinite(row.pVenta) ? row.pVenta : null);
-
-          row.pVentaDisplay = precioVisible;
-
-          const { utilidad: utilidadCalculada, margenPct: margenCalculado } =
-            computeMarginUtility(precioVisible, row.costo);
-
-          row.utilidad = (Number.isFinite(utilidadFromAdmin) && utilidadFromAdmin !== 0)
-            ? utilidadFromAdmin
-            : utilidadCalculada;
-
-          row.margen = (Number.isFinite(margenFromAdmin) && margenFromAdmin !== 0)
-            ? Number(margenFromAdmin.toFixed(1))
-            : margenCalculado;
-        });
-
-        return rows;
-      };
+      const mergeAdminFields = async (rows = []) => rows;
 
       const loadBaseRows = async () => {
         const cacheKey = "sheets";
@@ -7502,14 +7429,13 @@ const createPrendaRow = (item) => {
         const rawUpper = safeString(rawInput).trim().toUpperCase();
         const normalizedSku = normalizeSku(rawUpper);
         if (!rawUpper) return null;
-        const directSnap = await getDoc(doc(db, activePrendasPublicCollection, normalizedSku));
-        const altSnap = directSnap.exists()
-          ? null
-          : await getDoc(doc(db, activePrendasPublicCollection, rawUpper));
-        const baseSnap = directSnap.exists() ? directSnap : altSnap;
-        if (!baseSnap?.exists()) return null;
-        const item = normalizeDoc(baseSnap);
-        return item;
+        const baseRows = await loadBaseRows();
+        const rows = Array.isArray(baseRows) ? baseRows : [];
+        return rows.find((row) => {
+          const docId = normalizeSku(safeString(row?.docId || row?.id || row?.codigo).trim().toUpperCase());
+          const codigo = normalizeSku(safeString(row?.codigo).trim().toUpperCase());
+          return docId === normalizedSku || codigo === normalizedSku || codigo === normalizeSku(rawUpper);
+        }) || null;
       };
 
       const runSkuSearch = async (rawInput) => {
@@ -8149,29 +8075,14 @@ const createPrendaRow = (item) => {
         const sku = safeString(skuRaw).trim().toUpperCase();
         if (!sku) return null;
         const docId = safeDocId(sku);
-
-        const publicSnap = await getDoc(doc(db, activePrendasPublicCollection, docId));
-        const publicData = publicSnap.exists() ? publicSnap.data() || {} : null;
-
-        if (isAdminViewEnabled()) {
-          const adminSnap = await getDoc(doc(db, PRENDAS_ADMIN_COLLECTION, docId));
-          if (adminSnap.exists()) {
-            const adminData = adminSnap.data() || {};
-            return {
-              ...(publicData || {}),
-              ...adminData,
-              codigo: safeString(publicData?.codigo || adminData?.codigo || sku).toUpperCase()
-            };
-          }
-        }
-
-        if (publicData) {
-          return {
-            ...publicData,
-            codigo: safeString(publicData?.codigo || sku).toUpperCase()
-          };
-        }
-        return null;
+        const baseRows = await loadBaseRows();
+        const rows = Array.isArray(baseRows) ? baseRows : [];
+        const found = rows.find((row) => safeDocId(row?.codigo || row?.docId || row?.id) === docId);
+        if (!found) return null;
+        return {
+          ...found,
+          codigo: safeString(found?.codigo || sku).toUpperCase()
+        };
       };
 
       const buildLabelPrintPages = ({ sku, qty, price, logoSrc }) => {
