@@ -23,7 +23,11 @@ const callAdminSession = async (op, { method = "GET", body } = {}) => {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.ok === false) {
-    throw new Error(payload?.message || "No se pudo validar sesión admin.");
+    const error = new Error(payload?.message || "No se pudo validar sesión admin.");
+    error.status = response.status;
+    error.code = payload?.code || "";
+    error.payload = payload;
+    throw error;
   }
   return payload;
 };
@@ -146,6 +150,12 @@ export async function adminSignOut() {
 
 export function isAdminUser(session) {
   return Boolean(session?.authenticated === true && session?.isAdmin === true);
+}
+
+export function isAdminSessionExpired(session) {
+  const expiresAt = Number(session?.expiresAt || 0);
+  if (!expiresAt) return !isAdminUser(session);
+  return Date.now() >= expiresAt;
 }
 
 export { ADMIN_ALLOWLIST, ADMIN_SESSION_URL, normalizeEmail, ADMIN_ALLOWLIST_SET };

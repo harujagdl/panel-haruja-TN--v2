@@ -61,8 +61,10 @@ const ADMIN_SESSION_SECRET = String(
     'haruja-admin-session-v1'
 );
 const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim();
-const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
-const ADMIN_SESSION_REQUIRED_MESSAGE = 'Sesión admin requerida para esta operación.';
+const SESSION_MAX_AGE_SECONDS = 15 * 60;
+const SESSION_MAX_AGE_MS = SESSION_MAX_AGE_SECONDS * 1000;
+const ADMIN_SESSION_REQUIRED_MESSAGE =
+  'La sesión admin expiró. Vuelve a autenticarte con Google.';
 const CATALOGOS_CACHE_TTL_MS = 120 * 1000;
 let cacheCatalogosData = null;
 let cacheCatalogosAt = 0;
@@ -92,7 +94,7 @@ const buildSessionToken = (payload = {}) => {
     sub: String(payload.sub || '').trim() || null,
     isAdmin: true,
     iat: now,
-    exp: now + SESSION_MAX_AGE * 1000,
+    exp: now + SESSION_MAX_AGE_MS,
   };
   const encodedPayload = Buffer.from(JSON.stringify(sessionPayload), 'utf8').toString('base64url');
   const signature = createHmac('sha256', ADMIN_SESSION_SECRET).update(encodedPayload).digest('hex');
@@ -112,7 +114,19 @@ const decodeAdminSessionToken = (token = '') => {
     const parsed = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
     const email = normalizeEmail(parsed?.email);
     const exp = Number(parsed?.exp || 0);
-    if (!email || !exp || Date.now() > exp) return null;
+    if (!email || !exp) return null;
+    const now = Date.now();
+    if (now > exp) {
+      return {
+        authenticated: false,
+        email: null,
+        sub: null,
+        isAdmin: false,
+        issuedAt: Number(parsed?.iat || 0),
+        expiresAt: exp,
+        expired: true,
+      };
+    }
     return {
       authenticated: true,
       email,
@@ -120,6 +134,7 @@ const decodeAdminSessionToken = (token = '') => {
       isAdmin: Boolean(parsed?.isAdmin) && isAllowedAdminEmail(email),
       issuedAt: Number(parsed?.iat || 0),
       expiresAt: exp,
+      expired: false,
     };
   } catch (_error) {
     return null;
@@ -129,9 +144,13 @@ const decodeAdminSessionToken = (token = '') => {
 const createAdminSession = (res, payload = {}) => {
   const token = buildSessionToken(payload);
   const secure = process.env.NODE_ENV === 'production';
+  const decoded = decodeAdminSessionToken(token);
+  if (decoded?.expiresAt) {
+    console.log(`[admin-session] created expiresAt=${decoded.expiresAt}`);
+  }
   res.setHeader(
     'Set-Cookie',
-    `${HARUJA_ADMIN_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE};${secure ? ' Secure;' : ''}`
+    `${HARUJA_ADMIN_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE_SECONDS};${secure ? ' Secure;' : ''}`
   );
 };
 
@@ -149,9 +168,16 @@ const clearAdminSession = (res) => {
   );
 };
 
-const requireAdminSession = (req) => {
+const requireAdminSession = (req, res) => {
   const session = readAdminSession(req);
-  if (!session?.authenticated || !session?.isAdmin) return null;
+  if (session?.expired) {
+    console.warn('[admin-session] expired in backend');
+    if (res) clearAdminSession(res);
+    return null;
+  }
+  if (!session?.authenticated || !session?.isAdmin) {
+    return null;
+  }
   return session;
 };
 
@@ -258,7 +284,8 @@ async function proxyApartadoPdfWebApp(req, res) {
 async function handlePrendas(req, res) {
   const op = String(req.query?.op || req.body?.op || req.query?.mode || '').trim();
   const isSensitiveOp = ['create', 'delete', 'archive', 'restore', 'import-corrections'].includes(op);
-  if (isSensitiveOp && !requireAdminSession(req)) {
+  if (isSensitiveOp && !requireAdminSession(req, res)) {
+    console.warn('[admin-session] reauth required');
     return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
   }
 
@@ -291,11 +318,19 @@ async function handleAdminSession(req, res) {
   const op = String(req.query?.op || req.body?.op || '').trim();
   if (req.method === 'GET' && op === 'status') {
     const session = readAdminSession(req);
+    const now = Date.now();
+    const isExpired = Boolean(session?.expired) || (Number(session?.expiresAt || 0) > 0 && now >= Number(session?.expiresAt));
+    if (isExpired) {
+      console.warn('[admin-session] expired in backend');
+      clearAdminSession(res);
+    }
     return res.status(200).json({
       ok: true,
-      authenticated: Boolean(session?.authenticated),
-      email: session?.email || null,
-      isAdmin: Boolean(session?.isAdmin),
+      authenticated: Boolean(session?.authenticated) && !isExpired,
+      email: isExpired ? null : session?.email || null,
+      isAdmin: Boolean(session?.isAdmin) && !isExpired,
+      expiresAt: isExpired ? null : Number(session?.expiresAt || 0) || null,
+      now,
       googleClientId: GOOGLE_CLIENT_ID || null,
     });
   }
@@ -317,11 +352,14 @@ async function handleAdminSession(req, res) {
       }
 
       createAdminSession(res, { email, sub: verified?.sub });
+      const now = Date.now();
       return res.status(200).json({
         ok: true,
         authenticated: true,
         email,
         isAdmin: true,
+        expiresAt: now + SESSION_MAX_AGE_MS,
+        now,
       });
     } catch (error) {
       clearAdminSession(res);
@@ -331,7 +369,7 @@ async function handleAdminSession(req, res) {
 
   if (req.method === 'POST' && op === 'logout') {
     clearAdminSession(res);
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, authenticated: false, isAdmin: false, email: null, expiresAt: null, now: Date.now() });
   }
 
   return sendErr(res, 400, 'Operación inválida para action=admin-session.');
@@ -444,19 +482,28 @@ export default async function handler(req, res) {
     if (action === 'prendas-list') return sendOk(res, await listPrendas());
     if (action === 'prendas-generar-codigo') return sendOk(res, await generarCodigoPrenda(req.body || {}));
     if (action === 'prendas-create') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      if (!requireAdminSession(req, res)) {
+        console.warn('[admin-session] reauth required');
+        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      }
       return sendOk(res, await createPrenda(req.body || {}));
     }
 
     if (action === 'prendas-delete') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      if (!requireAdminSession(req, res)) {
+        console.warn('[admin-session] reauth required');
+        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      }
       const result = await deletePrenda(req.body || {});
       if (result?.status) return res.status(result.status).json(result.body);
       return sendOk(res, result);
     }
 
     if (action === 'prendas-archive') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      if (!requireAdminSession(req, res)) {
+        console.warn('[admin-session] reauth required');
+        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      }
       const result = await archivePrenda(req.body || {});
       if (result?.status) return res.status(result.status).json(result.body);
       return sendOk(res, result);
@@ -465,21 +512,30 @@ export default async function handler(req, res) {
     if (action === 'prendas-archived-list') return sendOk(res, await listArchivedPrendas());
 
     if (action === 'prendas-restore') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      if (!requireAdminSession(req, res)) {
+        console.warn('[admin-session] reauth required');
+        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      }
       const result = await restorePrenda(req.body || {});
       if (result?.status) return res.status(result.status).json(result.body);
       return sendOk(res, result);
     }
 
     if (action === 'prendas-import-corrections') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      if (!requireAdminSession(req, res)) {
+        console.warn('[admin-session] reauth required');
+        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      }
       return sendOk(res, await importCorrections(req.body || {}));
     }
 
     if (action === 'prendas') return await handlePrendas(req, res);
 
     if (action === 'prendas-admin') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      if (!requireAdminSession(req, res)) {
+        console.warn('[admin-session] reauth required');
+        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      }
       if (req.method === 'GET') return sendOk(res, await listArchivedPrendas());
       return sendOk(res, await importCorrections(req.body || {}));
     }
