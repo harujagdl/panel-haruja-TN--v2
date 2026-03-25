@@ -364,7 +364,6 @@ export default async function handler(req, res) {
     if (action === 'prendas-list') return sendOk(res, await listPrendas());
     if (action === 'prendas-generar-codigo') return sendOk(res, await generarCodigoPrenda(req.body || {}));
     if (action === 'prendas-create') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
       return sendOk(res, await createPrenda(req.body || {}));
     }
 
