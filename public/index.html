@@ -8047,23 +8047,6 @@ const createPrendaRow = (item) => {
             return;
           }
 
-          let adminSessionActiva = false;
-          try {
-            await ensureAdminSession();
-            adminSessionActiva = true;
-          } catch (_error) {
-            await handleAdminLogin();
-            try {
-              await ensureAdminSession();
-              adminSessionActiva = true;
-            } catch (_postLoginError) {
-              adminSessionActiva = false;
-            }
-          }
-          if (!adminSessionActiva) {
-            throw new Error("Necesitas iniciar sesión como admin para guardar prendas.");
-          }
-
           console.log('[save] payload final sheets:', payload);
           const saveResult = await createPrendaInSheets(payload);
           if (!saveResult?.ok) {
@@ -8096,13 +8079,9 @@ const createPrendaRow = (item) => {
             || errorCode === "ADMIN_SESSION_REQUIRED"
             || errorMessage.includes("Sesión admin requerida");
           if (isAdminSessionError) {
-            setRegistroStatus("Tu sesión de administrador no está activa. Inicia sesión nuevamente para guardar la prenda.", "error");
-          } else if (errorMessage.includes("Necesitas iniciar sesión como admin")) {
-            setRegistroStatus("Necesitas iniciar sesión como admin para guardar prendas.", "error");
-          } else if (errorCode.includes("permission") || errorMessage.includes("permission")) {
-            setRegistroStatus("No se pudo guardar la prenda en la base de datos.", "error");
-          } else if (errorMessage.includes("Invalid") || errorMessage.includes("unsupported")) {
-            setRegistroStatus("No se pudo guardar por un campo inválido. Revisar consola.", "error");
+            setRegistroStatus("Esta operación debería ser pública, pero el backend sigue bloqueando el guardado. Revisar action=prendas-create.", "error");
+          } else if (errorMessage) {
+            setRegistroStatus(errorMessage, "error");
           } else {
             setRegistroStatus("No se pudo guardar la prenda. Revisar consola para detalle técnico.", "error");
           }
