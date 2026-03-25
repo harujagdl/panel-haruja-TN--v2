@@ -4,6 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Tarjeta de Lealtad | HarujaGdl</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="theme-color" content="#A7B59E" />
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 
@@ -527,12 +531,34 @@
       return Math.max(0, Math.floor(total / 10));
     }
 
+    function normalizePromotionForCard(promo) {
+      return {
+        id: promo?.id || "",
+        active: promo?.active === true || promo?.activa === true,
+        title: promo?.title || promo?.nombre || "",
+        description: promo?.description || promo?.descripcion || "",
+        tag: promo?.tag || promo?.beneficio || promo?.tipo || promo?.mecanica || "Promo",
+        levels: Array.isArray(promo?.levels)
+          ? promo.levels
+          : Array.isArray(promo?.niveles)
+            ? promo.niveles
+            : [],
+        startAt: promo?.startAt || promo?.inicio || promo?.fechaInicio || promo?.vigenciaInicio || null,
+        endAt: promo?.endAt || promo?.fin || promo?.fechaFin || promo?.vigenciaFin || null,
+        priority: Number(promo?.priority ?? promo?.prioridad ?? 999)
+      };
+    }
+
     function promoEnVigencia(promo) {
       const now = Date.now();
-      const inicio = toMillisSafe(promo?.vigenciaInicio || promo?.inicio || promo?.fechaInicio || promo?.startAt);
-      const fin = toMillisSafe(promo?.vigenciaFin || promo?.fin || promo?.fechaFin || promo?.endAt);
-      if (Number.isNaN(inicio) || Number.isNaN(fin)) return false;
-      return now >= inicio && now <= fin;
+      const inicio = toMillisSafe(promo?.startAt || promo?.inicio || promo?.fechaInicio || promo?.vigenciaInicio);
+      const fin = toMillisSafe(promo?.endAt || promo?.fin || promo?.fechaFin || promo?.vigenciaFin);
+
+      if (Number.isNaN(inicio) && Number.isNaN(fin)) return true;
+      if (!Number.isNaN(inicio) && now < inicio) return false;
+      if (!Number.isNaN(fin) && now > fin) return false;
+
+      return true;
     }
 
     function extractNormalizedValues(value) {
@@ -559,34 +585,52 @@
         .map(norm);
     }
 
-    function promoAplicaANivel(promo, cliente) {
+    function buildClientLevelCandidates(cliente, levelsCatalog = []) {
+      const candidates = new Set(
+        [
+          cliente?.nivelId,
+          cliente?.nivel,
+          cliente?.nivelNombre,
+          cliente?.nivelSlug,
+          cliente?.tierId,
+          cliente?.tierName,
+          cliente?.levelId,
+          cliente?.level,
+          cliente?.levelName
+        ].filter(Boolean).map(norm)
+      );
+
+      (Array.isArray(levelsCatalog) ? levelsCatalog : []).forEach((level) => {
+        const aliases = [level?.id, level?.name, level?.key].filter(Boolean).map(norm);
+        if (aliases.some((value) => candidates.has(value))) {
+          aliases.forEach((value) => candidates.add(value));
+        }
+      });
+
+      return Array.from(candidates);
+    }
+
+    function promoAplicaANivel(promo, cliente, levelsCatalog = []) {
       const nivelesPromo = [
         ...extractNormalizedValues(promo?.niveles),
         ...extractNormalizedValues(promo?.levels)
       ];
+      if (!nivelesPromo.length) return false;
 
-      const candidatosCliente = [
-        cliente?.nivelId,
-        cliente?.nivel,
-        cliente?.nivelNombre,
-        cliente?.nivelSlug,
-        cliente?.tierId,
-        cliente?.tierName
-      ].filter(Boolean).map(norm);
-
+      const candidatosCliente = buildClientLevelCandidates(cliente, levelsCatalog);
       return candidatosCliente.some((valor) => nivelesPromo.includes(valor));
     }
 
     function ordenarPromociones(a, b) {
-      const pa = Number(a?.prioridad || 999);
-      const pb = Number(b?.prioridad || 999);
+      const pa = Number(a?.priority ?? a?.prioridad ?? 999);
+      const pb = Number(b?.priority ?? b?.prioridad ?? 999);
       if (pa !== pb) return pa - pb;
 
-      const fa = toMillisSafe(a?.vigenciaFin || a?.fin || a?.fechaFin || a?.endAt);
-      const fb = toMillisSafe(b?.vigenciaFin || b?.fin || b?.fechaFin || b?.endAt);
+      const fa = toMillisSafe(a?.endAt || a?.vigenciaFin || a?.fin || a?.fechaFin);
+      const fb = toMillisSafe(b?.endAt || b?.vigenciaFin || b?.fin || b?.fechaFin);
       if (fa !== fb) return fa - fb;
 
-      return String(a?.nombre || "").localeCompare(String(b?.nombre || ""));
+      return String(a?.title || a?.nombre || "").localeCompare(String(b?.title || b?.nombre || ""));
     }
 
     function formatFechaCorta(value) {
@@ -610,37 +654,37 @@
         return;
       }
 
-      box.innerHTML = promos.map((promo) => {
-        const badge =
-          promo?.beneficio ||
-          promo?.tipo ||
-          promo?.mecanica ||
-          "Promo";
+      const promoPrincipal = promos[0];
+      const extras = promos.length - 1;
+      const badge = promoPrincipal?.tag || "Promo";
+      const nombre = promoPrincipal?.title || "Promoción";
+      const vigencia = formatFechaCorta(promoPrincipal?.endAt);
+      const descripcion = promoPrincipal?.description
+        ? `<div class="beneficio-desc">${promoPrincipal.description}</div>`
+        : "";
+      const extrasHtml = extras > 0
+        ? `<div class="beneficio-desc">+ ${extras} beneficio(s) más disponible(s)</div>`
+        : "";
 
-        const nombre = promo?.nombre || "Promoción";
-        const vigencia = formatFechaCorta(promo?.vigenciaFin || promo?.fin || promo?.fechaFin || promo?.endAt);
-        const descripcion = promo?.descripcion
-          ? `<div class="beneficio-desc">${promo?.descripcion}</div>`
-          : "";
-
-        return `
-          <div class="beneficio-card">
-            <div class="beneficio-top">
-              <span class="beneficio-badge">${badge}</span>
-              <span class="beneficio-vigencia">${vigencia ? `hasta ${vigencia}` : ""}</span>
-            </div>
-            <div class="beneficio-nombre">${nombre}</div>
-            ${descripcion}
+      box.innerHTML = `
+        <div class="beneficio-card">
+          <div class="beneficio-top">
+            <span class="beneficio-badge">${badge}</span>
+            <span class="beneficio-vigencia">${vigencia ? `hasta ${vigencia}` : ""}</span>
           </div>
-        `;
-      }).join("");
+          <div class="beneficio-nombre">${nombre}</div>
+          ${descripcion}
+          ${extrasHtml}
+        </div>
+      `;
     }
 
-    function filtrarPromocionesCliente(cliente, promociones = []) {
+    function filtrarPromocionesCliente(cliente, promociones = [], levelsCatalog = []) {
       return (Array.isArray(promociones) ? promociones : [])
-        .filter((promo) => promo?.activa === true)
+        .map((promo) => normalizePromotionForCard(promo))
+        .filter((promo) => promo?.active === true)
         .filter((promo) => promoEnVigencia(promo))
-        .filter((promo) => promoAplicaANivel(promo, cliente))
+        .filter((promo) => promoAplicaANivel(promo, cliente, levelsCatalog))
         .sort(ordenarPromociones);
     }
 
@@ -705,13 +749,19 @@
         document.getElementById("comprasCliente").textContent = money(totalCompras);
 
         let promotions = [];
+        let levelsCatalog = [];
         try {
-          const promoResponse = await window.loyaltyService.getActivePromotions();
+          const [promoResponse, levelsResponse] = await Promise.all([
+            window.loyaltyService.getActivePromotions(),
+            window.loyaltyService.getActiveLevels()
+          ]);
           promotions = promoResponse.items || [];
+          levelsCatalog = levelsResponse.items || [];
         } catch (_err) {
           promotions = [];
+          levelsCatalog = [];
         }
-        renderPromociones(filtrarPromocionesCliente(c, promotions));
+        renderPromociones(filtrarPromocionesCliente(c, promotions, levelsCatalog));
         setLevelExtras(c);
 
         const pwaLink = `${DOMAIN_BASE}/tarjeta-lealtad?token=${encodeURIComponent(token)}`;

@@ -1,8 +1,9 @@
-const CACHE_NAME = 'tarjeta-lealtad-shell-v1';
+const CACHE_NAME = 'tarjeta-lealtad-shell-v2';
 const APP_SHELL_ASSETS = [
   '/tarjeta-lealtad.html',
   '/tarjeta-lealtad.html?pwa=1',
-  '/manifest-tarjeta-lealtad.json',
+  '/manifest.webmanifest',
+  '/favicon.svg',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/app/assets/haruja-logo.png',
