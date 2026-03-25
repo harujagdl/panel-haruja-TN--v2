@@ -38,9 +38,10 @@ import {
 import { runApartadoPdfDriveWriteTest } from '../lib/apartados/pdf-sync.js';
 
 const sendOk = (res, data) => res.status(200).json({ ok: true, data });
-const sendErr = (res, status, message, error) =>
+const sendErr = (res, status, message, error, code) =>
   res.status(status).json({
     ok: false,
+    ...(code ? { code } : {}),
     message,
     ...(error ? { error: String(error?.message || error) } : {}),
   });
@@ -56,6 +57,7 @@ const ADMIN_SESSION_SECRET = String(
   process.env.HARUJA_ADMIN_SESSION_SECRET || process.env.CORE_ADMIN_SESSION_SECRET || 'haruja-admin-session-v1'
 );
 const SESSION_MAX_AGE = 60 * 60 * 12;
+const ADMIN_SESSION_REQUIRED_MESSAGE = 'Sesión admin requerida para esta operación.';
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const isAllowedAdminEmail = (email) => ADMIN_ALLOWLIST_SET.has(normalizeEmail(email));
@@ -214,7 +216,7 @@ async function handlePrendas(req, res) {
   const op = String(req.query?.op || req.body?.op || req.query?.mode || '').trim();
   const isSensitiveOp = ['create', 'delete', 'archive', 'restore', 'import-corrections'].includes(op);
   if (isSensitiveOp && !requireAdminSession(req)) {
-    return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
+    return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
   }
 
   if (req.method === 'GET' && (!op || op === 'list')) return sendOk(res, await listPrendas());
@@ -362,19 +364,19 @@ export default async function handler(req, res) {
     if (action === 'prendas-list') return sendOk(res, await listPrendas());
     if (action === 'prendas-generar-codigo') return sendOk(res, await generarCodigoPrenda(req.body || {}));
     if (action === 'prendas-create') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
+      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
       return sendOk(res, await createPrenda(req.body || {}));
     }
 
     if (action === 'prendas-delete') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
+      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
       const result = await deletePrenda(req.body || {});
       if (result?.status) return res.status(result.status).json(result.body);
       return sendOk(res, result);
     }
 
     if (action === 'prendas-archive') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
+      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
       const result = await archivePrenda(req.body || {});
       if (result?.status) return res.status(result.status).json(result.body);
       return sendOk(res, result);
@@ -383,21 +385,21 @@ export default async function handler(req, res) {
     if (action === 'prendas-archived-list') return sendOk(res, await listArchivedPrendas());
 
     if (action === 'prendas-restore') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
+      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
       const result = await restorePrenda(req.body || {});
       if (result?.status) return res.status(result.status).json(result.body);
       return sendOk(res, result);
     }
 
     if (action === 'prendas-import-corrections') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
+      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
       return sendOk(res, await importCorrections(req.body || {}));
     }
 
     if (action === 'prendas') return await handlePrendas(req, res);
 
     if (action === 'prendas-admin') {
-      if (!requireAdminSession(req)) return sendErr(res, 401, 'Sesión admin requerida para esta operación.');
+      if (!requireAdminSession(req)) return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
       if (req.method === 'GET') return sendOk(res, await listArchivedPrendas());
       return sendOk(res, await importCorrections(req.body || {}));
     }
