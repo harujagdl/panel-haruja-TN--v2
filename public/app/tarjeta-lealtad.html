@@ -4,13 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Tarjeta de Lealtad | HarujaGdl</title>
-  <link rel="manifest" href="/manifest-tarjeta-lealtad.json" />
-  <meta name="theme-color" content="#faf7f2" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#A7B59E" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Lealtad Haruja" />
-  <link rel="apple-touch-icon" href="/assets/haruja-logo.png" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 
@@ -145,36 +146,42 @@
     .action-buttons{
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:8px;
       margin-top:12px;
     }
 
     .action-btn{
       width: 100%;
-      min-height: 44px;
-      padding: 10px 16px;
-      border: none;
-      border-radius: 999px;
-      font-weight: 700;
-      font-size: 14px;
+      min-height: 38px;
+      padding: 8px 14px;
+      border: 1px solid rgba(15,23,42,.12);
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 15px;
       line-height: 1.2;
+      letter-spacing: .01em;
       cursor: pointer;
-      background: var(--olive);
-      color: #fff;
-      transition: transform .15s ease, opacity .15s ease, background .15s ease;
+      background: #f5f7f6;
+      color: #2d3748;
+      transition: transform .15s ease, opacity .15s ease, background .15s ease, border-color .15s ease;
     }
 
     .action-btn:active{ transform: scale(.99); }
-    .action-btn:hover{ background: var(--olive-dark); }
 
     .action-btn.primary {
-      background: var(--olive);
-      color:#fff;
+      background: #edf2ec;
+      border-color: rgba(167,181,158,.55);
+      color:#2d4031;
     }
 
     .action-btn.secondary {
-      background: #5f6b80;
-      color:#fff;
+      background: #f3f4f8;
+      border-color: rgba(95,107,128,.35);
+      color:#344054;
+    }
+
+    .action-btn:hover {
+      opacity:.92;
     }
 
     .status{
@@ -680,21 +687,36 @@
         .map(norm);
     }
 
-    function promoAplicaANivel(promo, cliente) {
+    function buildClientLevelCandidates(cliente, levelsCatalog = []) {
+      const candidates = new Set(
+        [
+          cliente?.levelId,
+          cliente?.level,
+          cliente?.levelName,
+          cliente?.nivelId,
+          cliente?.nivel,
+          cliente?.nivelNombre
+        ].filter(Boolean).map(norm)
+      );
+
+      (Array.isArray(levelsCatalog) ? levelsCatalog : []).forEach((level) => {
+        const aliases = [level?.id, level?.name, level?.key].filter(Boolean).map(norm);
+        if (aliases.some((value) => candidates.has(value))) {
+          aliases.forEach((value) => candidates.add(value));
+        }
+      });
+
+      return Array.from(candidates);
+    }
+
+    function promoAplicaANivel(promo, cliente, levelsCatalog = []) {
       const nivelesPromo = [
         ...extractNormalizedValues(promo?.niveles),
         ...extractNormalizedValues(promo?.levels)
       ];
+      if (!nivelesPromo.length) return false;
 
-      const candidatosCliente = [
-        cliente?.levelId,
-        cliente?.level,
-        cliente?.levelName,
-        cliente?.nivelId,
-        cliente?.nivel,
-        cliente?.nivelNombre
-      ].filter(Boolean).map(norm);
-
+      const candidatosCliente = buildClientLevelCandidates(cliente, levelsCatalog);
       return candidatosCliente.some((valor) => nivelesPromo.includes(valor));
     }
 
@@ -719,32 +741,37 @@
         return;
       }
 
-      box.innerHTML = promos.map((promo) => {
-        const badge = promo?.tag || "Promo";
-        const nombre = promo?.title || "Promoción";
-        const vigencia = formatFechaCorta(promo?.endAt);
-        const descripcion = promo?.description
-          ? `<div class="beneficio-desc">${promo.description}</div>`
-          : "";
+      const promoPrincipal = promos[0];
+      const extras = promos.length - 1;
+      const badge = promoPrincipal?.tag || "Promo";
+      const nombre = promoPrincipal?.title || "Promoción";
+      const vigencia = formatFechaCorta(promoPrincipal?.endAt);
+      const descripcion = promoPrincipal?.description
+        ? `<div class="beneficio-desc">${promoPrincipal.description}</div>`
+        : "";
+      const extrasHtml = extras > 0
+        ? `<div class="beneficio-desc">+ ${extras} beneficio(s) más disponible(s)</div>`
+        : "";
 
-        return `
-          <div class="beneficio-card">
-            <div class="beneficio-top">
-              <span class="beneficio-badge">${badge}</span>
-              <span class="beneficio-vigencia">${vigencia ? `hasta ${vigencia}` : ""}</span>
-            </div>
-            <div class="beneficio-nombre">${nombre}</div>
-            ${descripcion}
+      box.innerHTML = `
+        <div class="beneficio-card">
+          <div class="beneficio-top">
+            <span class="beneficio-badge">${badge}</span>
+            <span class="beneficio-vigencia">${vigencia ? `hasta ${vigencia}` : ""}</span>
           </div>
-        `;
-      }).join("");
+          <div class="beneficio-nombre">${nombre}</div>
+          ${descripcion}
+          ${extrasHtml}
+        </div>
+      `;
     }
 
-    function filtrarPromocionesCliente(cliente, promociones = []) {
+    function filtrarPromocionesCliente(cliente, promociones = [], levelsCatalog = []) {
       return (Array.isArray(promociones) ? promociones : [])
+        .map((promo) => normalizePromotionForCard(promo))
         .filter((promo) => promo?.active === true)
         .filter((promo) => promoEnVigencia(promo))
-        .filter((promo) => promoAplicaANivel(promo, cliente))
+        .filter((promo) => promoAplicaANivel(promo, cliente, levelsCatalog))
         .sort((a, b) => {
           const pa = Number(a?.priority ?? 999);
           const pb = Number(b?.priority ?? 999);
@@ -819,13 +846,19 @@
         document.getElementById("comprasCliente").textContent = money(totalCompras);
 
         let promotions = [];
+        let levelsCatalog = [];
         try {
-          const promoResponse = await window.loyaltyService.getActivePromotions();
-          promotions = (promoResponse?.items || []).map(normalizePromotionForCard);
+          const [promoResponse, levelsResponse] = await Promise.all([
+            window.loyaltyService.getActivePromotions(),
+            window.loyaltyService.getActiveLevels()
+          ]);
+          promotions = promoResponse?.items || [];
+          levelsCatalog = levelsResponse?.items || [];
         } catch (_err) {
           promotions = [];
+          levelsCatalog = [];
         }
-        renderPromociones(filtrarPromocionesCliente(c, promotions));
+        renderPromociones(filtrarPromocionesCliente(c, promotions, levelsCatalog));
         setLevelExtras(c);
 
         const pwaLink = `${DOMAIN_BASE}/tarjeta-lealtad.html?token=${encodeURIComponent(token)}`;
