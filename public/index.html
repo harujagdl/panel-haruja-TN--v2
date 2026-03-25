@@ -4334,6 +4334,8 @@ Errores: 0</pre>
       const PRENDAS_SORT_DIR_STORAGE = "prendas_sort_dir";
       const ADMIN_VIEW_KEY = "haruja_admin_view";
       const DICTS_CACHE_KEY = "haruja_dicts_cache_v2";
+      let catalogosCache = null;
+      let catalogosCachePromise = null;
       const METADATA_COUNTS_DOC = {
         collection: "metadata",
         doc: "counters"
@@ -4528,11 +4530,39 @@ Errores: 0</pre>
         return best.collectionName;
       };
 
+      const getCatalogosCached = async ({ force = false } = {}) => {
+        if (!force && catalogosCache) {
+          console.log("[catalogos] cache hit frontend");
+          return catalogosCache;
+        }
+        if (!force && catalogosCachePromise) {
+          console.log("[catalogos] request deduplicated");
+          return catalogosCachePromise;
+        }
+        catalogosCachePromise = (async () => {
+          const previousCache = catalogosCache;
+          try {
+            const dictionaries = await loadDictionariesFromSheets();
+            catalogosCache = dictionaries;
+            return dictionaries;
+          } catch (error) {
+            if (previousCache) {
+              console.warn("[catalogos] fetch failed, using frontend cache", error);
+              return previousCache;
+            }
+            throw error;
+          } finally {
+            catalogosCachePromise = null;
+          }
+        })();
+        return catalogosCachePromise;
+      };
+
       const loadDictionary = async () => {
         // TODO v2:
         // Registro y diccionarios ya migran por Sheets.
         // Mantener helpers Firestore temporalmente por compatibilidad con módulos pendientes.
-        const dictionaries = await loadDictionariesFromSheets();
+        const dictionaries = await getCatalogosCached();
         const categories = ["tipos", "proveedores", "colores", "tallas"];
         const missing = categories.filter((category) => !(dictionaries?.[category] || []).length);
         return {
@@ -7220,6 +7250,7 @@ const createPrendaRow = (item) => {
             utilidad: hasMarginData ? utilidad : null,
             margen: hasMarginData ? Number(margenPct.toFixed(1)) : null
           });
+          console.log("[save] skipping catalog reload");
           await loadPrendasPage({ reset: false, reason: "edit-save" });
           setPrendasAlert("Prenda guardada.", "success");
           closeEditModal();
@@ -9136,7 +9167,11 @@ document.addEventListener("keydown", (event) => {
           if (/missing or insufficient permissions/i.test(String(error?.message || ""))) {
             mostrarErrorRegistro("No fue posible conectar con la base de datos. Revisa sesión y permisos.");
           }
-          alert(`Error cargando diccionario: ${error?.message || error}`);
+          if (!catalogosCache) {
+            alert(`Error cargando diccionario: ${error?.message || error}`);
+          } else {
+            console.warn("[catalogos] init failed but frontend cache is available");
+          }
         } finally {
           // ADMIN DB MODE START
           setAdminPanelVisible(false);

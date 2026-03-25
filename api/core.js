@@ -63,6 +63,10 @@ const ADMIN_SESSION_SECRET = String(
 const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim();
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 const ADMIN_SESSION_REQUIRED_MESSAGE = 'Sesión admin requerida para esta operación.';
+const CATALOGOS_CACHE_TTL_MS = 120 * 1000;
+let cacheCatalogosData = null;
+let cacheCatalogosAt = 0;
+let cacheCatalogosPromise = null;
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const isAllowedAdminEmail = (email) => ADMIN_ALLOWLIST_SET.has(normalizeEmail(email));
@@ -397,6 +401,31 @@ if (req.method === 'POST' && op === 'pdf-refresh') {
   return sendErr(res, 400, 'Operación inválida para action=apartados.');
 }
 
+async function getCatalogosCached({ force = false } = {}) {
+  const now = Date.now();
+  const cacheAlive = cacheCatalogosData && (now - cacheCatalogosAt) < CATALOGOS_CACHE_TTL_MS;
+  if (!force && cacheAlive) {
+    console.log('[catalogos] cache hit backend');
+    return cacheCatalogosData;
+  }
+  if (!force && cacheCatalogosPromise) {
+    console.log('[catalogos] request deduplicated');
+    return cacheCatalogosPromise;
+  }
+  cacheCatalogosPromise = (async () => {
+    console.log('[catalogos] fetch backend');
+    const data = await getCatalogos();
+    cacheCatalogosData = data;
+    cacheCatalogosAt = Date.now();
+    return data;
+  })();
+  try {
+    return await cacheCatalogosPromise;
+  } finally {
+    cacheCatalogosPromise = null;
+  }
+}
+
 export default async function handler(req, res) {
   const action = String(req.query?.action || '').trim();
   if (!action) return sendErr(res, 400, 'action es obligatorio.');
@@ -405,10 +434,10 @@ export default async function handler(req, res) {
     if (action === 'ventas-resumen' || action === 'resumen') return sendOk(res, await getVentasResumen(req.query?.month));
     if (action === 'ventas-detalle' || action === 'detalle') return sendOk(res, await getVentasDetalle(req.query?.month, req.query?.q || req.query?.search));
     if (action === 'ventas-webhook-status') return sendOk(res, await getLatestWebhookEvent());
-    if (action === 'catalogos') return sendOk(res, await getCatalogos());
+    if (action === 'catalogos') return sendOk(res, await getCatalogosCached());
 
     if (action === 'diccionario') {
-      const data = await getCatalogos();
+      const data = await getCatalogosCached();
       return res.status(200).json({ ok: true, ...data });
     }
 
