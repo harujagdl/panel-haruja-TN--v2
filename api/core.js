@@ -61,9 +61,75 @@ const CATALOGOS_CACHE_TTL_MS = 120 * 1000;
 let cacheCatalogosData = null;
 let cacheCatalogosAt = 0;
 let cacheCatalogosPromise = null;
+const PUBLIC_ACTIONS = new Set([
+  'catalogos',
+  'diccionario',
+  'prendas-list',
+  'prendas-generar-codigo',
+  'prendas-create',
+]);
+const ADMIN_ACTIONS = new Set([
+  'prendas-update',
+]);
+const PUBLIC_CREATE_ALLOWED_FIELDS = new Set([
+  'codigo',
+  'descripcion',
+  'detalles',
+  'tipo',
+  'color',
+  'talla',
+  'proveedor',
+  'fecha',
+  'tn',
+]);
+const PUBLIC_CREATE_BLOCKED_FIELDS = new Set([
+  'costo',
+  'precio',
+  'margen',
+  'utilidad',
+  'status',
+  'disponibilidad',
+  'existencia',
+  'inventorySource',
+  'lastInventorySyncAt',
+]);
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const isAllowedAdminEmail = (email) => ADMIN_ALLOWLIST_SET.has(normalizeEmail(email));
+const isPublicAction = (action) => PUBLIC_ACTIONS.has(String(action || '').trim());
+const isAdminAction = (action) => ADMIN_ACTIONS.has(String(action || '').trim());
+
+const sanitizePublicCreatePayload = (payload = {}) => {
+  const safePayload = {};
+  const blockedKeys = [];
+  Object.entries(payload || {}).forEach(([key, value]) => {
+    if (PUBLIC_CREATE_ALLOWED_FIELDS.has(key)) {
+      safePayload[key] = value;
+      return;
+    }
+    if (PUBLIC_CREATE_BLOCKED_FIELDS.has(key)) {
+      blockedKeys.push(key);
+      return;
+    }
+    // Campos no reconocidos se ignoran para no ampliar superficie de escritura pública.
+  });
+
+  safePayload.tn = String(safePayload.tn || 'N/A').trim();
+  safePayload.status = 'No definido';
+  safePayload.disponibilidad = 'No definido';
+  safePayload.existencia = 0;
+  safePayload.precio = '';
+  safePayload.costo = '';
+  safePayload.margen = '';
+  safePayload.utilidad = '';
+  safePayload.inventorySource = 'manual';
+  safePayload.lastInventorySyncAt = '';
+
+  return {
+    payload: safePayload,
+    blockedKeys,
+  };
+};
 
 const parseCookies = (req) => {
   const raw = String(req?.headers?.cookie || '');
@@ -499,6 +565,13 @@ export default async function handler(req, res) {
   if (!action) return sendErr(res, 400, 'action es obligatorio.');
 
   try {
+    if (isAdminAction(action) && !requireAdminSession(req, res, { logDenied: '[admin-session] admin action denied without valid session' })) {
+      return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+    }
+    if (isPublicAction(action)) {
+      console.log(`[permissions] public action allowed: ${action}`);
+    }
+
     if (action === 'ventas-resumen' || action === 'resumen') return sendOk(res, await getVentasResumen(req.query?.month));
     if (action === 'ventas-detalle' || action === 'detalle') return sendOk(res, await getVentasDetalle(req.query?.month, req.query?.q || req.query?.search));
     if (action === 'ventas-webhook-status') return sendOk(res, await getLatestWebhookEvent());
@@ -512,19 +585,19 @@ export default async function handler(req, res) {
     if (action === 'prendas-list') return sendOk(res, await listPrendas());
     if (action === 'prendas-generar-codigo') return sendOk(res, await generarCodigoPrenda(req.body || {}));
     if (action === 'prendas-create') {
-      if (!requireAdminSession(req, res, { logDenied: '[admin-session] admin action denied due to missing validated session' })) {
-        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      const { payload, blockedKeys } = sanitizePublicCreatePayload(req.body || {});
+      if (blockedKeys.length) {
+        console.warn('[permissions] blocked attempt to send admin fields through public create', {
+          action,
+          blockedFields: blockedKeys,
+        });
       }
-      const payload = req.body || {};
       if (!payload?.codigo) {
         return sendErr(res, 400, 'Datos incompletos');
       }
       return sendOk(res, await createPrenda(payload));
     }
     if (action === 'prendas-update') {
-      if (!requireAdminSession(req, res, { logDenied: '[admin-session] admin action denied due to missing validated session' })) {
-        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
-      }
       const result = await updatePrenda(req.body || {});
       if (result?.status) return res.status(result.status).json(result.body);
       return sendOk(res, result);
