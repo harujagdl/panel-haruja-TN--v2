@@ -33,6 +33,7 @@ import {
   updateApartadoStatus,
 } from '../lib/api/apartados.js';
 import { runApartadoPdfDriveWriteTest } from '../lib/apartados/pdf-sync.js';
+import { AdminSessionConfigError, getAdminSessionSecret } from '../lib/security/adminSessionConfig.js';
 
 export const sendOk = (res, data) => res.status(200).json({ ok: true, data });
 export const sendErr = (res, status, message, error, code) =>
@@ -50,17 +51,12 @@ const ADMIN_ALLOWLIST = [
   'harujagdl.ventas@gmail.com',
 ].map((email) => String(email || '').trim().toLowerCase());
 const ADMIN_ALLOWLIST_SET = new Set(ADMIN_ALLOWLIST);
-const ADMIN_SESSION_SECRET = String(
-  process.env.ADMIN_SESSION_SECRET ||
-    process.env.HARUJA_ADMIN_SESSION_SECRET ||
-    process.env.CORE_ADMIN_SESSION_SECRET ||
-    'haruja-admin-session-v1'
-);
 const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim();
 const SESSION_MAX_AGE_SECONDS = 15 * 60;
 const SESSION_MAX_AGE_MS = SESSION_MAX_AGE_SECONDS * 1000;
 export const ADMIN_SESSION_REQUIRED_MESSAGE =
   'La sesión admin expiró. Vuelve a autenticarte con Google.';
+const ADMIN_TEMP_UNAVAILABLE_MESSAGE = 'Admin temporalmente no disponible.';
 const CATALOGOS_CACHE_TTL_MS = 120 * 1000;
 let cacheCatalogosData = null;
 let cacheCatalogosAt = 0;
@@ -83,6 +79,11 @@ const parseCookies = (req) => {
 
 const googleOAuthClient = new OAuth2Client();
 
+const isAdminSessionConfigError = (error) => error instanceof AdminSessionConfigError;
+
+const sendAdminUnavailable = (res) =>
+  sendErr(res, 503, ADMIN_TEMP_UNAVAILABLE_MESSAGE, null, 'ADMIN_TEMP_UNAVAILABLE');
+
 const buildSessionToken = (payload = {}) => {
   const now = Date.now();
   const sessionPayload = {
@@ -93,7 +94,7 @@ const buildSessionToken = (payload = {}) => {
     exp: now + SESSION_MAX_AGE_MS,
   };
   const encodedPayload = Buffer.from(JSON.stringify(sessionPayload), 'utf8').toString('base64url');
-  const signature = createHmac('sha256', ADMIN_SESSION_SECRET).update(encodedPayload).digest('hex');
+  const signature = createHmac('sha256', getAdminSessionSecret()).update(encodedPayload).digest('hex');
   return `${encodedPayload}.${signature}`;
 };
 
@@ -101,10 +102,13 @@ const decodeAdminSessionToken = (token = '') => {
   if (!token || !token.includes('.')) return null;
   const [encodedPayload, signature] = token.split('.');
   if (!encodedPayload || !signature) return null;
-  const expected = createHmac('sha256', ADMIN_SESSION_SECRET).update(encodedPayload).digest('hex');
+  const expected = createHmac('sha256', getAdminSessionSecret()).update(encodedPayload).digest('hex');
   const a = Buffer.from(signature);
   const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    console.warn('[admin-session] admin session verification failed');
+    return null;
+  }
 
   try {
     const parsed = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
@@ -133,6 +137,7 @@ const decodeAdminSessionToken = (token = '') => {
       expired: false,
     };
   } catch (_error) {
+    console.warn('[admin-session] admin session verification failed');
     return null;
   }
 };
@@ -165,16 +170,21 @@ const clearAdminSession = (res) => {
 };
 
 export const requireAdminSession = (req, res) => {
-  const session = readAdminSession(req);
-  if (session?.expired) {
-    console.warn('[admin-session] expired in backend');
-    if (res) clearAdminSession(res);
-    return null;
+  try {
+    const session = readAdminSession(req);
+    if (session?.expired) {
+      console.warn('[admin-session] expired in backend');
+      if (res) clearAdminSession(res);
+      return null;
+    }
+    if (!session?.authenticated || !session?.isAdmin) {
+      return null;
+    }
+    return session;
+  } catch (error) {
+    if (isAdminSessionConfigError(error)) return null;
+    throw error;
   }
-  if (!session?.authenticated || !session?.isAdmin) {
-    return null;
-  }
-  return session;
 };
 
 const verifyGoogleIdToken = async (credential) => {
@@ -313,22 +323,27 @@ async function handlePrendas(req, res) {
 async function handleAdminSession(req, res) {
   const op = String(req.query?.op || req.body?.op || '').trim();
   if (req.method === 'GET' && op === 'status') {
-    const session = readAdminSession(req);
-    const now = Date.now();
-    const isExpired = Boolean(session?.expired) || (Number(session?.expiresAt || 0) > 0 && now >= Number(session?.expiresAt));
-    if (isExpired) {
-      console.warn('[admin-session] expired in backend');
-      clearAdminSession(res);
+    try {
+      const session = readAdminSession(req);
+      const now = Date.now();
+      const isExpired = Boolean(session?.expired) || (Number(session?.expiresAt || 0) > 0 && now >= Number(session?.expiresAt));
+      if (isExpired) {
+        console.warn('[admin-session] expired in backend');
+        clearAdminSession(res);
+      }
+      return res.status(200).json({
+        ok: true,
+        authenticated: Boolean(session?.authenticated) && !isExpired,
+        email: isExpired ? null : session?.email || null,
+        isAdmin: Boolean(session?.isAdmin) && !isExpired,
+        expiresAt: isExpired ? null : Number(session?.expiresAt || 0) || null,
+        now,
+        googleClientId: GOOGLE_CLIENT_ID || null,
+      });
+    } catch (error) {
+      if (isAdminSessionConfigError(error)) return sendAdminUnavailable(res);
+      throw error;
     }
-    return res.status(200).json({
-      ok: true,
-      authenticated: Boolean(session?.authenticated) && !isExpired,
-      email: isExpired ? null : session?.email || null,
-      isAdmin: Boolean(session?.isAdmin) && !isExpired,
-      expiresAt: isExpired ? null : Number(session?.expiresAt || 0) || null,
-      now,
-      googleClientId: GOOGLE_CLIENT_ID || null,
-    });
   }
 
   if (req.method === 'POST' && op === 'google-login') {
@@ -359,6 +374,7 @@ async function handleAdminSession(req, res) {
       });
     } catch (error) {
       clearAdminSession(res);
+      if (isAdminSessionConfigError(error)) return sendAdminUnavailable(res);
       return sendErr(res, 401, 'No se pudo validar la cuenta de Google.', error, 'GOOGLE_AUTH_FAILED');
     }
   }
