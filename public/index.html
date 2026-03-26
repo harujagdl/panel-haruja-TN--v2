@@ -7527,6 +7527,8 @@ const createPrendaRow = (item) => {
       let lockedBaseTipo = "";
       let lockedBaseProveedor = "";
       let generarCodigoInFlight = null;
+      let registroSubmitInFlight = false;
+      let registroSaveInFlight = false;
       let lastGenerateRequestKey = "";
       let lastGenerateAt = 0;
       let generarCodigoClicks = 0;
@@ -7873,10 +7875,11 @@ const createPrendaRow = (item) => {
       const handleRegistroSubmit = async (event) => {
         console.log("[registro-prendas] submit click en Generar código");
         event.preventDefault();
-        if (registroSubmit.disabled || generarCodigoInFlight) return;
+        if (registroSubmit.disabled || generarCodigoInFlight || registroSubmitInFlight) return;
         generarCodigoClicks += 1;
         console.log("[registro-prendas] generar-codigo-intent", { count: generarCodigoClicks });
         setRegistroStatus("");
+        registroSubmitInFlight = true;
 
         try {
           console.log("[registro-prendas] usando Apps Script / Sheets");
@@ -7898,11 +7901,14 @@ const createPrendaRow = (item) => {
           setRegistroStatus(message, "error");
           console.error(error);
         } finally {
+          registroSubmitInFlight = false;
           registroSubmit.disabled = false;
         }
       };
 
       const handleRegistroSave = async () => {
+        if (registroSaveInFlight) return;
+        registroSaveInFlight = true;
         try {
           console.log("[registro-prendas] usando Apps Script / Sheets");
           const preview = registroPreview || await buildRegistroPreview();
@@ -7973,8 +7979,7 @@ const createPrendaRow = (item) => {
           const codigoYaExiste = baseCodigos.includes(codigoFinal);
           const reuseFlowValido = Boolean(preview?.usingExistingBase && codigoBaseFinal && baseCodigos.some((code) => extraerCodigoBase(code) === codigoBaseFinal));
           if (codigoYaExiste && !reuseFlowValido) {
-            setRegistroStatus("El código generado ya existe. Reintenta.", "error");
-            return;
+            console.log("[registro-prendas] preview code may be stale; backend will resolve final code", { codigoFinal });
           }
           console.log('[save] nextOrden:', nextOrden);
           console.log('[guardarPrenda] proveedorNombre:', proveedorNombre);
@@ -7988,8 +7993,10 @@ const createPrendaRow = (item) => {
           const payload = {
             orden: nextOrden,
             codigo: codigoFinal,
+            codigoPreview: codigoFinal,
             descripcion,
             detalles,
+            creadoPor,
             tipo: typeName,
             color: colorName,
             talla: tallaName,
@@ -8017,10 +8024,12 @@ const createPrendaRow = (item) => {
           if (!saveResult?.ok) {
             throw new Error(saveResult?.message || "No se pudo confirmar el guardado en Sheets.");
           }
+          const codigoGuardado = String(saveResult?.codigoFinal || saveResult?.codigo || codigoFinal).trim().toUpperCase();
+          const ordenGuardado = Number.parseInt(String(saveResult?.ordenFinal ?? saveResult?.orden ?? nextOrden), 10);
           if (adminCreateCostoInput) adminCreateCostoInput.value = "";
           if (adminCreatePVentaInput) adminCreatePVentaInput.value = "";
-          registroPreview = { ...preview };
-          registroCodigo.textContent = codigoFinal;
+          registroPreview = { ...preview, codigo: codigoGuardado };
+          registroCodigo.textContent = codigoGuardado;
           registroResult.classList.remove("hidden");
 
           console.log('[save] invalidando cache baseRows');
@@ -8036,7 +8045,12 @@ const createPrendaRow = (item) => {
           prendasState.queryKey = "";
           console.log('[save] recargando tabla desde la base de datos');
           await loadPrendasPage({ reset: true, reason: "save-garment" });
-          setRegistroStatus("Prenda guardada correctamente en la base de datos.", "success");
+          const codigoCambio = Boolean(saveResult?.codigoChangedFromPreview) || (codigoGuardado && codigoGuardado !== codigoFinal);
+          if (codigoCambio) {
+            setRegistroStatus(`Prenda guardada con código final ${codigoGuardado} (orden ${Number.isFinite(ordenGuardado) ? ordenGuardado : "N/A"}).`, "success");
+          } else {
+            setRegistroStatus("Prenda guardada correctamente en la base de datos.", "success");
+          }
         } catch (error) {
           console.error(error);
           const errorCode = String(error?.code || "");
@@ -8054,6 +8068,7 @@ const createPrendaRow = (item) => {
             setRegistroStatus("No se pudo guardar la prenda. Revisar consola para detalle técnico.", "error");
           }
         } finally {
+          registroSaveInFlight = false;
           registroSave.disabled = false;
           registroSubmit.disabled = false;
         }
