@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ventas & Comisiones | Haruja</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #f6f7fb; color: #111827; }
     .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
@@ -173,6 +174,9 @@
 
     const buildSyncErrorMessage = (error) => {
       const payload = error?.payload || {};
+      if (payload?.code === "TIENDANUBE_AUTH_ERROR") {
+        return "No fue posible autenticar con Tiendanube. Revisa la conexión OAuth o elimina variables viejas de Vercel (TIENDANUBE_ACCESS_TOKEN / TIENDANUBE_STORE_ID).";
+      }
       if (payload?.code === "TIENDANUBE_NOT_FOUND") {
         return "Error consultando Tiendanube: recurso no encontrado. Revisar endpoint/store_id de sincronización.";
       }
