@@ -2810,7 +2810,7 @@ Errores: 0</pre>
       import { loadBaseRowsFromSheets } from "/shared/sheets-adapter.js";
       import { loadDictionariesFromSheets } from "/shared/dictionaries-adapter.js";
       import { normalizeCodeBase } from "/shared/code-generator.js";
-      import { generarDescripcionSimple } from "/shared/dictionary-utils.js";
+      import { compactContiguousDuplicateFragment, generarDescripcionSimple } from "/shared/dictionary-utils.js";
       import { processCorrectionsFileRows } from "/shared/corrections-adapter.js";
 
       const callPrendasSheetsApi = async ({ action, method = "GET", payload = null, query = {} } = {}) => {
@@ -7774,9 +7774,9 @@ const createPrendaRow = (item) => {
           tallaClave,
           prendasState.dictEntries
         );
-        const descripcion = detallesValue
-          ? `${descripcionBase} - ${detallesValue}`
-          : descripcionBase;
+        const descripcion = compactContiguousDuplicateFragment(
+          detallesValue ? `${descripcionBase} - ${detallesValue}` : descripcionBase
+        );
 
         if (codeMode === "supplier") {
           const codigo = buildSupplierFinalCode({ supplierRaw, colorClave, tallaClave });
@@ -7850,10 +7850,10 @@ const createPrendaRow = (item) => {
           registroState.codigoBaseInterno = parseBaseCode(found.baseCode);
           registroState.codigoBaseReutilizado = parseBaseCode(found.baseCode);
           registroState.isReuseMode = true;
-          const descripcionEncontrada = safeString(found?.data?.descripcion || "").trim();
-          if (descripcionEncontrada && registroDetalles && !safeString(registroDetalles.value).trim()) {
-            registroDetalles.value = descripcionEncontrada;
-          }
+          registroPreview = null;
+          registroState.codigoGenerado = "";
+          if (registroResult) registroResult.classList.add("hidden");
+          if (registroCodigo) registroCodigo.textContent = "--";
           if (registroBaseCodeInput) registroBaseCodeInput.value = registroState.codigoBaseReutilizado;
           console.log("[buscarCodigoExistente] codigoBaseInterno:", registroState.codigoBaseInterno);
           console.log("[buscarCodigoExistente] isReuseMode:", registroState.isReuseMode);
@@ -7943,7 +7943,7 @@ const createPrendaRow = (item) => {
           const colorName = String(getSelectedLabel(registroColor) || "").trim();
           const tallaName = String(getSelectedLabel(registroTalla) || "").trim();
 
-          const descripcion = String(preview?.descripcion || registroDetalles?.value || "").trim();
+          const descripcion = compactContiguousDuplicateFragment(String(preview?.descripcion || registroDetalles?.value || "").trim());
           const detalles = String(registroDetalles?.value || "").trim();
           const creadoPor = String(registroCreatedBy?.value || "").trim();
           const proveedorCodigo = providerCode;
