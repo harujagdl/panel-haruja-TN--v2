@@ -16,8 +16,7 @@ export default async function handler(req, res) {
   const action = String(req.query?.action || '').trim();
   if (!action) return sendErr(res, 400, 'action es obligatorio.');
 
-  if (!requireAdminSession(req, res)) {
-    console.warn('[admin-session] reauth required');
+  if (!requireAdminSession(req, res, { logDenied: '[admin-session] admin action denied due to missing validated session' })) {
     return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
   }
 
