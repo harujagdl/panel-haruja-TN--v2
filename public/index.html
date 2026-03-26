@@ -2856,6 +2856,11 @@ Errores: 0</pre>
         method: "POST",
         payload
       });
+      const updatePrendaInSheets = async (payload = {}) => callPrendasSheetsApi({
+        action: "prendas-update",
+        method: "POST",
+        payload
+      });
       const deletePrendaInSheets = async (payload = {}) => callPrendasAdminApi({
         action: "prendas-delete",
         method: "POST",
@@ -7095,8 +7100,8 @@ const createPrendaRow = (item) => {
         if (editDisponibilidadManual) editDisponibilidadManual.value = disponibilidadManual;
         if (editColorInput) editColorInput.disabled = true;
         if (editTallaInput) editTallaInput.disabled = true;
-        if (editDescripcionInput) editDescripcionInput.disabled = true;
-        if (editQtyAvailableInput) editQtyAvailableInput.disabled = true;
+        if (editDescripcionInput) editDescripcionInput.disabled = false;
+        if (editQtyAvailableInput) editQtyAvailableInput.disabled = false;
         if (editManualOverride) editManualOverride.disabled = true;
         setManualControlsEnabled(true);
         if (editModalError) {
@@ -7156,18 +7161,12 @@ const createPrendaRow = (item) => {
       const saveEdit = async () => {
         try {
           if (!ensureAdminMode()) return;
-          if (!prendasState.editing?.docId) return;
-          const oldDocId = prendasState.editing.docId;
+          if (!prendasState.editing?.codigo) return;
           const preservedCode = safeString(prendasState.editing?.codigo).trim().toUpperCase();
           const pVentaOverrideIngresado = toNumber(editPVentaInput?.value);
           const costo = toNumber(editCostoInput?.value);
-          const newDocId = oldDocId;
-          const newCodigo = preservedCode;
           console.log("[admin-edit] preserving existing code");
           console.log("[admin-edit] no structural recalculation");
-          const ajusteOverride = Number.isFinite(pVentaOverrideIngresado)
-            ? ajustarDesdePrecioConIVA(pVentaOverrideIngresado)
-            : null;
           const pickedStatus = safeString(editStatusManual?.value || prendasState.editing?.rowDataSnapshot?.status || "Disponible").trim();
           const pickedDisp = safeString(editDisponibilidadManual?.value || prendasState.editing?.rowDataSnapshot?.disponibilidad || "Disponible").trim();
           const finalAvailability = {
@@ -7181,85 +7180,19 @@ const createPrendaRow = (item) => {
             throw new Error("Costo debe ser mayor o igual a 0.");
           }
           editModalSaveButton.disabled = true;
-          const user = await ensureAdminSession();
-          const userEmail = safeString(user?.email).trim().toLowerCase();
-          const oldPublicRef = doc(db, activePrendasPublicCollection, oldDocId);
-          const nextPublicPayload = {
+          await ensureAdminSession();
+          const payload = {
+            codigo: preservedCode,
+            descripcion: safeString(editDescripcionInput?.value).trim(),
+            precio: Number.isFinite(pVentaOverrideIngresado) ? pVentaOverrideIngresado : "",
+            costo: Number.isFinite(costo) ? costo : "",
             status: finalAvailability.status,
             disponibilidad: finalAvailability.disponibilidad,
-            statusManual: finalAvailability.status,
-            disponibilidadManual: finalAvailability.disponibilidad,
-            updatedAt: serverTimestamp(),
-            updatedBy: userEmail
+            existencia: toNumber(editQtyAvailableInput?.value)
           };
-          console.log("[admin-edit] save payload fields:", Object.keys(nextPublicPayload));
-          if (ajusteOverride) {
-            nextPublicPayload.pVenta = ajusteOverride.precioConIVA;
-            nextPublicPayload.precioConIva = ajusteOverride.precioConIVA;
-            nextPublicPayload.precioConIVA = ajusteOverride.precioConIVA;
-            nextPublicPayload.precioSinIVA = ajusteOverride.precioSinIVA;
-            nextPublicPayload.iva = ajusteOverride.iva;
-            nextPublicPayload.price = ajusteOverride.precioConIVA;
-            nextPublicPayload.priceSinIVA = ajusteOverride.precioSinIVA;
-            nextPublicPayload.priceConIVA = ajusteOverride.precioConIVA;
-            nextPublicPayload.priceOverride = ajusteOverride.precioConIVA;
-            nextPublicPayload.priceOverrideRaw = pVentaOverrideIngresado;
-          }
-          await updateDoc(oldPublicRef, nextPublicPayload);
-
-          const pVentaVisible = ajusteOverride?.precioConIVA ?? toNumber(prendasState.editing?.publicPVenta);
-          const { utilidad, margenPct } = computeMarginUtility(pVentaVisible, costo);
-          const oldAdminRef = doc(db, PRENDAS_ADMIN_COLLECTION, oldDocId);
-          await setDoc(oldAdminRef, {
-            docId: newDocId,
-            codigo: newCodigo,
-            costo: Number.isFinite(costo) ? costo : deleteField(),
-            pVentaOverride: ajusteOverride ? ajusteOverride.precioConIVA : deleteField(),
-            precioSinIVA: ajusteOverride ? ajusteOverride.precioSinIVA : deleteField(),
-            iva: ajusteOverride ? ajusteOverride.iva : deleteField(),
-            precioConIVA: ajusteOverride ? ajusteOverride.precioConIVA : deleteField(),
-            price: ajusteOverride ? ajusteOverride.precioConIVA : deleteField(),
-            priceSinIVA: ajusteOverride ? ajusteOverride.precioSinIVA : deleteField(),
-            priceConIVA: ajusteOverride ? ajusteOverride.precioConIVA : deleteField(),
-            priceOverride: ajusteOverride ? ajusteOverride.precioConIVA : deleteField(),
-            priceOverrideRaw: ajusteOverride ? pVentaOverrideIngresado : deleteField(),
-            utilidad: (Number.isFinite(pVentaVisible) && Number.isFinite(costo)) ? utilidad : deleteField(),
-            margen: (Number.isFinite(pVentaVisible) && Number.isFinite(costo)) ? margenPct : deleteField(),
-            statusManual: finalAvailability.status,
-            disponibilidadManual: finalAvailability.disponibilidad,
-            status: finalAvailability.status,
-            disponibilidad: finalAvailability.disponibilidad,
-            updatedAt: serverTimestamp(),
-            updatedBy: userEmail
-          }, { merge: true });
-
-          prendasState.adminMap.set(newDocId, {
-            costo: Number.isFinite(costo) ? costo : null,
-            pVentaOverride: ajusteOverride ? ajusteOverride.precioConIVA : null,
-            utilidad: (Number.isFinite(pVentaVisible) && Number.isFinite(costo)) ? utilidad : null,
-            margen: (Number.isFinite(pVentaVisible) && Number.isFinite(costo)) ? margenPct : null
-          });
-
-          const nextPVenta = ajusteOverride?.precioConIVA ?? toNumber(prendasState.editing?.publicPVenta);
-          const hasMarginData = Number.isFinite(nextPVenta) && Number.isFinite(costo);
-          updateRowInMemory(newDocId, {
-            docId: newDocId,
-            id: newDocId,
-            codigo: newCodigo,
-            statusManual: finalAvailability.status,
-            disponibilidadManual: finalAvailability.disponibilidad,
-            status: finalAvailability.status,
-            statusCanon: finalAvailability.status,
-            disponibilidad: finalAvailability.disponibilidad,
-            disponibilidadCanon: finalAvailability.disponibilidad,
-            costo: Number.isFinite(costo) ? costo : null,
-            pVentaOverride: ajusteOverride ? ajusteOverride.precioConIVA : null,
-            pVentaDisplay: Number.isFinite(nextPVenta) ? nextPVenta : null,
-            utilidad: hasMarginData ? utilidad : null,
-            margen: hasMarginData ? Number(margenPct.toFixed(1)) : null
-          });
-          console.log("[save] skipping catalog reload");
-          await loadPrendasPage({ reset: false, reason: "edit-save" });
+          await updatePrendaInSheets(payload);
+          resetPrendasState();
+          await loadPrendasPage({ reset: true, reason: "edit-save" });
           setPrendasAlert("Prenda guardada.", "success");
           closeEditModal();
         } catch (error) {

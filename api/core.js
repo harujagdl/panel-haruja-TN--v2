@@ -17,6 +17,7 @@ import {
   saveVentasConfig,
   registerTiendanubeWebhooks,
   updateVentasComisiones,
+  updatePrenda,
 } from '../lib/api/core.js';
 import {
   addAbono,
@@ -482,6 +483,15 @@ export default async function handler(req, res) {
         return sendErr(res, 400, 'Datos incompletos');
       }
       return sendOk(res, await createPrenda(payload));
+    }
+    if (action === 'prendas-update') {
+      if (!requireAdminSession(req, res)) {
+        console.warn('[admin-session] reauth required');
+        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      }
+      const result = await updatePrenda(req.body || {});
+      if (result?.status) return res.status(result.status).json(result.body);
+      return sendOk(res, result);
     }
 
     if (action === 'prendas') return await handlePrendas(req, res);
