@@ -938,8 +938,24 @@
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
         try {
-          await navigator.serviceWorker.register('/lealtad/sw.js', {
+          const registration = await navigator.serviceWorker.register('/lealtad/sw.js', {
             scope: '/lealtad/'
+          });
+          if (registration.waiting) {
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (!newWorker) return;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('[SW lealtad] actualización detectada');
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          });
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            console.log('[SW lealtad] controlador actualizado');
           });
           console.log('Service Worker registrado correctamente');
         } catch (error) {
