@@ -20,3 +20,7 @@
 ### Nota para deploy en Vercel
 Si el login admin con Google falla, verificar dominios autorizados:
 `Firebase Console > Authentication > Settings > Authorized domains`.
+
+
+### Variables de entorno (admin)
+- `ADMIN_SESSION_SECRET=pon_un_secreto_largo_de_al_menos_32_caracteres`
