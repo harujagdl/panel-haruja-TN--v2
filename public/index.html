@@ -2832,27 +2832,46 @@ Errores: 0</pre>
         }
         return data?.data;
       };
+      const callPrendasAdminApi = async ({ action, method = "GET", payload = null, query = {} } = {}) => {
+        const params = new URLSearchParams({ action, ...query });
+        const response = await fetch(`/api/admin?${params.toString()}`, {
+          method,
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: payload && method !== "GET" ? JSON.stringify(payload) : undefined
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data?.ok) {
+          const error = new Error(data?.message || data?.error || `Error en ${action}`);
+          error.status = response.status;
+          error.code = data?.code || "";
+          error.payload = data;
+          handleAdminSessionApiError(error);
+          throw error;
+        }
+        return data?.data;
+      };
       const createPrendaInSheets = async (payload = {}) => callPrendasSheetsApi({
         action: "prendas-create",
         method: "POST",
         payload
       });
-      const deletePrendaInSheets = async (payload = {}) => callPrendasSheetsApi({
+      const deletePrendaInSheets = async (payload = {}) => callPrendasAdminApi({
         action: "prendas-delete",
         method: "POST",
         payload
       });
-      const archivePrendaInSheets = async (payload = {}) => callPrendasSheetsApi({
+      const archivePrendaInSheets = async (payload = {}) => callPrendasAdminApi({
         action: "prendas-archive",
         method: "POST",
         payload
       });
-      const restorePrendaInSheets = async (payload = {}) => callPrendasSheetsApi({
+      const restorePrendaInSheets = async (payload = {}) => callPrendasAdminApi({
         action: "prendas-restore",
         method: "POST",
         payload
       });
-      const loadArchivedPrendas = async () => callPrendasSheetsApi({ action: "prendas-archived-list" });
+      const loadArchivedPrendas = async () => callPrendasAdminApi({ action: "prendas-archived-list" });
       const debugMode = new URLSearchParams(window.location.search).get("debug") === "1";
       function isEmbedded() {
         try {
@@ -7265,7 +7284,7 @@ const createPrendaRow = (item) => {
         const confirmed = window.confirm(`¿Eliminar ${codigo}? Esta acción no se puede deshacer.`);
         if (!confirmed) return;
         try {
-          await deletePrendaInSheets(codigo);
+          await deletePrendaInSheets({ codigo });
           prendasState.baseRows = [];
           prendasState.baseRowsCacheKey = null;
           await loadPrendasPage({ reset: true, reason: "delete" });
@@ -7298,7 +7317,7 @@ const createPrendaRow = (item) => {
 
         prendasState.archivingCodes.add(codigo);
         try {
-          const result = await archivePrendaInSheets(codigo);
+          const result = await archivePrendaInSheets({ codigo });
           if (!result?.ok || result?.archived !== true) {
             throw new Error(result?.message || "No se pudo archivar el registro.");
           }
@@ -7410,7 +7429,7 @@ const createPrendaRow = (item) => {
 
         prendasState.restoringCodes.add(codigo);
         try {
-          const result = await restorePrendaInSheets(codigo);
+          const result = await restorePrendaInSheets({ codigo });
           if (!result?.ok || result?.restored !== true) {
             throw new Error(result?.message || "No se pudo restaurar el registro.");
           }
@@ -8013,8 +8032,9 @@ const createPrendaRow = (item) => {
           prendasState.sort = normalizeSortConfig({ key: "orden", dir: "desc" });
           updateOrdenSortToggleUi();
 
-          if (prendasSearchInput) prendasSearchInput.value = codigoFinal;
-          if (prendasSearch) prendasSearch.value = codigoFinal;
+          if (prendasSearchInput) prendasSearchInput.value = "";
+          if (prendasSearch) prendasSearch.value = "";
+          prendasState.queryKey = "";
           console.log('[save] recargando tabla desde la base de datos');
           await loadPrendasPage({ reset: true, reason: "save-garment" });
           setRegistroStatus("Prenda guardada correctamente en la base de datos.", "success");

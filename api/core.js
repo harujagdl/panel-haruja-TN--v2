@@ -2,10 +2,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { getLatestWebhookEvent } from '../lib/ventas/dedupeWebhookEvent.js';
 import {
-  archivePrenda,
   assignVentaSeller,
   createPrenda,
-  deletePrenda,
   generarCodigoPrenda,
   getCatalogos,
   getMetaVsVentaData,
@@ -14,11 +12,8 @@ import {
   getVentasDetalle,
   getVentasResumen,
   getVentasSinAsignar,
-  importCorrections,
-  listArchivedPrendas,
   listPrendas,
   rebuildVentasResumen,
-  restorePrenda,
   saveVentasConfig,
   registerTiendanubeWebhooks,
   updateVentasComisiones,
@@ -38,8 +33,8 @@ import {
 } from '../lib/api/apartados.js';
 import { runApartadoPdfDriveWriteTest } from '../lib/apartados/pdf-sync.js';
 
-const sendOk = (res, data) => res.status(200).json({ ok: true, data });
-const sendErr = (res, status, message, error, code) =>
+export const sendOk = (res, data) => res.status(200).json({ ok: true, data });
+export const sendErr = (res, status, message, error, code) =>
   res.status(status).json({
     ok: false,
     ...(code ? { code } : {}),
@@ -63,7 +58,7 @@ const ADMIN_SESSION_SECRET = String(
 const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim();
 const SESSION_MAX_AGE_SECONDS = 15 * 60;
 const SESSION_MAX_AGE_MS = SESSION_MAX_AGE_SECONDS * 1000;
-const ADMIN_SESSION_REQUIRED_MESSAGE =
+export const ADMIN_SESSION_REQUIRED_MESSAGE =
   'La sesión admin expiró. Vuelve a autenticarte con Google.';
 const CATALOGOS_CACHE_TTL_MS = 120 * 1000;
 let cacheCatalogosData = null;
@@ -168,7 +163,7 @@ const clearAdminSession = (res) => {
   );
 };
 
-const requireAdminSession = (req, res) => {
+export const requireAdminSession = (req, res) => {
   const session = readAdminSession(req);
   if (session?.expired) {
     console.warn('[admin-session] expired in backend');
@@ -489,56 +484,7 @@ export default async function handler(req, res) {
       return sendOk(res, await createPrenda(payload));
     }
 
-    if (action === 'prendas-delete') {
-      if (!requireAdminSession(req, res)) {
-        console.warn('[admin-session] reauth required');
-        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
-      }
-      const result = await deletePrenda(req.body || {});
-      if (result?.status) return res.status(result.status).json(result.body);
-      return sendOk(res, result);
-    }
-
-    if (action === 'prendas-archive') {
-      if (!requireAdminSession(req, res)) {
-        console.warn('[admin-session] reauth required');
-        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
-      }
-      const result = await archivePrenda(req.body || {});
-      if (result?.status) return res.status(result.status).json(result.body);
-      return sendOk(res, result);
-    }
-
-    if (action === 'prendas-archived-list') return sendOk(res, await listArchivedPrendas());
-
-    if (action === 'prendas-restore') {
-      if (!requireAdminSession(req, res)) {
-        console.warn('[admin-session] reauth required');
-        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
-      }
-      const result = await restorePrenda(req.body || {});
-      if (result?.status) return res.status(result.status).json(result.body);
-      return sendOk(res, result);
-    }
-
-    if (action === 'prendas-import-corrections') {
-      if (!requireAdminSession(req, res)) {
-        console.warn('[admin-session] reauth required');
-        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
-      }
-      return sendOk(res, await importCorrections(req.body || {}));
-    }
-
     if (action === 'prendas') return await handlePrendas(req, res);
-
-    if (action === 'prendas-admin') {
-      if (!requireAdminSession(req, res)) {
-        console.warn('[admin-session] reauth required');
-        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
-      }
-      if (req.method === 'GET') return sendOk(res, await listArchivedPrendas());
-      return sendOk(res, await importCorrections(req.body || {}));
-    }
 
     if (action === 'admin-session') return await handleAdminSession(req, res);
 
