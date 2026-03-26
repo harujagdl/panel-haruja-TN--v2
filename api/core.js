@@ -169,7 +169,7 @@ const clearAdminSession = (res) => {
   );
 };
 
-export const requireAdminSession = (req, res) => {
+export const getValidatedAdminSession = (req, res) => {
   try {
     const session = readAdminSession(req);
     if (session?.expired) {
@@ -185,6 +185,15 @@ export const requireAdminSession = (req, res) => {
     if (isAdminSessionConfigError(error)) return null;
     throw error;
   }
+};
+
+export const requireAdminSession = (req, res, options = {}) => {
+  const session = getValidatedAdminSession(req, res);
+  if (session) return session;
+  if (options?.logDenied) {
+    console.warn(options.logDenied);
+  }
+  return null;
 };
 
 const verifyGoogleIdToken = async (credential) => {
@@ -290,8 +299,7 @@ async function proxyApartadoPdfWebApp(req, res) {
 async function handlePrendas(req, res) {
   const op = String(req.query?.op || req.body?.op || req.query?.mode || '').trim();
   const isSensitiveOp = ['create', 'delete', 'archive', 'restore', 'import-corrections'].includes(op);
-  if (isSensitiveOp && !requireAdminSession(req, res)) {
-    console.warn('[admin-session] reauth required');
+  if (isSensitiveOp && !requireAdminSession(req, res, { logDenied: '[admin-session] admin action denied due to missing validated session' })) {
     return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
   }
 
@@ -331,6 +339,9 @@ async function handleAdminSession(req, res) {
         console.warn('[admin-session] expired in backend');
         clearAdminSession(res);
       }
+      if (!session?.authenticated || !session?.isAdmin || isExpired) {
+        console.warn('[admin-session] admin UI requested without valid backend session');
+      }
       return res.status(200).json({
         ok: true,
         authenticated: Boolean(session?.authenticated) && !isExpired,
@@ -347,9 +358,11 @@ async function handleAdminSession(req, res) {
   }
 
   if (req.method === 'POST' && op === 'google-login') {
+    let verifiedEmail = '';
     try {
       const verified = await verifyGoogleIdToken(req.body?.credential);
       const email = normalizeEmail(verified?.email);
+      verifiedEmail = email;
       const emailVerified = verified?.email_verified === true;
       const aud = String(verified?.aud || '').trim();
       const isAdmin = isAllowedAdminEmail(email);
@@ -374,7 +387,12 @@ async function handleAdminSession(req, res) {
       });
     } catch (error) {
       clearAdminSession(res);
-      if (isAdminSessionConfigError(error)) return sendAdminUnavailable(res);
+      if (isAdminSessionConfigError(error)) {
+        if (isAllowedAdminEmail(verifiedEmail)) {
+          console.warn('[admin-session] allowlisted email but missing/invalid backend admin session');
+        }
+        return sendAdminUnavailable(res);
+      }
       return sendErr(res, 401, 'No se pudo validar la cuenta de Google.', error, 'GOOGLE_AUTH_FAILED');
     }
   }
@@ -494,6 +512,9 @@ export default async function handler(req, res) {
     if (action === 'prendas-list') return sendOk(res, await listPrendas());
     if (action === 'prendas-generar-codigo') return sendOk(res, await generarCodigoPrenda(req.body || {}));
     if (action === 'prendas-create') {
+      if (!requireAdminSession(req, res, { logDenied: '[admin-session] admin action denied due to missing validated session' })) {
+        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      }
       const payload = req.body || {};
       if (!payload?.codigo) {
         return sendErr(res, 400, 'Datos incompletos');
@@ -501,8 +522,7 @@ export default async function handler(req, res) {
       return sendOk(res, await createPrenda(payload));
     }
     if (action === 'prendas-update') {
-      if (!requireAdminSession(req, res)) {
-        console.warn('[admin-session] reauth required');
+      if (!requireAdminSession(req, res, { logDenied: '[admin-session] admin action denied due to missing validated session' })) {
         return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
       }
       const result = await updatePrenda(req.body || {});

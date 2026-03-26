@@ -3623,7 +3623,7 @@ Errores: 0</pre>
           try {
             const session = await googleAdminSignIn();
             setAdminSession(session || {});
-            prendasState.adminByAuth = Boolean(adminSession?.isAdmin);
+            prendasState.adminByAuth = isAdminUser(adminSession) && !isAdminSessionExpired(adminSession);
             prendasState.adminEmail = safeString(adminSession?.email).trim().toLowerCase();
             applyAdminUI({ refresh: true });
             syncMetaAccessUi();
@@ -7156,7 +7156,7 @@ const createPrendaRow = (item) => {
         const session = adminSession?.authenticated ? adminSession : await getAdminSession().catch(() => null);
         const email = safeString(session?.email).trim().toLowerCase();
         setAdminSession(session || {});
-        if (!isAllowlistedAdmin(email) || isAdminSessionExpired(adminSession)) {
+        if (!isAdminUser(adminSession) || isAdminSessionExpired(adminSession)) {
           expireAdminSessionFrontend({ reason: "ensure-admin-session" });
           throw new Error("La sesión admin expiró. Vuelve a autenticarte con Google.");
         }
@@ -8384,7 +8384,7 @@ const createPrendaRow = (item) => {
           const session = await googleAdminSignIn();
           setAdminSession(session || {});
           prendasState.adminEmail = safeString(adminSession?.email).trim().toLowerCase();
-          prendasState.adminByAuth = Boolean(adminSession?.isAdmin);
+          prendasState.adminByAuth = isAdminUser(adminSession) && !isAdminSessionExpired(adminSession);
           if (!prendasState.adminByAuth) {
             setAdminLoginStatus("Correo no autorizado para modo admin.", "error");
             return;
@@ -8597,7 +8597,7 @@ const createPrendaRow = (item) => {
           const session = await getAdminSession();
           setAdminSession(session || {});
           prendasState.adminEmail = adminSession.email || "";
-          prendasState.adminByAuth = Boolean(adminSession.isAdmin) && !isAdminSessionExpired(adminSession);
+          prendasState.adminByAuth = isAdminUser(adminSession) && !isAdminSessionExpired(adminSession);
           if (prendasState.adminByAuth) {
             hideAdminSessionExpiredModal();
           } else if (adminSession?.authenticated || adminSession?.expiresAt) {
@@ -8866,7 +8866,7 @@ const createPrendaRow = (item) => {
             const session = await googleAdminSignIn();
             setAdminSession(session || {});
             prendasState.adminEmail = safeString(adminSession?.email).trim().toLowerCase();
-            prendasState.adminByAuth = Boolean(adminSession?.isAdmin) && !isAdminSessionExpired(adminSession);
+            prendasState.adminByAuth = isAdminUser(adminSession) && !isAdminSessionExpired(adminSession);
             if (!prendasState.adminByAuth) {
               throw new Error("Tu cuenta Google no está autorizada para modo admin.");
             }
