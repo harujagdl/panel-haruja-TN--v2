@@ -5768,13 +5768,16 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
         printWindow.focus();
       };
 
-      const computeMarginUtility = (pVenta, costo) => {
-        const p = toNumberOrNull(pVenta) ?? 0;
-        const c = toNumberOrNull(costo) ?? 0;
-        const utilidad = Number((p - c).toFixed(2));
-        const margenPct = p > 0 ? Number(((utilidad / p) * 100).toFixed(1)) : 0;
-        return { utilidad, margenPct };
-      };
+      function calcularUtilidadYMargen(precio, costo) {
+        const p = Number(precio) || 0;
+        const c = Number(costo) || 0;
+        const utilidad = Math.max(0, p - c);
+        const margen = p > 0 ? (utilidad / p) * 100 : 0;
+        return {
+          utilidad: Number(utilidad.toFixed(2)),
+          margen: Number(margen.toFixed(1))
+        };
+      }
 
       const buildSearchKey = (data) => {
         const codigo = safeString(data.codigo || data.code || data.Codigo || data.Code);
@@ -6001,8 +6004,8 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
         const isDeleted = data.eliminado === true || data.deleted === true || data.isActive === false;
         const isActive = !isDeleted;
 
-        const { utilidad: utilidadCalculada, margenPct: margenCalculado } =
-          computeMarginUtility(precioConIvaFinal, costo);
+        const { utilidad: utilidadCalculada, margen: margenCalculado } =
+          calcularUtilidadYMargen(precioConIvaFinal, costo);
 
         let utilidad = Number(data.utilidad ?? data.Utilidad ?? 0);
         if ((!utilidad || utilidad === 0) && costo > 0 && precioConIvaFinal > 0) {
@@ -7036,19 +7039,23 @@ const createPrendaRow = (item) => {
 
       const updateEditPreview = () => {
         if (!editPVentaInput || !editCostoInput) return;
-        const pOverrideIngresado = toNumber(editPVentaInput.value);
-        const ajusteOverride = Number.isFinite(pOverrideIngresado)
-          ? ajustarDesdePrecioConIVA(pOverrideIngresado)
+        const precioIngresado = toNumber(editPVentaInput.value);
+        const precioBaseFila = toNumber(prendasState.editing?.rowDataSnapshot?.precio ?? prendasState.editing?.publicPVenta);
+        const precioFinal = Number.isFinite(precioIngresado) && precioIngresado > 0
+          ? precioIngresado
+          : (precioBaseFila ?? 0);
+        const ajusteFinal = Number.isFinite(precioFinal) && precioFinal > 0
+          ? ajustarDesdePrecioConIVA(precioFinal)
           : null;
-        const pPublic = toNumber(prendasState.editing?.publicPVenta);
-        const pFinal = ajusteOverride?.precioConIVA ?? pPublic ?? 0;
-        const c = toNumber(editCostoInput.value) ?? 0;
-        const { utilidad, margenPct } = computeMarginUtility(pFinal, c);
+        const costoIngresado = toNumber(editCostoInput.value);
+        const costoBaseFila = toNumber(prendasState.editing?.rowDataSnapshot?.costo);
+        const costoFinal = Number.isFinite(costoIngresado) ? costoIngresado : (costoBaseFila ?? 0);
+        const { utilidad, margen } = calcularUtilidadYMargen(precioFinal, costoFinal);
         if (editUtilidadPreview) editUtilidadPreview.textContent = moneyFmt(utilidad);
-        if (editMargenPreview) editMargenPreview.textContent = pctFmt(margenPct);
-        if (editPrecioFinalPreview) editPrecioFinalPreview.textContent = ajusteOverride ? moneyFmt(ajusteOverride.precioConIVA) : "--";
-        if (editBaseSinIvaPreview) editBaseSinIvaPreview.textContent = ajusteOverride ? moneyFmt(ajusteOverride.precioSinIVA) : "--";
-        if (editIvaPreview) editIvaPreview.textContent = ajusteOverride ? moneyFmt(ajusteOverride.iva) : "--";
+        if (editMargenPreview) editMargenPreview.textContent = pctFmt(margen);
+        if (editPrecioFinalPreview) editPrecioFinalPreview.textContent = ajusteFinal ? moneyFmt(ajusteFinal.precioConIVA) : "--";
+        if (editBaseSinIvaPreview) editBaseSinIvaPreview.textContent = ajusteFinal ? moneyFmt(ajusteFinal.precioSinIVA) : "--";
+        if (editIvaPreview) editIvaPreview.textContent = ajusteFinal ? moneyFmt(ajusteFinal.iva) : "--";
 
         if (editCodigoPreview) {
           editCodigoPreview.textContent = safeString(prendasState.editing?.codigo).trim() || "--";
@@ -7163,8 +7170,15 @@ const createPrendaRow = (item) => {
           if (!ensureAdminMode()) return;
           if (!prendasState.editing?.codigo) return;
           const preservedCode = safeString(prendasState.editing?.codigo).trim().toUpperCase();
-          const pVentaOverrideIngresado = toNumber(editPVentaInput?.value);
-          const costo = toNumber(editCostoInput?.value);
+          const precioIngresado = toNumber(editPVentaInput?.value);
+          const precioBaseFila = toNumber(prendasState.editing?.rowDataSnapshot?.precio ?? prendasState.editing?.publicPVenta);
+          const precioFinal = Number.isFinite(precioIngresado) && precioIngresado > 0
+            ? precioIngresado
+            : (precioBaseFila ?? 0);
+          const costoIngresado = toNumber(editCostoInput?.value);
+          const costoBaseFila = toNumber(prendasState.editing?.rowDataSnapshot?.costo);
+          const costoFinal = Number.isFinite(costoIngresado) ? costoIngresado : (costoBaseFila ?? 0);
+          const { utilidad, margen } = calcularUtilidadYMargen(precioFinal, costoFinal);
           console.log("[admin-edit] preserving existing code");
           console.log("[admin-edit] no structural recalculation");
           const pickedStatus = safeString(editStatusManual?.value || prendasState.editing?.rowDataSnapshot?.status || "Disponible").trim();
@@ -7173,10 +7187,10 @@ const createPrendaRow = (item) => {
             status: pickedStatus || "Disponible",
             disponibilidad: pickedDisp || "Disponible"
           };
-          if (Number.isFinite(pVentaOverrideIngresado) && pVentaOverrideIngresado < 0) {
+          if (Number.isFinite(precioIngresado) && precioIngresado < 0) {
             throw new Error("P.Venta debe ser mayor o igual a 0.");
           }
-          if (Number.isFinite(costo) && costo < 0) {
+          if (Number.isFinite(costoFinal) && costoFinal < 0) {
             throw new Error("Costo debe ser mayor o igual a 0.");
           }
           editModalSaveButton.disabled = true;
@@ -7184,11 +7198,13 @@ const createPrendaRow = (item) => {
           const payload = {
             codigo: preservedCode,
             descripcion: safeString(editDescripcionInput?.value).trim(),
-            precio: Number.isFinite(pVentaOverrideIngresado) ? pVentaOverrideIngresado : "",
-            costo: Number.isFinite(costo) ? costo : "",
+            precio: precioFinal,
+            costo: Number.isFinite(costoFinal) ? costoFinal : 0,
             status: finalAvailability.status,
             disponibilidad: finalAvailability.disponibilidad,
-            existencia: toNumber(editQtyAvailableInput?.value)
+            existencia: toNumber(editQtyAvailableInput?.value),
+            utilidad,
+            margen
           };
           await updatePrendaInSheets(payload);
           resetPrendasState();
