@@ -146,6 +146,16 @@ const parseCookies = (req) => {
 const googleOAuthClient = new OAuth2Client();
 
 const isAdminSessionConfigError = (error) => error instanceof AdminSessionConfigError;
+const isSheetsQuotaExceededError = (error) => {
+  const message = String(error?.message || error || '').toLowerCase();
+  const code = String(error?.code || '').toLowerCase();
+  const status = Number(error?.status || error?.response?.status || 0);
+  return status === 429
+    || code.includes('resource_exhausted')
+    || code.includes('quota')
+    || message.includes('quota exceeded')
+    || message.includes('resource_exhausted');
+};
 
 const sendAdminUnavailable = (res) =>
   sendErr(res, 503, ADMIN_TEMP_UNAVAILABLE_MESSAGE, null, 'ADMIN_TEMP_UNAVAILABLE');
@@ -628,6 +638,15 @@ export default async function handler(req, res) {
 
     return sendErr(res, 400, 'Acción inválida para /api/core.');
   } catch (error) {
+    if (isSheetsQuotaExceededError(error)) {
+      return sendErr(
+        res,
+        429,
+        'Demasiadas solicitudes. Intenta nuevamente en unos segundos.',
+        error,
+        'SHEETS_QUOTA_EXCEEDED',
+      );
+    }
     return sendErr(res, 400, error?.message || 'Error en /api/core.', error);
   }
 }
