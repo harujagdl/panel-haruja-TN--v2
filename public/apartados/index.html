@@ -475,7 +475,7 @@
         showMsg('', '');
         setBtnLoading(true);
 
-        const usarFolioExistente = $('usarFolioExistente').checked;
+        const esAbono = document.getElementById('usarFolioExistente').checked;
         const descuentoTipo = getDescuentoTipo();
         const descuentoValor = toNum($('descValor').value);
 
@@ -489,29 +489,45 @@
           descuentoValor,
           descuentoPct: (descuentoTipo === 'PCT') ? descuentoValor : 0,
           generarTicket: $('genTicket').checked,
-          usarFolioExistente,
+          usarFolioExistente: esAbono,
           folio: $('folio').value.trim()
         };
 
-        if (!usarFolioExistente && !payload.codigos){
+        if (!esAbono) {
+          // Validación para apartado nuevo
+          if (!payload.cliente || !payload.contacto || !payload.codigos) {
+            setBtnLoading(false);
+            showMsg('Completa los campos obligatorios para el apartado', 'err');
+            return;
+          }
+        } else {
+          // Validación para abono
+          if (!payload.folio) {
+            setBtnLoading(false);
+            showMsg('Selecciona un folio válido para abonar', 'err');
+            return;
+          }
+
+          if (!payload.anticipo || Number(payload.anticipo) <= 0) {
+            setBtnLoading(false);
+            showMsg('Ingresa un monto de abono válido', 'err');
+            return;
+          }
+        }
+
+        if (!esAbono && !payload.codigos){
           setBtnLoading(false);
           showMsg('Debes ingresar al menos un código de prenda para un apartado nuevo.', 'err');
           return;
         }
 
-        if (usarFolioExistente && (!payload.folio || payload.anticipo <= 0)){
-          setBtnLoading(false);
-          showMsg('Para abono ingresa el folio y un anticipo mayor a 0.', 'err');
-          return;
-        }
-
-        if (!usarFolioExistente && payload.descuentoValor < 0){
+        if (!esAbono && payload.descuentoValor < 0){
           setBtnLoading(false);
           showMsg('El descuento no puede ser negativo.', 'err');
           return;
         }
 
-        if (!usarFolioExistente && payload.descuentoTipo === 'PCT' && payload.descuentoValor > 100){
+        if (!esAbono && payload.descuentoTipo === 'PCT' && payload.descuentoValor > 100){
           setBtnLoading(false);
           showMsg('El descuento en % no puede ser mayor a 100.', 'err');
           return;
@@ -532,7 +548,7 @@
           pdfUrl: res.ticketUrl || res.pdfUrl || ''
         });
 
-        if (!usarFolioExistente) {
+        if (!esAbono) {
           $('folio').value = await fetchNextFolio();
         }
       } catch (err) {
