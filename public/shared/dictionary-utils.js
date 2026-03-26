@@ -60,3 +60,19 @@ export const generarDescripcionSimple = (tipo, color, talla, diccionario) => {
   const tallaNom = buscarDiccionarioFlexible(diccionario, "tallas", talla) || normalizeDictionaryValue(talla);
   return [producto, colorNom, tallaNom].filter(Boolean).join(" ").trim();
 };
+
+export const compactContiguousDuplicateFragment = (value) => {
+  const normalized = safeText(value).replace(/\s+/g, " ");
+  if (!normalized) return "";
+
+  const parts = normalized.split(/\s+-\s+/).map((part) => safeText(part));
+  if (parts.length >= 2) {
+    const base = parts[0].toLowerCase();
+    const detail = parts[1].toLowerCase();
+    if (base && detail && (base === detail || detail.startsWith(`${base} `))) {
+      return parts[0];
+    }
+  }
+
+  return normalized;
+};
