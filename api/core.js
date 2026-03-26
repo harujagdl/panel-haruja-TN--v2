@@ -482,11 +482,11 @@ export default async function handler(req, res) {
     if (action === 'prendas-list') return sendOk(res, await listPrendas());
     if (action === 'prendas-generar-codigo') return sendOk(res, await generarCodigoPrenda(req.body || {}));
     if (action === 'prendas-create') {
-      if (!requireAdminSession(req, res)) {
-        console.warn('[admin-session] reauth required');
-        return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+      const payload = req.body || {};
+      if (!payload?.codigo) {
+        return sendErr(res, 400, 'Datos incompletos');
       }
-      return sendOk(res, await createPrenda(req.body || {}));
+      return sendOk(res, await createPrenda(payload));
     }
 
     if (action === 'prendas-delete') {
