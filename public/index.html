@@ -3920,20 +3920,70 @@ Errores: 0</pre>
         return true;
       };
 
-      const syncDerivedBaseSelects = async ({ tipoValue, proveedorValue }) => {
-        await waitForSelectOptions(registroProducto);
-        await waitForSelectOptions(registroProveedor);
+      const parseExistingCodeParts = (codeValue) => {
+        const rawCode = safeString(codeValue).trim().toUpperCase();
+        if (!rawCode) {
+          return {
+            proveedor: "",
+            tipo: "",
+            consecutivo: "",
+            color: "",
+            talla: ""
+          };
+        }
+
+        const match = rawCode.match(/^HA([A-Z0-9]+)([A-Z0-9])(\d{3})(?:\/([A-Z0-9]+)-([A-Z0-9]+))?$/i);
+        if (!match) {
+          return {
+            proveedor: "",
+            tipo: "",
+            consecutivo: "",
+            color: "",
+            talla: ""
+          };
+        }
+
+        return {
+          proveedor: safeString(match[1]).trim().toUpperCase(),
+          tipo: safeString(match[2]).trim().toUpperCase(),
+          consecutivo: safeString(match[3]).trim().toUpperCase(),
+          color: safeString(match[4]).trim().toUpperCase(),
+          talla: safeString(match[5]).trim().toUpperCase()
+        };
+      };
+
+      const syncSelectsFromExistingCode = async ({ tipoValue, proveedorValue, colorValue, tallaValue }) => {
+        await Promise.all([
+          waitForSelectOptions(registroProducto),
+          waitForSelectOptions(registroProveedor),
+          waitForSelectOptions(registroColor),
+          waitForSelectOptions(registroTalla)
+        ]);
+
         const resolvedTipo = findOptionValueByText(registroProducto, tipoValue);
         const resolvedProveedor = findOptionValueByText(registroProveedor, proveedorValue);
+        const resolvedColor = findOptionValueByText(registroColor, colorValue);
+        const resolvedTalla = findOptionValueByText(registroTalla, tallaValue);
+
         const okTipo = setSelectValueSafely(registroProducto, resolvedTipo);
         const okProveedor = setSelectValueSafely(registroProveedor, resolvedProveedor);
-        console.log("[derivado] tipo:", tipoValue, "resolved:", resolvedTipo, "ok:", okTipo);
-        console.log("[derivado] proveedor:", proveedorValue, "resolved:", resolvedProveedor, "ok:", okProveedor);
+        const okColor = setSelectValueSafely(registroColor, resolvedColor);
+        const okTalla = setSelectValueSafely(registroTalla, resolvedTalla);
+
+        console.log("[autollenado] tipo:", tipoValue, "resolved:", resolvedTipo, "ok:", okTipo);
+        console.log("[autollenado] proveedor:", proveedorValue, "resolved:", resolvedProveedor, "ok:", okProveedor);
+        console.log("[autollenado] color:", colorValue, "resolved:", resolvedColor, "ok:", okColor);
+        console.log("[autollenado] talla:", tallaValue, "resolved:", resolvedTalla, "ok:", okTalla);
+
         return {
           okTipo,
           okProveedor,
+          okColor,
+          okTalla,
           resolvedTipo,
-          resolvedProveedor
+          resolvedProveedor,
+          resolvedColor,
+          resolvedTalla
         };
       };
 
@@ -7827,16 +7877,22 @@ const createPrendaRow = (item) => {
             setRegistroStatus("No se encontró el código en la fuente disponible.", "warning");
             return;
           }
-          const tipoBase = safeString(found?.data?.tipo).trim().toUpperCase();
-          const proveedorBase = safeString(found?.data?.proveedor).trim().toUpperCase();
-          if (!tipoBase || !proveedorBase) {
+          const parsedFromCode = parseExistingCodeParts(found.codigo || raw);
+          const tipoBase = parsedFromCode.tipo || safeString(found?.data?.tipo).trim().toUpperCase();
+          const proveedorBase = parsedFromCode.proveedor || safeString(found?.data?.proveedor).trim().toUpperCase();
+          const colorBase = parsedFromCode.color || safeString(found?.data?.color).trim().toUpperCase();
+          const tallaBase = parsedFromCode.talla || safeString(found?.data?.talla).trim().toUpperCase();
+
+          if (!tipoBase || !proveedorBase || !colorBase || !tallaBase) {
             setBaseMode({ enabled: false });
-            throw new Error("El código encontrado no tiene tipo/proveedor para bloquear el formulario.");
+            throw new Error("El código encontrado no contiene tipo/proveedor/color/talla válidos para autollenar.");
           }
 
-          const derivedResult = await syncDerivedBaseSelects({
+          const derivedResult = await syncSelectsFromExistingCode({
             tipoValue: tipoBase,
-            proveedorValue: proveedorBase
+            proveedorValue: proveedorBase,
+            colorValue: colorBase,
+            tallaValue: tallaBase
           });
 
           setBaseMode({
@@ -7857,13 +7913,14 @@ const createPrendaRow = (item) => {
           if (registroBaseCodeInput) registroBaseCodeInput.value = registroState.codigoBaseReutilizado;
           console.log("[buscarCodigoExistente] codigoBaseInterno:", registroState.codigoBaseInterno);
           console.log("[buscarCodigoExistente] isReuseMode:", registroState.isReuseMode);
+          console.log("[buscarCodigoExistente] parse:", parsedFromCode);
 
-          if (!derivedResult.okTipo || !derivedResult.okProveedor) {
-            mostrarWarningRegistro("Se encontró el código base, pero revisa Tipo/Proveedor antes de guardar.");
+          if (!derivedResult.okTipo || !derivedResult.okProveedor || !derivedResult.okColor || !derivedResult.okTalla) {
+            mostrarWarningRegistro("Se encontró el código base, pero revisa Tipo/Proveedor/Color/Talla antes de guardar.");
             return;
           }
 
-          setRegistroStatus(`Código encontrado en ${found.collectionName}. Base reutilizable: ${found.baseCode}`, "success");
+          setRegistroStatus(`Código encontrado en ${found.collectionName}. Campos autollenados y base reutilizable: ${found.baseCode}`, "success");
         } catch (error) {
           console.error(error);
           setRegistroStatus("No se pudo consultar el código. Revisa permisos o sesión.", "error");
