@@ -1,6 +1,7 @@
 import { fetchTiendanubeOrderById, processTiendanubeWebhook, resolveTiendanubeConnection } from '../../lib/api/core.js';
 import { verifyTiendanubeWebhook } from '../../lib/tiendanube/verifyWebhook.js';
 import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
+import { registerWebhookEventAttempt, trackWebhookEventResult } from '../../lib/ventas/dedupeWebhookEvent.js';
 import {
   acquireVentasSyncLock,
   releaseVentasSyncLock,
@@ -43,6 +44,36 @@ function extractOrderName(payload = {}, fallbackOrderId = '') {
   return fallbackOrderId ? `#${fallbackOrderId}` : '';
 }
 
+function getEventId(payload = {}, req = {}) {
+  return String(
+    req.headers?.['x-tiendanube-event-id']
+    || req.headers?.['x-linkedstore-event-id']
+    || payload?.event_id
+    || payload?.idempotency_key
+    || '',
+  ).trim();
+}
+
+function getEventTimestamp(payload = {}, req = {}) {
+  return String(
+    req.headers?.['x-tiendanube-event-created-at']
+    || req.headers?.['x-linkedstore-event-created-at']
+    || payload?.created_at
+    || payload?.sent_at
+    || '',
+  ).trim();
+}
+
+async function logWebhookTrace(meta = {}) {
+  const { eventKey, orderId, result, reason } = meta;
+  console.log('[ventas-webhook] trace event_key=%s order_id=%s result=%s reason=%s', eventKey || '-', orderId || '-', result || '-', reason || '-');
+  try {
+    await trackWebhookEventResult(meta);
+  } catch (error) {
+    console.warn('[ventas-webhook] trace_write_failed', String(error?.message || error));
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, message: 'Method not allowed.' });
@@ -52,11 +83,17 @@ export default async function handler(req, res) {
   const signature = String(req.headers?.['x-linkedstore-hmac-sha256'] || '').trim();
   const receivedAt = new Date().toISOString();
   let lockAcquired = false;
+  let traceMeta = null;
   console.log('[ventas-webhook] received');
 
   try {
     const rawBody = await readRawBody(req);
     if (!verifyTiendanubeWebhook(rawBody, signature, secret)) {
+      await logWebhookTrace({
+        rawBody,
+        result: 'invalid_signature',
+        reason: 'signature_validation_failed',
+      });
       return res.status(401).json({ ok: false, message: 'Firma inválida.' });
     }
 
@@ -71,6 +108,35 @@ export default async function handler(req, res) {
 
     const event = String(req.headers?.['x-tiendanube-event'] || req.headers?.['x-linkedstore-topic'] || payload?.event || payload?.topic || '').trim().toLowerCase();
     const orderId = String(payload?.id || payload?.order_id || payload?.resource_id || payload?.order?.id || '').trim();
+    const eventId = getEventId(payload, req);
+    const eventTimestamp = getEventTimestamp(payload, req);
+    const dedupe = await registerWebhookEventAttempt({
+      source: 'tiendanube',
+      event,
+      orderId,
+      storeId: resolvedStoreId || storeId,
+      eventId,
+      rawBody,
+      eventTimestamp,
+    });
+    traceMeta = {
+      eventKey: dedupe.eventKey,
+      eventId,
+      event,
+      orderId,
+      storeId: resolvedStoreId || storeId,
+      rawBody,
+      eventTimestamp,
+    };
+
+    if (dedupe.duplicated) {
+      await logWebhookTrace({
+        ...traceMeta,
+        result: 'duplicate_ignored',
+        reason: 'duplicate_event_key_recent',
+      });
+      return res.status(200).json({ ok: true, result: 'duplicate_ignored' });
+    }
 
     await writeVentasSyncState({
       mode: 'automatico',
@@ -84,23 +150,43 @@ export default async function handler(req, res) {
         last_sync_result: 'ok',
         last_sync_message: 'webhook sin order_id',
       });
-      return res.status(200).json({ ok: true, ignored: 'missing_order_id' });
+      await logWebhookTrace({
+        ...traceMeta,
+        result: 'no_relevant_change',
+        reason: 'missing_order_id',
+      });
+      return res.status(200).json({ ok: true, result: 'no_relevant_change' });
     }
 
     const lock = await acquireVentasSyncLock();
     if (!lock.acquired) {
+      await logWebhookTrace({
+        ...traceMeta,
+        result: 'duplicate_ignored',
+        reason: 'sync_running_lock_active',
+      });
       return res.status(200).json({ ok: true, skipped: true, reason: 'sync_running' });
     }
     lockAcquired = true;
 
     const enrichedPayload = { ...payload };
     if (!enrichedPayload.order && resolvedStoreId && connection?.accessToken) {
-      enrichedPayload.order = await fetchTiendanubeOrderById(resolvedStoreId, connection.accessToken, orderId);
+      try {
+        enrichedPayload.order = await fetchTiendanubeOrderById(resolvedStoreId, connection.accessToken, orderId);
+      } catch (error) {
+        await logWebhookTrace({
+          ...traceMeta,
+          result: 'fetch_failed',
+          reason: String(error?.message || error),
+        });
+        throw new Error(`fetch_failed:${String(error?.message || error)}`);
+      }
     }
 
     const result = await processTiendanubeWebhook(enrichedPayload, req);
     const orderName = extractOrderName(enrichedPayload, orderId);
     const processedAt = new Date().toISOString();
+    const webhookResult = result?.action === 'no_relevant_change' ? 'no_relevant_change' : 'processed';
 
     await writeVentasSyncState({
       last_order_processed_at: processedAt,
@@ -108,23 +194,35 @@ export default async function handler(req, res) {
       last_order_name: orderName,
       last_sync_at: processedAt,
       last_sync_result: 'ok',
-      last_sync_message: 'webhook procesado',
+      last_sync_message: webhookResult === 'processed' ? 'webhook procesado' : 'webhook sin cambios relevantes',
       last_created_at_max: processedAt,
       last_updated_at_max: processedAt,
     });
-    invalidateVentasFullCache(result.month_key);
-    console.log(`[ventas-webhook] processed_order_${orderId}`);
+    if (webhookResult === 'processed') invalidateVentasFullCache(result.month_key);
+    await logWebhookTrace({
+      ...traceMeta,
+      result: webhookResult,
+      reason: result?.action || 'upsert_ok',
+    });
+    console.log(`[ventas-webhook] processed_order_${orderId} result=${webhookResult}`);
     await releaseVentasSyncLock();
     lockAcquired = false;
 
-    return res.status(200).json({ ok: true, ...result });
+    return res.status(200).json({ ok: true, result: webhookResult, ...result });
   } catch (error) {
+    const message = String(error?.message || error);
+    const isFetchFailed = message.startsWith('fetch_failed:');
     await writeVentasSyncState({
       last_sync_at: new Date().toISOString(),
       last_sync_result: 'error',
-      last_sync_message: String(error?.message || error),
+      last_sync_message: message,
+    });
+    await logWebhookTrace({
+      ...(traceMeta || {}),
+      result: isFetchFailed ? 'fetch_failed' : 'error',
+      reason: message,
     });
     if (lockAcquired) await releaseVentasSyncLock();
-    return res.status(500).json({ ok: false, message: String(error?.message || error) });
+    return res.status(500).json({ ok: false, result: isFetchFailed ? 'fetch_failed' : 'error', message });
   }
 }
