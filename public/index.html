@@ -4424,6 +4424,8 @@ Errores: 0</pre>
       const PRENDAS_SORT_KEY_STORAGE = "prendas_sort_key";
       const PRENDAS_SORT_DIR_STORAGE = "prendas_sort_dir";
       const ADMIN_VIEW_KEY = "haruja_admin_view";
+      const ADMIN_VIEW_ACTIVATED_AT_KEY = "haruja_admin_view_activated_at";
+      const ADMIN_VIEW_TIMEOUT_MS = 15 * 60 * 1000;
       const DICTS_CACHE_KEY = "haruja_dicts_cache_v2";
       let catalogosCache = null;
       let catalogosCachePromise = null;
@@ -8395,11 +8397,26 @@ const createPrendaRow = (item) => {
 
       const getAdminViewEnabled = () =>
         safeStorageGet(window.sessionStorage, ADMIN_VIEW_KEY, "0") === "1";
+      const getAdminViewActivatedAt = () =>
+        Number(safeStorageGet(window.sessionStorage, ADMIN_VIEW_ACTIVATED_AT_KEY, "0") || 0);
+      const isAdminViewTimedOut = () => {
+        const activatedAt = getAdminViewActivatedAt();
+        if (!Number.isFinite(activatedAt) || activatedAt <= 0) return true;
+        return (Date.now() - activatedAt) >= ADMIN_VIEW_TIMEOUT_MS;
+      };
+      const touchAdminViewActivation = () =>
+        safeStorageSet(window.sessionStorage, ADMIN_VIEW_ACTIVATED_AT_KEY, String(Date.now()));
 
       const isAdminAuthenticated = () => prendasState.adminByAuth === true;
       const isAdminViewEnabled = () => getAdminViewEnabled() === true && isAdminAuthenticated();
 
       const ensureAdminMode = () => {
+        if (isAdminMode && isAdminViewTimedOut()) {
+          expireAdminSessionFrontend({
+            reason: "frontend-admin-view-timeout",
+            message: "El modo admin local expiró tras 15 minutos. Vuelve a autenticarte.",
+          });
+        }
         if (isAdminMode) return true;
         alert("Activa Modo admin para esta acción.");
         return false;
@@ -8410,6 +8427,8 @@ const createPrendaRow = (item) => {
         const adminByAuth = Boolean(prendasState.adminByAuth);
         const finalEnabled = adminByAuth ? Boolean(enabled) : false;
         safeStorageSet(window.sessionStorage, ADMIN_VIEW_KEY, finalEnabled ? "1" : "0");
+        if (finalEnabled) touchAdminViewActivation();
+        else safeStorageRemove(window.sessionStorage, ADMIN_VIEW_ACTIVATED_AT_KEY);
         document.body.classList.toggle("is-admin", finalEnabled);
       };
       const setAdminMode = (nextEnabled, { refresh = true } = {}) => {
@@ -8442,7 +8461,14 @@ const createPrendaRow = (item) => {
 
       const applyAdminUI = ({ refresh = true } = {}) => {
         const byAuth = Boolean(prendasState.adminByAuth);
-        const enabled = byAuth && getAdminViewEnabled();
+        const enabled = byAuth && getAdminViewEnabled() && !isAdminViewTimedOut();
+        if (byAuth && getAdminViewEnabled() && !enabled) {
+          expireAdminSessionFrontend({
+            reason: "frontend-admin-view-expired-at-load",
+            message: "El modo admin local expiró tras 15 minutos. Vuelve a autenticarte.",
+          });
+          return;
+        }
         isAdminMode = enabled;
         prendasState.isAdmin = enabled;
         document.body.classList.toggle("is-admin", enabled);

@@ -36,12 +36,11 @@ import { runApartadoPdfDriveWriteTest } from '../lib/apartados/pdf-sync.js';
 import { AdminSessionConfigError, getAdminSessionSecret } from '../lib/security/adminSessionConfig.js';
 
 export const sendOk = (res, data) => res.status(200).json({ ok: true, data });
-export const sendErr = (res, status, message, error, code) =>
+export const sendErr = (res, status, message, _error, code) =>
   res.status(status).json({
     ok: false,
     ...(code ? { code } : {}),
     message,
-    ...(error ? { error: String(error?.message || error) } : {}),
   });
 
 const HARUJA_ADMIN_COOKIE = 'HARUJA_ADMIN_SESSION';
@@ -68,10 +67,57 @@ const PUBLIC_ACTIONS = new Set([
   'prendas-list',
   'prendas-generar-codigo',
   'prendas-create',
+  'apartados',
+  'admin-session',
 ]);
 const ADMIN_ACTIONS = new Set([
   'prendas-update',
+  'prendas',
+  'ventas-resumen',
+  'resumen',
+  'ventas-detalle',
+  'detalle',
+  'ventas-webhook-status',
+  'ventas-comisiones',
+  'meta-vs-venta',
+  'ventas-config',
+  'ventas-config-save',
+  'ventas-sin-asignar',
+  'assign-seller',
+  'venta-asignar-vendedora',
+  'ventas-rebuild',
+  'tiendanube-webhooks-register',
 ]);
+const APARTADOS_PUBLIC_OPS = new Set(['list', 'next', 'search', 'detail', 'historial', 'create', 'abono']);
+const APARTADOS_ADMIN_OPS = new Set(['update-status', 'missing-pdf', 'pdf-webapp-proxy', 'pdf-refresh', 'pdf-drive-test', 'cancel']);
+const ADMIN_ALLOWED_METHODS_BY_ACTION = new Map([
+  ['prendas-update', new Set(['POST'])],
+  ['prendas', new Set(['GET', 'POST'])],
+  ['ventas-resumen', new Set(['GET'])],
+  ['resumen', new Set(['GET'])],
+  ['ventas-detalle', new Set(['GET'])],
+  ['detalle', new Set(['GET'])],
+  ['ventas-webhook-status', new Set(['GET'])],
+  ['ventas-comisiones', new Set(['GET', 'POST'])],
+  ['meta-vs-venta', new Set(['GET', 'POST'])],
+  ['ventas-config', new Set(['GET'])],
+  ['ventas-config-save', new Set(['POST'])],
+  ['ventas-sin-asignar', new Set(['GET'])],
+  ['assign-seller', new Set(['POST'])],
+  ['venta-asignar-vendedora', new Set(['POST'])],
+  ['ventas-rebuild', new Set(['POST'])],
+  ['tiendanube-webhooks-register', new Set(['POST'])],
+]);
+const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
+  ['catalogos', new Set(['GET'])],
+  ['diccionario', new Set(['GET'])],
+  ['prendas-list', new Set(['GET'])],
+  ['prendas-generar-codigo', new Set(['POST'])],
+  ['prendas-create', new Set(['POST'])],
+  ['admin-session', new Set(['GET', 'POST'])],
+  ['apartados', new Set(['GET', 'POST'])],
+]);
+const PUBLIC_PRENDA_FIELDS = ['Código', 'Descripción', 'Tipo', 'Color', 'Talla', 'Status', 'Disponibilidad', 'Existencia', 'Existencias', 'Precio'];
 const PUBLIC_CREATE_ALLOWED_FIELDS = new Set([
   'codigo',
   'descripcion',
@@ -99,6 +145,25 @@ const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const isAllowedAdminEmail = (email) => ADMIN_ALLOWLIST_SET.has(normalizeEmail(email));
 const isPublicAction = (action) => PUBLIC_ACTIONS.has(String(action || '').trim());
 const isAdminAction = (action) => ADMIN_ACTIONS.has(String(action || '').trim());
+const toAction = (value) => String(value || '').trim();
+const toOp = (value) => String(value || '').trim();
+const sendMethodNotAllowed = (res, allowedMethods = []) =>
+  res.status(405).json({
+    ok: false,
+    code: 'METHOD_NOT_ALLOWED',
+    message: `Método no permitido. Usa: ${allowedMethods.join(', ') || 'N/A'}.`,
+  });
+
+const sanitizePrendaPublicRow = (row = {}) => {
+  const result = {};
+  PUBLIC_PRENDA_FIELDS.forEach((field) => {
+    if (!Object.prototype.hasOwnProperty.call(row, field)) return;
+    result[field] = row[field];
+  });
+  return result;
+};
+
+const sanitizePrendasPublicRows = (rows = []) => (Array.isArray(rows) ? rows.map(sanitizePrendaPublicRow) : []);
 
 const sanitizePublicCreatePayload = (payload = {}) => {
   const safePayload = {};
@@ -364,12 +429,10 @@ async function proxyApartadoPdfWebApp(req, res) {
     } catch (parseError) {
       console.error('pdf_proxy:apps_script_invalid_json', {
         message: parseError?.message,
-        raw: text?.slice?.(0, 400),
       });
       return res.status(502).json({
         ok: false,
         message: 'Respuesta no válida del Apps Script.',
-        raw: String(text || '').slice(0, 400),
       });
     }
 
@@ -380,9 +443,7 @@ async function proxyApartadoPdfWebApp(req, res) {
       });
       return res.status(502).json({
         ok: false,
-        message: data?.message || data?.details || data?.error || 'No se pudo procesar el PDF con Apps Script.',
-        ...(data?.fileId ? { fileId: data.fileId } : {}),
-        ...(data?.pdfUrl ? { pdfUrl: data.pdfUrl } : {}),
+        message: 'No se pudo procesar el PDF oficial.',
       });
     }
 
@@ -395,25 +456,28 @@ async function proxyApartadoPdfWebApp(req, res) {
   } catch (error) {
     console.error('pdf_proxy:error', {
       message: error?.message,
-      stack: error?.stack,
     });
     return res.status(500).json({
       ok: false,
-      message: error?.message || 'Error inesperado en proxy de PDF.',
+      message: 'Error inesperado en proxy de PDF.',
     });
   }
 }
 
 async function handlePrendas(req, res) {
-  const op = String(req.query?.op || req.body?.op || req.query?.mode || '').trim();
-  const isSensitiveOp = ['create', 'delete', 'archive', 'restore', 'import-corrections'].includes(op);
-  if (isSensitiveOp && !requireAdminSession(req, res, {
-    logDenied: '[admin-session] admin action denied due to missing validated session',
+  const op = toOp(req.query?.op || req.body?.op || req.query?.mode || '');
+  if (!['GET', 'POST'].includes(req.method)) return sendMethodNotAllowed(res, ['GET', 'POST']);
+
+  if (!requireAdminSession(req, res, {
+    logDenied: `[admin-session] prendas op denied: ${op || 'list'}`,
     touchActivity: true,
-    reason: `prendas-${op || 'unknown-op'}`,
+    reason: `prendas-${op || 'list'}`,
   })) {
     return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
   }
+
+  const isSensitiveOp = ['create', 'delete', 'archive', 'restore', 'import-corrections'].includes(op);
+  if (isSensitiveOp) console.log(`[security] prendas sensitive op by admin: ${op}`);
 
   if (req.method === 'GET' && (!op || op === 'list')) return sendOk(res, await listPrendas());
   if (req.method === 'GET' && op === 'archived') return sendOk(res, await listArchivedPrendas());
@@ -517,9 +581,21 @@ async function handleAdminSession(req, res) {
 }
 
 async function handleApartados(req, res) {
-  const op = String(req.query?.op || req.body?.op || '').trim();
+  const op = toOp(req.query?.op || req.body?.op || '');
   const folio = String(req.query?.folio || req.body?.folio || '').trim();
-  const action = String(req.query?.action || '').trim();
+  if (!['GET', 'POST'].includes(req.method)) return sendMethodNotAllowed(res, ['GET', 'POST']);
+
+  const isAdminOp = APARTADOS_ADMIN_OPS.has(op);
+  if (isAdminOp && !requireAdminSession(req, res, {
+    logDenied: `[admin-session] apartados op denied: ${op}`,
+    touchActivity: true,
+    reason: `apartados-${op}`,
+  })) {
+    return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
+  }
+  if (op && !APARTADOS_PUBLIC_OPS.has(op) && !APARTADOS_ADMIN_OPS.has(op)) {
+    return sendErr(res, 400, 'Operación inválida para action=apartados.');
+  }
 
   if (req.method === 'GET' && (!op || op === 'list')) return sendOk(res, await listApartados(req.query || {}));
   if (req.method === 'GET' && op === 'next') return sendOk(res, await getNextFolio(req.query?.fecha || req.body?.fecha || ''));
@@ -560,10 +636,10 @@ async function handleApartados(req, res) {
   }
 
   // 🔥 FORZAR SIEMPRE Apps Script (sin service account)
-if (req.method === 'POST' && op === 'pdf-refresh') {
-  console.log('pdf_refresh_redirect_to_webapp');
-  return proxyApartadoPdfWebApp(req, res);
-}
+  if (req.method === 'POST' && op === 'pdf-refresh') {
+    console.log('pdf_refresh_redirect_to_webapp');
+    return proxyApartadoPdfWebApp(req, res);
+  }
 
   if (req.method === 'POST' && op === 'pdf-drive-test') {
     const result = await runApartadoPdfDriveWriteTest();
@@ -606,10 +682,15 @@ async function getCatalogosCached({ force = false } = {}) {
 }
 
 export default async function handler(req, res) {
-  const action = String(req.query?.action || '').trim();
+  const action = toAction(req.query?.action || '');
   if (!action) return sendErr(res, 400, 'action es obligatorio.');
 
   try {
+    const allowedMethods = ADMIN_ALLOWED_METHODS_BY_ACTION.get(action) || PUBLIC_ALLOWED_METHODS_BY_ACTION.get(action);
+    if (allowedMethods && !allowedMethods.has(req.method)) {
+      return sendMethodNotAllowed(res, [...allowedMethods]);
+    }
+
     if (isAdminAction(action) && !requireAdminSession(req, res, {
       logDenied: '[admin-session] admin action denied without valid session',
       touchActivity: true,
@@ -631,7 +712,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, ...data });
     }
 
-    if (action === 'prendas-list') return sendOk(res, await listPrendas());
+    if (action === 'prendas-list') return sendOk(res, sanitizePrendasPublicRows(await listPrendas()));
     if (action === 'prendas-generar-codigo') return sendOk(res, await generarCodigoPrenda(req.body || {}));
     if (action === 'prendas-create') {
       const { payload, blockedKeys } = sanitizePublicCreatePayload(req.body || {});
@@ -677,15 +758,21 @@ export default async function handler(req, res) {
 
     return sendErr(res, 400, 'Acción inválida para /api/core.');
   } catch (error) {
+    console.error('[api/core] action failed', {
+      action,
+      method: req?.method,
+      message: error?.message,
+      code: error?.code,
+    });
     if (isSheetsQuotaExceededError(error)) {
       return sendErr(
         res,
         429,
         'Demasiadas solicitudes. Intenta nuevamente en unos segundos.',
-        error,
+        null,
         'SHEETS_QUOTA_EXCEEDED',
       );
     }
-    return sendErr(res, 400, error?.message || 'Error en /api/core.', error);
+    return sendErr(res, 400, 'No se pudo completar la operación solicitada.');
   }
 }
