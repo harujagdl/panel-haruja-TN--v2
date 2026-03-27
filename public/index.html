@@ -4506,6 +4506,8 @@ Errores: 0</pre>
 
       const applyAdminSessionHeaders = (response) => {
         if (!response?.headers || !adminSession?.authenticated || !adminSession?.isAdmin) return;
+        const refreshedHeader = safeString(response.headers.get("x-haruja-admin-session-refreshed")).trim();
+        if (refreshedHeader !== "1") return;
         const expiresAtHeader = Number(response.headers.get("x-haruja-admin-session-expires-at") || 0);
         if (!Number.isFinite(expiresAtHeader) || expiresAtHeader <= 0) return;
         adminSession.expiresAt = expiresAtHeader;

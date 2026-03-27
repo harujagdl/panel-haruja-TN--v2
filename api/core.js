@@ -248,6 +248,7 @@ const clearAdminSession = (res) => {
 
 const setAdminSessionResponseHeaders = (res, { session, refreshed = false } = {}) => {
   if (!res?.setHeader || !session?.authenticated || !session?.isAdmin) return;
+  if (!refreshed) return;
   res.setHeader('X-Haruja-Admin-Session-Expires-At', String(Number(session?.expiresAt || 0) || ''));
   res.setHeader('X-Haruja-Admin-Session-Refreshed', refreshed ? '1' : '0');
 };
@@ -256,7 +257,7 @@ const maybeRefreshAdminSession = (req, res, { reason = 'admin-activity', force =
   try {
     const session = readAdminSession(req);
     if (session?.expired) {
-      console.warn('[admin-session] admin session expired');
+      console.warn('[admin-session] admin session expired due to inactivity');
       if (res) clearAdminSession(res);
       return null;
     }
@@ -265,12 +266,11 @@ const maybeRefreshAdminSession = (req, res, { reason = 'admin-activity', force =
     }
     const remainingMs = Math.max(0, Number(session?.expiresAt || 0) - Date.now());
     if (!allowRefresh) {
-      setAdminSessionResponseHeaders(res, { session, refreshed: false });
+      console.log('[admin-session] admin session refresh skipped for passive check');
       return session;
     }
     if (!force && remainingMs > ADMIN_SESSION_REFRESH_WINDOW_MS) {
       console.log(`[admin-session] admin session refresh skipped reason=${reason} remainingMs=${remainingMs}`);
-      setAdminSessionResponseHeaders(res, { session, refreshed: false });
       return session;
     }
     createAdminSession(res, { email: session?.email, sub: session?.sub });
@@ -279,7 +279,7 @@ const maybeRefreshAdminSession = (req, res, { reason = 'admin-activity', force =
       issuedAt: Date.now(),
       expiresAt: Date.now() + SESSION_MAX_AGE_MS,
     };
-    console.log(`[admin-session] admin session refreshed reason=${reason} expiresAt=${refreshedSession.expiresAt}`);
+    console.log(`[admin-session] admin session refreshed by real admin activity reason=${reason} expiresAt=${refreshedSession.expiresAt}`);
     setAdminSessionResponseHeaders(res, { session: refreshedSession, refreshed: true });
     return refreshedSession;
   } catch (error) {
