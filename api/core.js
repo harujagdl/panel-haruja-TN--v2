@@ -54,6 +54,7 @@ const ADMIN_ALLOWLIST_SET = new Set(ADMIN_ALLOWLIST);
 const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim();
 const SESSION_MAX_AGE_SECONDS = 15 * 60;
 const SESSION_MAX_AGE_MS = SESSION_MAX_AGE_SECONDS * 1000;
+const ADMIN_SESSION_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 export const ADMIN_SESSION_REQUIRED_MESSAGE =
   'La sesión admin expiró. Vuelve a autenticarte con Google.';
 const ADMIN_TEMP_UNAVAILABLE_MESSAGE = 'Admin temporalmente no disponible.';
@@ -245,26 +246,52 @@ const clearAdminSession = (res) => {
   );
 };
 
-export const getValidatedAdminSession = (req, res) => {
+const setAdminSessionResponseHeaders = (res, { session, refreshed = false } = {}) => {
+  if (!res?.setHeader || !session?.authenticated || !session?.isAdmin) return;
+  res.setHeader('X-Haruja-Admin-Session-Expires-At', String(Number(session?.expiresAt || 0) || ''));
+  res.setHeader('X-Haruja-Admin-Session-Refreshed', refreshed ? '1' : '0');
+};
+
+const maybeRefreshAdminSession = (req, res, { reason = 'admin-activity', force = false } = {}) => {
   try {
     const session = readAdminSession(req);
     if (session?.expired) {
-      console.warn('[admin-session] expired in backend');
+      console.warn('[admin-session] admin session expired');
       if (res) clearAdminSession(res);
       return null;
     }
     if (!session?.authenticated || !session?.isAdmin) {
       return null;
     }
-    return session;
+    const remainingMs = Math.max(0, Number(session?.expiresAt || 0) - Date.now());
+    if (!force && remainingMs > ADMIN_SESSION_REFRESH_WINDOW_MS) {
+      console.log(`[admin-session] admin session refresh skipped reason=${reason} remainingMs=${remainingMs}`);
+      setAdminSessionResponseHeaders(res, { session, refreshed: false });
+      return session;
+    }
+    createAdminSession(res, { email: session?.email, sub: session?.sub });
+    const refreshedSession = {
+      ...session,
+      issuedAt: Date.now(),
+      expiresAt: Date.now() + SESSION_MAX_AGE_MS,
+    };
+    console.log(`[admin-session] admin session refreshed reason=${reason} expiresAt=${refreshedSession.expiresAt}`);
+    setAdminSessionResponseHeaders(res, { session: refreshedSession, refreshed: true });
+    return refreshedSession;
   } catch (error) {
     if (isAdminSessionConfigError(error)) return null;
     throw error;
   }
 };
 
+export const getValidatedAdminSession = (req, res, options = {}) =>
+  maybeRefreshAdminSession(req, res, {
+    reason: options?.reason || 'admin-validation',
+    force: options?.touchActivity === true,
+  });
+
 export const requireAdminSession = (req, res, options = {}) => {
-  const session = getValidatedAdminSession(req, res);
+  const session = getValidatedAdminSession(req, res, options);
   if (session) return session;
   if (options?.logDenied) {
     console.warn(options.logDenied);
@@ -375,7 +402,11 @@ async function proxyApartadoPdfWebApp(req, res) {
 async function handlePrendas(req, res) {
   const op = String(req.query?.op || req.body?.op || req.query?.mode || '').trim();
   const isSensitiveOp = ['create', 'delete', 'archive', 'restore', 'import-corrections'].includes(op);
-  if (isSensitiveOp && !requireAdminSession(req, res, { logDenied: '[admin-session] admin action denied due to missing validated session' })) {
+  if (isSensitiveOp && !requireAdminSession(req, res, {
+    logDenied: '[admin-session] admin action denied due to missing validated session',
+    touchActivity: true,
+    reason: `prendas-${op || 'unknown-op'}`,
+  })) {
     return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
   }
 
@@ -408,13 +439,12 @@ async function handleAdminSession(req, res) {
   const op = String(req.query?.op || req.body?.op || '').trim();
   if (req.method === 'GET' && op === 'status') {
     try {
-      const session = readAdminSession(req);
+      const session = getValidatedAdminSession(req, res, {
+        touchActivity: true,
+        reason: 'admin-status-check',
+      });
       const now = Date.now();
-      const isExpired = Boolean(session?.expired) || (Number(session?.expiresAt || 0) > 0 && now >= Number(session?.expiresAt));
-      if (isExpired) {
-        console.warn('[admin-session] expired in backend');
-        clearAdminSession(res);
-      }
+      const isExpired = !session?.authenticated || !session?.isAdmin;
       if (!session?.authenticated || !session?.isAdmin || isExpired) {
         console.warn('[admin-session] admin UI requested without valid backend session');
       }
@@ -575,7 +605,11 @@ export default async function handler(req, res) {
   if (!action) return sendErr(res, 400, 'action es obligatorio.');
 
   try {
-    if (isAdminAction(action) && !requireAdminSession(req, res, { logDenied: '[admin-session] admin action denied without valid session' })) {
+    if (isAdminAction(action) && !requireAdminSession(req, res, {
+      logDenied: '[admin-session] admin action denied without valid session',
+      touchActivity: true,
+      reason: `core-${action}`,
+    })) {
       return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
     }
     if (isPublicAction(action)) {

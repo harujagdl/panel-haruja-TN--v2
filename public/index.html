@@ -2830,6 +2830,7 @@ Errores: 0</pre>
           handleAdminSessionApiError(error);
           throw error;
         }
+        applyAdminSessionHeaders(response);
         return data?.data;
       };
       const isQuotaExceededError = (error) => {
@@ -2854,6 +2855,7 @@ Errores: 0</pre>
           handleAdminSessionApiError(error);
           throw error;
         }
+        applyAdminSessionHeaders(response);
         return data?.data;
       };
       const createPrendaInSheets = async (payload = {}) => callPrendasSheetsApi({
@@ -4489,6 +4491,7 @@ Errores: 0</pre>
       const EMPTY_ADMIN_SESSION = { authenticated: false, email: null, isAdmin: false, expiresAt: null, now: null };
       let adminSession = { ...EMPTY_ADMIN_SESSION };
       let adminSessionWatchdogId = null;
+      let adminSessionHeartbeatAt = 0;
 
       const setAdminSession = (session = {}) => {
         adminSession = {
@@ -4501,8 +4504,17 @@ Errores: 0</pre>
         return adminSession;
       };
 
+      const applyAdminSessionHeaders = (response) => {
+        if (!response?.headers || !adminSession?.authenticated || !adminSession?.isAdmin) return;
+        const expiresAtHeader = Number(response.headers.get("x-haruja-admin-session-expires-at") || 0);
+        if (!Number.isFinite(expiresAtHeader) || expiresAtHeader <= 0) return;
+        adminSession.expiresAt = expiresAtHeader;
+        adminSession.now = Date.now();
+      };
+
       const clearAdminSession = () => {
         adminSession = { ...EMPTY_ADMIN_SESSION };
+        adminSessionHeartbeatAt = 0;
         prendasState.adminByAuth = false;
         prendasState.adminEmail = "";
         setAdminViewEnabled(false);
@@ -4550,6 +4562,22 @@ Errores: 0</pre>
         if (adminSessionWatchdogId) window.clearInterval(adminSessionWatchdogId);
         adminSessionWatchdogId = window.setInterval(() => {
           if (!prendasState.adminByAuth || !adminSession?.authenticated) return;
+          const remainingMs = getAdminRemainingMs(adminSession);
+          const nowMs = Date.now();
+          if (remainingMs > 0 && remainingMs <= (5 * 60 * 1000) && (nowMs - adminSessionHeartbeatAt) >= 60000) {
+            adminSessionHeartbeatAt = nowMs;
+            getAdminSession()
+              .then((session) => {
+                setAdminSession(session || {});
+                prendasState.adminByAuth = isAdminUser(adminSession) && !isAdminSessionExpired(adminSession);
+                if (!prendasState.adminByAuth) {
+                  expireAdminSessionFrontend({ reason: "heartbeat-expired" });
+                }
+              })
+              .catch(() => {
+                // silencioso: el watchdog principal forzará reauth si realmente expiró
+              });
+          }
           if (isAdminSessionExpired(adminSession)) {
             expireAdminSessionFrontend({ reason: "watchdog" });
           }
