@@ -456,7 +456,9 @@
       setBtnLoading(false);
 
       if (esAbono) {
-        if (res.partial) {
+        if (res.duplicated) {
+          showMsg('Este movimiento ya había sido procesado previamente. Folio: <b>'+res.folio+'</b>', 'ok');
+        } else if (res.partial) {
           showMsg('Abono registrado correctamente, pero no se pudo generar el ticket. Folio: <b>'+res.folio+'</b>', 'ok');
         } else {
           showMsg('Abono registrado y ticket generado correctamente. Folio: <b>'+res.folio+'</b>', 'ok');
@@ -483,7 +485,7 @@
       setBtnLoading(false);
       const msg = (err && err.message) ? err.message : String(err || 'Error sin respuesta');
       const esAbono = document.getElementById('usarFolioExistente').checked;
-      if (esAbono) showMsg('No se pudo registrar el abono, no se realizaron cambios. Detalle: '+msg, 'err');
+      if (esAbono) showMsg('No se pudo registrar el abono, no se realizaron cambios. Detalle: '+msg + (err?.traceId ? ` (Ref: ${err.traceId})` : ''), 'err');
       else showMsg('Error: '+msg, 'err');
     } finally {
       isSubmitting = false;

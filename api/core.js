@@ -34,6 +34,7 @@ import {
 } from '../lib/api/apartados.js';
 import { runApartadoPdfDriveWriteTest } from '../lib/apartados/pdf-sync.js';
 import { AdminSessionConfigError, getAdminSessionSecret } from '../lib/security/adminSessionConfig.js';
+import { createTraceId, getErrorMessage, logError, logInfo, logWarn } from '../lib/observability/logger.js';
 
 export const sendOk = (res, data) => res.status(200).json({ ok: true, data });
 export const sendErr = (res, status, message, _error, code) =>
@@ -153,6 +154,15 @@ const sendMethodNotAllowed = (res, allowedMethods = []) =>
     code: 'METHOD_NOT_ALLOWED',
     message: `Método no permitido. Usa: ${allowedMethods.join(', ') || 'N/A'}.`,
   });
+
+const readTraceFromRequest = (req = {}) =>
+  createTraceId(
+    req?.headers?.['x-trace-id']
+    || req?.headers?.['x-request-id']
+    || req?.body?.operationId
+    || req?.body?.traceId
+    || req?.query?.traceId
+  );
 
 const sanitizePrendaPublicRow = (row = {}) => {
   const result = {};
@@ -400,15 +410,24 @@ function getBaseUrl(reqLike = {}) {
   return host ? `${proto}://${host}` : '';
 }
 
-async function proxyApartadoPdfWebApp(req, res) {
-  console.log('pdf_proxy:start');
+async function proxyApartadoPdfWebApp(req, res, { traceId = '' } = {}) {
+  logInfo('pdf.proxy.start', { action: 'apartados', op: 'pdf-webapp-proxy', traceId });
 
   const webAppUrl = String(process.env.HARUJA_APARTADOS_PDF_WEBAPP_URL || '').trim();
   if (!webAppUrl) {
-    console.error('pdf_proxy:missing_env');
+    logError('pdf.proxy.error', {
+      action: 'apartados',
+      op: 'pdf-webapp-proxy',
+      traceId,
+      stage: 'validate_env',
+      errorCode: 'ADMIN_TEMP_UNAVAILABLE',
+      message: 'missing HARUJA_APARTADOS_PDF_WEBAPP_URL',
+    });
     return res.status(500).json({
       ok: false,
-      message: 'Falta HARUJA_APARTADOS_PDF_WEBAPP_URL en variables de entorno.',
+      code: 'ADMIN_TEMP_UNAVAILABLE',
+      traceId,
+      message: 'No se pudo procesar el PDF oficial.',
     });
   }
 
@@ -427,38 +446,62 @@ async function proxyApartadoPdfWebApp(req, res) {
     try {
       data = JSON.parse(text);
     } catch (parseError) {
-      console.error('pdf_proxy:apps_script_invalid_json', {
-        message: parseError?.message,
+      logError('pdf.proxy.invalid_response', {
+        action: 'apartados',
+        op: 'pdf-webapp-proxy',
+        traceId,
+        stage: 'parse_response',
+        errorCode: 'PDF_PROXY_FAILED',
+        message: getErrorMessage(parseError),
       });
       return res.status(502).json({
         ok: false,
-        message: 'Respuesta no válida del Apps Script.',
-      });
-    }
-
-    if (!response.ok || !data?.ok) {
-      console.error('pdf_proxy:error', {
-        status: response.status,
-        message: data?.message || data?.details || data?.error || `HTTP ${response.status}`,
-      });
-      return res.status(502).json({
-        ok: false,
+        code: 'PDF_PROXY_FAILED',
+        traceId,
         message: 'No se pudo procesar el PDF oficial.',
       });
     }
 
-    console.log('pdf_proxy:apps_script_ok', {
+    if (!response.ok || !data?.ok) {
+      logError('pdf.proxy.error', {
+        action: 'apartados',
+        op: 'pdf-webapp-proxy',
+        traceId,
+        stage: 'apps_script_response',
+        status: response.status,
+        errorCode: 'PDF_PROXY_FAILED',
+        message: data?.message || data?.details || data?.error || `HTTP ${response.status}`,
+      });
+      return res.status(502).json({
+        ok: false,
+        code: 'PDF_PROXY_FAILED',
+        traceId,
+        message: 'No se pudo procesar el PDF oficial.',
+      });
+    }
+
+    logInfo('pdf.proxy.success', {
+      action: 'apartados',
+      op: 'pdf-webapp-proxy',
+      traceId,
       fileId: data?.fileId || '',
       pdfUrl: data?.pdfUrl || '',
     });
 
-    return res.status(200).json(data);
+    return res.status(200).json({ ...data, traceId });
   } catch (error) {
-    console.error('pdf_proxy:error', {
-      message: error?.message,
+    logError('pdf.proxy.error', {
+      action: 'apartados',
+      op: 'pdf-webapp-proxy',
+      traceId,
+      stage: 'fetch_proxy',
+      errorCode: 'PDF_PROXY_FAILED',
+      message: getErrorMessage(error),
     });
     return res.status(500).json({
       ok: false,
+      code: 'PDF_PROXY_FAILED',
+      traceId,
       message: 'Error inesperado en proxy de PDF.',
     });
   }
@@ -466,6 +509,7 @@ async function proxyApartadoPdfWebApp(req, res) {
 
 async function handlePrendas(req, res) {
   const op = toOp(req.query?.op || req.body?.op || req.query?.mode || '');
+  const traceId = readTraceFromRequest(req);
   if (!['GET', 'POST'].includes(req.method)) return sendMethodNotAllowed(res, ['GET', 'POST']);
 
   if (!requireAdminSession(req, res, {
@@ -473,6 +517,13 @@ async function handlePrendas(req, res) {
     touchActivity: true,
     reason: `prendas-${op || 'list'}`,
   })) {
+    logWarn('api.core.denied', {
+      action: 'prendas',
+      op: op || 'list',
+      traceId,
+      result: 'denied',
+      errorCode: 'ADMIN_SESSION_REQUIRED',
+    });
     return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
   }
 
@@ -481,22 +532,22 @@ async function handlePrendas(req, res) {
 
   if (req.method === 'GET' && (!op || op === 'list')) return sendOk(res, await listPrendas());
   if (req.method === 'GET' && op === 'archived') return sendOk(res, await listArchivedPrendas());
-  if (req.method === 'POST' && op === 'create') return sendOk(res, await createPrenda(req.body || {}));
+  if (req.method === 'POST' && op === 'create') return sendOk(res, await createPrenda({ ...(req.body || {}), traceId }));
 
   if (req.method === 'POST' && op === 'delete') {
-    const result = await deletePrenda(req.body || {});
+    const result = await deletePrenda({ ...(req.body || {}), traceId });
     if (result?.status) return res.status(result.status).json(result.body);
     return sendOk(res, result);
   }
 
   if (req.method === 'POST' && op === 'archive') {
-    const result = await archivePrenda(req.body || {});
+    const result = await archivePrenda({ ...(req.body || {}), traceId });
     if (result?.status) return res.status(result.status).json(result.body);
     return sendOk(res, result);
   }
 
   if (req.method === 'POST' && op === 'restore') {
-    const result = await restorePrenda(req.body || {});
+    const result = await restorePrenda({ ...(req.body || {}), traceId });
     if (result?.status) return res.status(result.status).json(result.body);
     return sendOk(res, result);
   }
@@ -506,6 +557,7 @@ async function handlePrendas(req, res) {
 
 async function handleAdminSession(req, res) {
   const op = String(req.query?.op || req.body?.op || '').trim();
+  const traceId = readTraceFromRequest(req);
   if (req.method === 'GET' && op === 'status') {
     try {
       const session = getValidatedAdminSession(req, res, {
@@ -515,7 +567,13 @@ async function handleAdminSession(req, res) {
       const now = Date.now();
       const isExpired = !session?.authenticated || !session?.isAdmin;
       if (!session?.authenticated || !session?.isAdmin || isExpired) {
-        console.warn('[admin-session] admin UI requested without valid backend session');
+        logWarn('admin.session.expired', {
+          action: 'admin-session',
+          op: 'status',
+          traceId,
+          result: 'denied',
+          errorCode: 'ADMIN_SESSION_REQUIRED',
+        });
       }
       return res.status(200).json({
         ok: true,
@@ -543,6 +601,13 @@ async function handleAdminSession(req, res) {
       const isAdmin = isAllowedAdminEmail(email);
 
       if (!emailVerified || !email || aud !== GOOGLE_CLIENT_ID || !isAdmin) {
+        logWarn('api.core.denied', {
+          action: 'admin-session',
+          op: 'google-login',
+          traceId,
+          userEmail: email,
+          result: 'denied',
+        });
         clearAdminSession(res);
         return res.status(403).json({
           ok: false,
@@ -568,6 +633,13 @@ async function handleAdminSession(req, res) {
         }
         return sendAdminUnavailable(res);
       }
+      logError('admin.session.login_failed', {
+        action: 'admin-session',
+        op: 'google-login',
+        traceId,
+        errorCode: 'GOOGLE_AUTH_FAILED',
+        message: getErrorMessage(error),
+      });
       return sendErr(res, 401, 'No se pudo validar la cuenta de Google.', error, 'GOOGLE_AUTH_FAILED');
     }
   }
@@ -583,6 +655,7 @@ async function handleAdminSession(req, res) {
 async function handleApartados(req, res) {
   const op = toOp(req.query?.op || req.body?.op || '');
   const folio = String(req.query?.folio || req.body?.folio || '').trim();
+  const traceId = readTraceFromRequest(req);
   if (!['GET', 'POST'].includes(req.method)) return sendMethodNotAllowed(res, ['GET', 'POST']);
 
   const isAdminOp = APARTADOS_ADMIN_OPS.has(op);
@@ -591,6 +664,14 @@ async function handleApartados(req, res) {
     touchActivity: true,
     reason: `apartados-${op}`,
   })) {
+    logWarn('api.core.denied', {
+      action: 'apartados',
+      op,
+      folio,
+      traceId,
+      result: 'denied',
+      errorCode: 'ADMIN_SESSION_REQUIRED',
+    });
     return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
   }
   if (op && !APARTADOS_PUBLIC_OPS.has(op) && !APARTADOS_ADMIN_OPS.has(op)) {
@@ -621,34 +702,34 @@ async function handleApartados(req, res) {
     return sendOk(res, result);
   }
 
-  if (req.method === 'POST' && op === 'create') return sendOk(res, await createApartado(req.body || {}));
-  if (req.method === 'POST' && op === 'abono') return sendOk(res, await addAbono(req.body || {}));
+  if (req.method === 'POST' && op === 'create') return sendOk(res, await createApartado({ ...(req.body || {}), traceId }));
+  if (req.method === 'POST' && op === 'abono') return sendOk(res, await addAbono({ ...(req.body || {}), traceId }));
 
   if (req.method === 'POST' && op === 'update-status') {
-    const result = await updateApartadoStatus(req.body || {});
+    const result = await updateApartadoStatus({ ...(req.body || {}), traceId });
     if (result?.status) return res.status(result.status).json(result.body);
     return sendOk(res, result);
   }
 
   // ✅ Proxy real al Apps Script para evitar CORS desde navegador
   if (req.method === 'POST' && op === 'pdf-webapp-proxy') {
-    return proxyApartadoPdfWebApp(req, res);
+    return proxyApartadoPdfWebApp(req, res, { traceId });
   }
 
   // 🔥 FORZAR SIEMPRE Apps Script (sin service account)
   if (req.method === 'POST' && op === 'pdf-refresh') {
     console.log('pdf_refresh_redirect_to_webapp');
-    return proxyApartadoPdfWebApp(req, res);
+    return proxyApartadoPdfWebApp(req, res, { traceId });
   }
 
   if (req.method === 'POST' && op === 'pdf-drive-test') {
-    const result = await runApartadoPdfDriveWriteTest();
+    const result = await runApartadoPdfDriveWriteTest({ traceId });
     if (!result?.ok) return sendErr(res, 502, result?.error || 'No se pudo guardar el PDF en Drive.');
     return sendOk(res, result);
   }
 
   if (req.method === 'POST' && op === 'cancel') {
-    const result = await cancelApartado(req.body || {});
+    const result = await cancelApartado({ ...(req.body || {}), traceId });
     if (result?.status) return res.status(result.status).json(result.body);
     return sendOk(res, result);
   }
@@ -683,11 +764,19 @@ async function getCatalogosCached({ force = false } = {}) {
 
 export default async function handler(req, res) {
   const action = toAction(req.query?.action || '');
+  const traceId = readTraceFromRequest(req);
   if (!action) return sendErr(res, 400, 'action es obligatorio.');
 
   try {
     const allowedMethods = ADMIN_ALLOWED_METHODS_BY_ACTION.get(action) || PUBLIC_ALLOWED_METHODS_BY_ACTION.get(action);
     if (allowedMethods && !allowedMethods.has(req.method)) {
+      logWarn('api.core.method_not_allowed', {
+        action,
+        traceId,
+        stage: 'method_guard',
+        method: req.method,
+        errorCode: 'METHOD_NOT_ALLOWED',
+      });
       return sendMethodNotAllowed(res, [...allowedMethods]);
     }
 
@@ -696,6 +785,12 @@ export default async function handler(req, res) {
       touchActivity: true,
       reason: `core-${action}`,
     })) {
+      logWarn('api.core.denied', {
+        action,
+        traceId,
+        result: 'denied',
+        errorCode: 'ADMIN_SESSION_REQUIRED',
+      });
       return sendErr(res, 401, ADMIN_SESSION_REQUIRED_MESSAGE, null, 'ADMIN_SESSION_REQUIRED');
     }
     if (isPublicAction(action)) {
@@ -728,7 +823,7 @@ export default async function handler(req, res) {
       return sendOk(res, await createPrenda(payload));
     }
     if (action === 'prendas-update') {
-      const result = await updatePrenda(req.body || {});
+      const result = await updatePrenda({ ...(req.body || {}), traceId });
       if (result?.status) return res.status(result.status).json(result.body);
       return sendOk(res, result);
     }
@@ -750,19 +845,20 @@ export default async function handler(req, res) {
     }
 
     if (action === 'ventas-config') return sendOk(res, await getVentasConfig());
-    if (action === 'ventas-config-save') return sendOk(res, await saveVentasConfig(req.body || {}));
+    if (action === 'ventas-config-save') return sendOk(res, await saveVentasConfig({ ...(req.body || {}), traceId }));
     if (action === 'ventas-sin-asignar') return sendOk(res, await getVentasSinAsignar(req.query?.month));
-    if (action === 'assign-seller' || action === 'venta-asignar-vendedora') return sendOk(res, await assignVentaSeller(req.body || {}));
+    if (action === 'assign-seller' || action === 'venta-asignar-vendedora') return sendOk(res, await assignVentaSeller({ ...(req.body || {}), traceId }));
     if (action === 'ventas-rebuild') return sendOk(res, await rebuildVentasResumen(req.body?.month || req.query?.month));
     if (action === 'tiendanube-webhooks-register') return sendOk(res, await registerTiendanubeWebhooks(getBaseUrl(req)));
 
     return sendErr(res, 400, 'Acción inválida para /api/core.');
   } catch (error) {
-    console.error('[api/core] action failed', {
+    logError('api.core.failed', {
       action,
+      traceId,
       method: req?.method,
-      message: error?.message,
-      code: error?.code,
+      message: getErrorMessage(error),
+      errorCode: String(error?.code || '').trim() || undefined,
     });
     if (isSheetsQuotaExceededError(error)) {
       return sendErr(
@@ -773,6 +869,11 @@ export default async function handler(req, res) {
         'SHEETS_QUOTA_EXCEEDED',
       );
     }
-    return sendErr(res, 400, 'No se pudo completar la operación solicitada.');
+    return res.status(400).json({
+      ok: false,
+      code: String(error?.code || '').trim() || 'ADMIN_TEMP_UNAVAILABLE',
+      traceId,
+      message: 'No se pudo completar la operación solicitada.',
+    });
   }
 }
