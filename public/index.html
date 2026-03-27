@@ -77,7 +77,7 @@
         :root { --page-pad: 14px; }
 
         .haruja-header {
-          padding: 14px 0;
+          padding: 8px 0;
         }
 
         .haruja-header img {
@@ -1783,7 +1783,7 @@ body.admin-on .admin-only{ display:table-cell; }
   display:block;
 }
 @media (max-width: 768px){
-  .haruja-header{ padding: 14px 14px; }
+  .haruja-header{ padding: 8px 14px; }
   .haruja-header img{ height: 18px; max-width: min(70vw, 200px); }
 }
 @media (max-width: 420px){
@@ -2037,10 +2037,54 @@ th.col-drag-over {
       #dbCodigosSection table.haruja-table tbody td{padding:10px;border-right:1px solid rgba(0,0,0,.12);border-bottom:1px solid rgba(0,0,0,.06);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#fff;}
       #dbCodigosSection table.haruja-table tbody tr:hover td{background:rgba(30,94,255,.05);}
       #dbCodigosSection table.haruja-table tbody td:last-child{border-right:none;}
+      input[type="number"]{font-variant-numeric:tabular-nums;}
       @media (max-width:768px){
         #dbCodigosSection table.haruja-table thead th{padding:8px;}
         #dbCodigosSection .th-inner{min-height:56px;gap:6px;}
         #dbCodigosSection .th-control select{height:28px;border-radius:9px;}
+        /* Mantener columnas clave: código, descripción, precio, status, disponibilidad, acciones */
+        #dbCodigosSection table.haruja-table th[data-col="select"],
+        #dbCodigosSection table.haruja-table td[data-col="select"],
+        #dbCodigosSection table.haruja-table th[data-col="orden"],
+        #dbCodigosSection table.haruja-table td[data-col="orden"],
+        #dbCodigosSection table.haruja-table th[data-col="tipo"],
+        #dbCodigosSection table.haruja-table td[data-col="tipo"],
+        #dbCodigosSection table.haruja-table th[data-col="color"],
+        #dbCodigosSection table.haruja-table td[data-col="color"],
+        #dbCodigosSection table.haruja-table th[data-col="talla"],
+        #dbCodigosSection table.haruja-table td[data-col="talla"],
+        #dbCodigosSection table.haruja-table th[data-col="proveedor"],
+        #dbCodigosSection table.haruja-table td[data-col="proveedor"],
+        #dbCodigosSection table.haruja-table th[data-col="tn"],
+        #dbCodigosSection table.haruja-table td[data-col="tn"],
+        #dbCodigosSection table.haruja-table th[data-col="qtyAvailable"],
+        #dbCodigosSection table.haruja-table td[data-col="qtyAvailable"],
+        #dbCodigosSection table.haruja-table th[data-col="fecha"],
+        #dbCodigosSection table.haruja-table td[data-col="fecha"],
+        #dbCodigosSection table.haruja-table th[data-col="costo"],
+        #dbCodigosSection table.haruja-table td[data-col="costo"],
+        #dbCodigosSection table.haruja-table th[data-col="margen"],
+        #dbCodigosSection table.haruja-table td[data-col="margen"],
+        #dbCodigosSection table.haruja-table th[data-col="utilidad"],
+        #dbCodigosSection table.haruja-table td[data-col="utilidad"]{
+          display:none;
+        }
+        #dbCodigosSection .actions-wrap{gap:12px;}
+        #dbCodigosSection .actions-wrap .rowArchiveBtn,
+        #dbCodigosSection .actions-wrap .rowDeleteBtn{
+          margin-left:6px;
+        }
+        .edit-modal-actions{
+          flex-direction:column;
+          align-items:stretch;
+          gap:10px;
+        }
+        .edit-modal-actions > button{
+          width:100%;
+        }
+        .edit-modal-actions > button.secondary{
+          margin-top:4px;
+        }
       }
       @media (max-width:980px){
         #dbCodigosSection .th-filter-text{display:none;}
