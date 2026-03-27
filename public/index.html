@@ -2243,6 +2243,188 @@ body.haruja-col-resizing{
   user-select: none !important;
 }
 </style>
+
+<style id="mobile-ux-surgical">
+  /* BLOQUE 8 — UX móvil quirúrgico */
+  html, body { max-width: 100%; overflow-x: hidden; }
+
+  .table-wrap,
+  .table-wrapper,
+  #base-datos-codigos .table-wrapper,
+  #dbCodigosSection .table-wrap {
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Tablet */
+  @media (max-width: 1024px) {
+    .app-shell { gap: 18px; }
+    .section,
+    #base-datos-codigos { padding: 18px; border-radius: 18px; }
+
+    #dbCodigosSection .db-controls,
+    #dbCodigosSection .db-table,
+    #dbCodigosSection .db-controls-row,
+    #dbCodigosSection .db-metrics {
+      padding-left: 0;
+      padding-right: 0;
+    }
+
+    #dbCodigosSection .db-table { padding-bottom: 8px; }
+  }
+
+  /* Móvil general */
+  @media (max-width: 768px) {
+    :root { --page-pad: 12px; }
+
+    .haruja-header { padding: 10px 0; }
+
+    .launcher-title { font-size: 1.25rem; line-height: 1.25; }
+    .launcher-subtitle { font-size: 0.92rem; }
+
+    .section h2 { font-size: 1.08rem; line-height: 1.3; }
+    .section p { margin-bottom: 14px; }
+
+    .form,
+    .form-row,
+    .edit-modal-grid,
+    .edit-modal-meta {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    input,
+    select,
+    button,
+    .btn,
+    .btn-more-filters,
+    .admin-mode-btn,
+    #prendas-filters-clear,
+    #prendas-precio-apply,
+    #dbCodigosSection .rowEditBtn {
+      min-height: 44px;
+      font-size: 16px;
+    }
+
+    .result-actions,
+    .edit-modal-actions,
+    .pager-right,
+    #dbCodigosSection .more-filters-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .js-go-panel,
+    #prendas-prev,
+    #prendas-next,
+    #editModalSave,
+    #editModalCancel {
+      width: 100%;
+    }
+
+    #dbCodigosSection .db-controls-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+      padding-top: 12px;
+    }
+
+    #dbCodigosSection .db-controls-row .input,
+    #dbCodigosSection .more-filters-grid .input,
+    #dbCodigosSection .more-filters-grid input[type="number"] {
+      width: 100%;
+      min-width: 0;
+    }
+
+    #dbCodigosSection .more-filters-panel {
+      margin: 8px 0 0;
+      padding: 10px;
+      border-radius: 12px;
+    }
+
+    #dbCodigosSection .more-filters-grid,
+    #dbCodigosSection .db-metrics,
+    #dbCodigosSection .pager,
+    #dbCodigosSection .pager-bottom {
+      grid-template-columns: 1fr;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+    }
+
+    #dbCodigosSection .check,
+    #dbCodigosSection .check-pill,
+    #dbCodigosSection .inline-toggle,
+    #dbCodigosSection .inline-toggle-top {
+      min-height: 44px;
+      width: 100%;
+    }
+
+    #dbCodigosSection table.table {
+      min-width: 720px;
+      font-size: 13px;
+    }
+
+    #dbCodigosSection thead th,
+    #dbCodigosSection table.table th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #fff;
+    }
+
+    .edit-modal {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .edit-modal-sheet {
+      margin: 0;
+      width: min(100vw, 100%);
+      max-width: 100%;
+      max-height: min(90dvh, 90vh);
+      overflow: auto;
+      border-radius: 16px 16px 0 0;
+      padding: 14px;
+    }
+
+    .status,
+    .prendas-alert,
+    .muted { font-size: 13px; }
+  }
+
+  /* Móvil chico */
+  @media (max-width: 480px) {
+    :root { --page-pad: 10px; }
+    .app-shell { gap: 14px; }
+
+    .section,
+    #base-datos-codigos,
+    #dbCodigosSection,
+    .card {
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .toolcard-title,
+    .card h2 { font-size: 1rem; }
+
+    #dbCodigosSection table.table { min-width: 640px; }
+
+    #dbCodigosSection .pager-left,
+    #dbCodigosSection .pager-center,
+    #dbCodigosSection .pager-size {
+      font-size: 12px;
+      color: #667085;
+    }
+
+    .edit-modal-sheet { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  }
+</style>
 </head>
   <body>
   <header class="haruja-header">
