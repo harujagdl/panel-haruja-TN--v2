@@ -2796,7 +2796,7 @@ Errores: 0</pre>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script type="module">
-      import { ajustarDesdePrecioConIVA } from "/shared/priceRules.js";
+      import { ajustarDesdePrecioConIVA, calcularUtilidadYMargen, normalizeNumber as normalizePricingNumber } from "/shared/pricing-utils.js";
       import {
         emptyMonths
       } from "/shared/salesTotals.js";
@@ -5851,17 +5851,6 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
         printWindow.focus();
       };
 
-      function calcularUtilidadYMargen(precio, costo) {
-        const p = Number(precio) || 0;
-        const c = Number(costo) || 0;
-        const utilidad = Math.max(0, p - c);
-        const margen = p > 0 ? (utilidad / p) * 100 : 0;
-        return {
-          utilidad: Number(utilidad.toFixed(2)),
-          margen: Number(margen.toFixed(1))
-        };
-      }
-
       const buildSearchKey = (data) => {
         const codigo = safeString(data.codigo || data.code || data.Codigo || data.Code);
         const descripcion = safeString(data.descripcion || data.Descripcion || data.detalles);
@@ -6080,25 +6069,15 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
         );
         const iva = toNumberOrNull(data.iva ?? data.IVA);
         const pVenta = toNumberOrNull(data.pVenta ?? data.precioConIva ?? data.precio);
-        const costo = Number(data.costo ?? 0) || 0;
+        const costo = normalizePricingNumber(data.costo, { fallback: 0 }) || 0;
         const precioConIvaFinal = Number.isFinite(precioConIva)
           ? precioConIva
           : (Number.isFinite(pVenta) ? pVenta : null);
         const isDeleted = data.eliminado === true || data.deleted === true || data.isActive === false;
         const isActive = !isDeleted;
 
-        const { utilidad: utilidadCalculada, margen: margenCalculado } =
+        const { utilidad, margen } =
           calcularUtilidadYMargen(precioConIvaFinal, costo);
-
-        let utilidad = Number(data.utilidad ?? data.Utilidad ?? 0);
-        if ((!utilidad || utilidad === 0) && costo > 0 && precioConIvaFinal > 0) {
-          utilidad = Math.round((precioConIvaFinal - costo) * 100) / 100;
-        }
-
-        let margen = Number(data.margen ?? data.Margen ?? 0);
-        if ((!margen || margen === 0) && precioConIvaFinal > 0) {
-          margen = Math.round(((utilidad / precioConIvaFinal) * 100) * 10) / 10;
-        }
         const createdAt = data.createdAt ?? data.CreatedAt ?? null;
         const fechaAlta = data.fechaAlta ?? data.FechaAlta ?? null;
         const fecha = data.fecha ?? data.Fecha ?? null;
@@ -6162,9 +6141,9 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
           pVenta,
           precioConIva: Number(data.precioConIva ?? data.pVenta ?? data.precio ?? precioConIvaFinal ?? 0) || 0,
           iva,
-          costo: Number(data.costo ?? 0) || 0,
-          margen: Number(data.margen ?? margen ?? margenCalculado ?? 0) || 0,
-          utilidad: Number(data.utilidad ?? utilidad ?? utilidadCalculada ?? 0) || 0,
+          costo,
+          margen,
+          utilidad,
           createdAt,
           fechaAlta,
           fecha,
