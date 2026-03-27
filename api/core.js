@@ -252,7 +252,7 @@ const setAdminSessionResponseHeaders = (res, { session, refreshed = false } = {}
   res.setHeader('X-Haruja-Admin-Session-Refreshed', refreshed ? '1' : '0');
 };
 
-const maybeRefreshAdminSession = (req, res, { reason = 'admin-activity', force = false } = {}) => {
+const maybeRefreshAdminSession = (req, res, { reason = 'admin-activity', force = false, allowRefresh = true } = {}) => {
   try {
     const session = readAdminSession(req);
     if (session?.expired) {
@@ -264,6 +264,10 @@ const maybeRefreshAdminSession = (req, res, { reason = 'admin-activity', force =
       return null;
     }
     const remainingMs = Math.max(0, Number(session?.expiresAt || 0) - Date.now());
+    if (!allowRefresh) {
+      setAdminSessionResponseHeaders(res, { session, refreshed: false });
+      return session;
+    }
     if (!force && remainingMs > ADMIN_SESSION_REFRESH_WINDOW_MS) {
       console.log(`[admin-session] admin session refresh skipped reason=${reason} remainingMs=${remainingMs}`);
       setAdminSessionResponseHeaders(res, { session, refreshed: false });
@@ -288,6 +292,7 @@ export const getValidatedAdminSession = (req, res, options = {}) =>
   maybeRefreshAdminSession(req, res, {
     reason: options?.reason || 'admin-validation',
     force: options?.touchActivity === true,
+    allowRefresh: options?.touchActivity === true,
   });
 
 export const requireAdminSession = (req, res, options = {}) => {
@@ -440,7 +445,7 @@ async function handleAdminSession(req, res) {
   if (req.method === 'GET' && op === 'status') {
     try {
       const session = getValidatedAdminSession(req, res, {
-        touchActivity: true,
+        touchActivity: false,
         reason: 'admin-status-check',
       });
       const now = Date.now();
