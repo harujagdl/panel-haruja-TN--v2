@@ -19,8 +19,11 @@ export function normalizeNumber(value, { integer = false, fallback = null } = {}
 export const roundMoney = (value) => Number((Number(value) || 0).toFixed(2));
 export const roundMargin = (value) => Number((Number(value) || 0).toFixed(1));
 
-export function calcularUtilidadYMargen(precio, costo) {
-  const p = normalizeNumber(precio, { fallback: 0 }) || 0;
+// Regla oficial de negocio:
+// La base de venta para utilidad/margen es el campo Precio (columna "Precio" en Sheets).
+// pVenta / precioConIva se tratan como alias de compatibilidad cuando Precio no esté presente.
+export function calcularUtilidadYMargenDesdeBaseVenta(baseVenta, costo) {
+  const p = normalizeNumber(baseVenta, { fallback: 0 }) || 0;
   const c = normalizeNumber(costo, { fallback: 0 }) || 0;
   const utilidad = Math.max(0, p - c);
   const margen = p > 0 ? (utilidad / p) * 100 : 0;
@@ -28,6 +31,10 @@ export function calcularUtilidadYMargen(precio, costo) {
     utilidad: roundMoney(utilidad),
     margen: roundMargin(margen),
   };
+}
+
+export function calcularUtilidadYMargen(precio, costo) {
+  return calcularUtilidadYMargenDesdeBaseVenta(precio, costo);
 }
 
 export function calcularPrecioConIVA(precioSinIVA) {

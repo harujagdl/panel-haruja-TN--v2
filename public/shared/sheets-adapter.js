@@ -1,4 +1,4 @@
-import { calcularUtilidadYMargen, normalizeNumber } from "./pricing-utils.js";
+import { calcularUtilidadYMargenDesdeBaseVenta, normalizeNumber } from "./pricing-utils.js";
 
 export async function loadBaseRowsFromSheets() {
   const res = await fetch("/api/core?action=prendas-list");
@@ -15,7 +15,7 @@ export async function loadBaseRowsFromSheets() {
     const precio = normalizeNumber(row["Precio"], { fallback: 0 }) || 0;
     const costo = normalizeNumber(row["Costo"], { fallback: 0 }) || 0;
     const existencia = normalizeNumber(row["Existencia"] ?? row["Existencias"], { fallback: 0 }) || 0;
-    const { utilidad, margen } = calcularUtilidadYMargen(precio, costo);
+    const { utilidad, margen } = calcularUtilidadYMargenDesdeBaseVenta(precio, costo);
     const orden = normalizeNumber(row["Orden"], { fallback: index + 1 }) || index + 1;
 
     return {

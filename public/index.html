@@ -2796,7 +2796,7 @@ Errores: 0</pre>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script type="module">
-      import { ajustarDesdePrecioConIVA, calcularUtilidadYMargen, normalizeNumber as normalizePricingNumber } from "/shared/pricing-utils.js";
+      import { ajustarDesdePrecioConIVA, calcularUtilidadYMargenDesdeBaseVenta, normalizeNumber as normalizePricingNumber } from "/shared/pricing-utils.js";
       import {
         emptyMonths
       } from "/shared/salesTotals.js";
@@ -5041,19 +5041,21 @@ Errores: 0</pre>
       const renderDisponibilidadCell = (disponibilidad, status) =>
         renderBadgeCell(normalizeDisponibilidad(disponibilidad, status));
 
+      // Base oficial de venta para utilidad/margen: Precio.
+      // Fallbacks solo por compatibilidad histórica con datos anteriores.
       const resolvePVenta = (data) => {
-        const precioConIva = toNumberOrNull(
-          pickFirstValue(data?.precioConIva, data?.precioConIVA)
-        );
         const precioBase = toNumberOrNull(
           pickFirstValue(data?.precio, data?.Precio, data?.price)
         );
         const pVenta = toNumberOrNull(
           pickFirstValue(data?.pVenta, data?.PVenta, data?.p_venta)
         );
-        if (Number.isFinite(precioConIva)) return precioConIva;
+        const precioConIva = toNumberOrNull(
+          pickFirstValue(data?.precioConIva, data?.precioConIVA)
+        );
         if (Number.isFinite(precioBase)) return precioBase;
         if (Number.isFinite(pVenta)) return pVenta;
+        if (Number.isFinite(precioConIva)) return precioConIva;
         return null;
       };
 
@@ -6070,16 +6072,14 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
           pickFirstValue(data.precioConIva, data.precioConIVA)
         );
         const iva = toNumberOrNull(data.iva ?? data.IVA);
-        const pVenta = toNumberOrNull(data.pVenta ?? data.precioConIva ?? data.precio);
+        const baseVentaOficial = resolvePVenta(data);
+        const pVenta = toNumberOrNull(data.pVenta ?? data.precio ?? data.precioConIva);
         const costo = normalizePricingNumber(data.costo, { fallback: 0 }) || 0;
-        const precioConIvaFinal = Number.isFinite(precioConIva)
-          ? precioConIva
-          : (Number.isFinite(pVenta) ? pVenta : null);
         const isDeleted = data.eliminado === true || data.deleted === true || data.isActive === false;
         const isActive = !isDeleted;
 
         const { utilidad, margen } =
-          calcularUtilidadYMargen(precioConIvaFinal, costo);
+          calcularUtilidadYMargenDesdeBaseVenta(baseVentaOficial, costo);
         const createdAt = data.createdAt ?? data.CreatedAt ?? null;
         const fechaAlta = data.fechaAlta ?? data.FechaAlta ?? null;
         const fecha = data.fecha ?? data.Fecha ?? null;
@@ -6139,9 +6139,9 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
           tnNotes: safeString(data.tnNotes).trim() || null,
           isActive,
           eliminado: isDeleted,
-          precio,
+          precio: Number.isFinite(precio) ? precio : (baseVentaOficial ?? 0),
           pVenta,
-          precioConIva: Number(data.precioConIva ?? data.pVenta ?? data.precio ?? precioConIvaFinal ?? 0) || 0,
+          precioConIva: Number(data.precioConIva ?? baseVentaOficial ?? 0) || 0,
           iva,
           costo,
           margen,
@@ -7114,7 +7114,7 @@ const createPrendaRow = (item) => {
         const costoIngresado = toNumber(editCostoInput.value);
         const costoBaseFila = toNumber(prendasState.editing?.rowDataSnapshot?.costo);
         const costoFinal = Number.isFinite(costoIngresado) ? costoIngresado : (costoBaseFila ?? 0);
-        const { utilidad, margen } = calcularUtilidadYMargen(precioFinal, costoFinal);
+        const { utilidad, margen } = calcularUtilidadYMargenDesdeBaseVenta(precioFinal, costoFinal);
         if (editUtilidadPreview) editUtilidadPreview.textContent = moneyFmt(utilidad);
         if (editMargenPreview) editMargenPreview.textContent = pctFmt(margen);
         if (editPrecioFinalPreview) editPrecioFinalPreview.textContent = ajusteFinal ? moneyFmt(ajusteFinal.precioConIVA) : "--";
@@ -7242,7 +7242,7 @@ const createPrendaRow = (item) => {
           const costoIngresado = toNumber(editCostoInput?.value);
           const costoBaseFila = toNumber(prendasState.editing?.rowDataSnapshot?.costo);
           const costoFinal = Number.isFinite(costoIngresado) ? costoIngresado : (costoBaseFila ?? 0);
-          const { utilidad, margen } = calcularUtilidadYMargen(precioFinal, costoFinal);
+          const { utilidad, margen } = calcularUtilidadYMargenDesdeBaseVenta(precioFinal, costoFinal);
           console.log("[admin-edit] preserving existing code");
           console.log("[admin-edit] no structural recalculation");
           const pickedStatus = safeString(editStatusManual?.value || prendasState.editing?.rowDataSnapshot?.status || "Disponible").trim();
