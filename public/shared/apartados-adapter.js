@@ -1,7 +1,21 @@
 async function parseApiResponse(response, fallbackMessage) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.ok === false) {
-    throw new Error(data?.message || fallbackMessage);
+    const code = String(data?.code || "").trim();
+    const safeMessageByCode = {
+      ADMIN_SESSION_REQUIRED: "La sesión admin expiró. Vuelve a autenticarte.",
+      METHOD_NOT_ALLOWED: "Operación no permitida para este método.",
+      INVALID_PAYLOAD: "No se pudo completar la operación. Revisa los datos e intenta de nuevo.",
+      APARTADO_NOT_FOUND: "No se encontró el folio indicado.",
+      ABONO_DUPLICATED: "Este movimiento ya había sido procesado previamente.",
+      ABONO_INCONSISTENT: "Se detectó una inconsistencia en el abono. Contacta soporte con la referencia.",
+      PDF_PROXY_FAILED: "El abono se registró, pero no se pudo generar el ticket.",
+    };
+    const error = new Error(safeMessageByCode[code] || data?.message || fallbackMessage);
+    error.code = code || undefined;
+    error.traceId = String(data?.traceId || "").trim() || undefined;
+    error.status = Number(response?.status || 0) || undefined;
+    throw error;
   }
   return data?.data || data;
 }

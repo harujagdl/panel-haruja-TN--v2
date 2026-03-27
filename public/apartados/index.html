@@ -451,7 +451,19 @@
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || data?.ok === false) {
-        throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+        const code = String(data?.code || '').trim();
+        const byCode = {
+          ADMIN_SESSION_REQUIRED: 'La sesión admin expiró. Vuelve a autenticarte.',
+          METHOD_NOT_ALLOWED: 'Operación no permitida para este método.',
+          INVALID_PAYLOAD: 'No se pudo completar la operación. Revisa los datos e intenta de nuevo.',
+          ABONO_DUPLICATED: 'Este movimiento ya había sido procesado previamente.',
+          ABONO_INCONSISTENT: 'Se detectó una inconsistencia del abono. Contacta soporte.',
+          PDF_PROXY_FAILED: 'El abono se registró, pero no se pudo generar el ticket.',
+        };
+        const error = new Error(byCode[code] || data?.error || data?.message || `HTTP ${res.status}`);
+        error.code = code || '';
+        error.traceId = String(data?.traceId || '').trim();
+        throw error;
       }
 
       return data?.data || data;
@@ -543,7 +555,9 @@
 
         setBtnLoading(false);
         if (esAbono) {
-          if (res.partial) {
+          if (res.duplicated) {
+            showMsg('Este movimiento ya había sido procesado previamente. Folio: <b>' + res.folio + '</b>', 'ok');
+          } else if (res.partial) {
             showMsg('Abono registrado correctamente, pero no se pudo generar el ticket. Folio: <b>' + res.folio + '</b>', 'ok');
           } else {
             showMsg('Abono registrado y ticket generado correctamente. Folio: <b>' + res.folio + '</b>', 'ok');
@@ -569,7 +583,7 @@
         setBtnLoading(false);
         const msg = (err && err.message) ? err.message : String(err || 'Error sin respuesta');
         const esAbono = document.getElementById('usarFolioExistente').checked;
-        if (esAbono) showMsg('No se pudo registrar el abono, no se realizaron cambios. Detalle: ' + msg, 'err');
+        if (esAbono) showMsg('No se pudo registrar el abono, no se realizaron cambios. Detalle: ' + msg + (err?.traceId ? ` (Ref: ${err.traceId})` : ''), 'err');
         else showMsg('Error: ' + msg, 'err');
       } finally {
         isSubmitting = false;
