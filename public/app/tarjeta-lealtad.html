@@ -443,8 +443,11 @@
       }
 
       window.addEventListener('load', async () => {
+        const SW_RELEASE_TAG = '2026-03-27-b3.1';
+        const RELOAD_KEY = 'sw-tarjeta-reloaded';
         try {
           const registration = await navigator.serviceWorker.register('/sw-tarjeta-lealtad.js', { scope: '/' });
+          console.log('[SW tarjeta] registered release', SW_RELEASE_TAG);
           if (registration.waiting) {
             registration.waiting.postMessage({ type: 'SKIP_WAITING' });
           }
@@ -459,7 +462,11 @@
             });
           });
           navigator.serviceWorker.addEventListener('controllerchange', () => {
-            console.log('[SW tarjeta] controlador actualizado');
+            console.log('[SW tarjeta] controlador actualizado', SW_RELEASE_TAG);
+            if (!sessionStorage.getItem(RELOAD_KEY)) {
+              sessionStorage.setItem(RELOAD_KEY, '1');
+              window.location.reload();
+            }
           });
         } catch (error) {
           console.error('[tarjeta-lealtad] SW no registrado', error);

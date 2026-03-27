@@ -1,6 +1,7 @@
-const RELEASE_TAG = '2026-03-26-b3';
+const RELEASE_TAG = '2026-03-27-b3.1';
 const CACHE_PREFIX = 'haruja-lealtad';
 const CACHE_NAME = `${CACHE_PREFIX}-${RELEASE_TAG}`;
+const SW_LABEL = '[SW lealtad]';
 
 const APP_SHELL = [
   '/lealtad',
@@ -14,9 +15,12 @@ function isHtmlRequest(request) {
 }
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(APP_SHELL);
+    self.skipWaiting();
+    console.log(`${SW_LABEL} version installed`, RELEASE_TAG);
+  })());
 });
 
 self.addEventListener('activate', (event) => {
@@ -26,12 +30,12 @@ self.addEventListener('activate', (event) => {
       keys
         .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
         .map((key) => {
-          console.log('[SW lealtad] deleting old cache', key);
+          console.log(`${SW_LABEL} deleting old cache`, key);
           return caches.delete(key);
         })
     );
     await self.clients.claim();
-    console.log('[SW lealtad] version active', RELEASE_TAG);
+    console.log(`${SW_LABEL} version active`, RELEASE_TAG);
   })());
 });
 
@@ -57,9 +61,11 @@ self.addEventListener('fetch', (event) => {
   if (isHtmlRequest(request)) {
     event.respondWith((async () => {
       try {
-        const networkResponse = await fetch(request);
-        const cache = await caches.open(CACHE_NAME);
-        cache.put(request, networkResponse.clone());
+        const networkResponse = await fetch(request, { cache: 'no-store' });
+        if (networkResponse.ok && networkResponse.type === 'basic') {
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(request, networkResponse.clone());
+        }
         return networkResponse;
       } catch {
         return (await caches.match(request)) || (await caches.match('/lealtad')) || Response.error();
@@ -78,7 +84,7 @@ self.addEventListener('fetch', (event) => {
     const cached = await caches.match(request);
     const networkFetch = fetch(request)
       .then(async (response) => {
-        if (response.ok) {
+        if (response.ok && response.type === 'basic') {
           const cache = await caches.open(CACHE_NAME);
           cache.put(request, response.clone());
         }
@@ -86,6 +92,6 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => cached);
 
-    return cached || networkFetch;
+    return cached || networkFetch || Response.error();
   })());
 });

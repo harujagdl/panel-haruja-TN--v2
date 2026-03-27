@@ -1,6 +1,7 @@
-const RELEASE_TAG = '2026-03-26-b3';
+const RELEASE_TAG = '2026-03-27-b3.1';
 const CACHE_PREFIX = 'tarjeta-lealtad-shell';
 const CACHE_NAME = `${CACHE_PREFIX}-${RELEASE_TAG}`;
+const SW_LABEL = '[SW tarjeta]';
 const APP_SHELL_ASSETS = [
   '/tarjeta-lealtad.html',
   '/tarjeta-lealtad.html?pwa=1',
@@ -11,11 +12,22 @@ const APP_SHELL_ASSETS = [
   '/app/assets/haruja-logo.png',
   '/shared/loyaltyService.js'
 ];
+const STATIC_CACHE_PATTERNS = [
+  /^\/icons\//,
+  /^\/app\/assets\//,
+  /^\/shared\/loyaltyService\.js$/,
+  /^\/manifest\.webmanifest$/,
+  /^\/favicon\.svg$/,
+  /^\/apple-touch-icon\.png$/
+];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL_ASSETS))
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(APP_SHELL_ASSETS);
+    self.skipWaiting();
+    console.log(`${SW_LABEL} version installed`, RELEASE_TAG);
+  })());
 });
 
 self.addEventListener('activate', (event) => {
@@ -25,12 +37,12 @@ self.addEventListener('activate', (event) => {
       keys
         .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
         .map((key) => {
-          console.log('[SW tarjeta] deleting old cache', key);
+          console.log(`${SW_LABEL} deleting old cache`, key);
           return caches.delete(key);
         })
     );
     await self.clients.claim();
-    console.log('[SW tarjeta] version active', RELEASE_TAG);
+    console.log(`${SW_LABEL} version active`, RELEASE_TAG);
   })());
 });
 
@@ -50,7 +62,7 @@ self.addEventListener('fetch', (event) => {
   const isSameOrigin = requestUrl.origin === self.location.origin;
   const isApiRequest = requestUrl.pathname.startsWith('/api/');
   const isNavigationRequest = request.mode === 'navigate';
-  const isLoyaltyPage = requestUrl.pathname === '/tarjeta-lealtad.html';
+  const isLoyaltyPage = requestUrl.pathname === '/tarjeta-lealtad.html' || requestUrl.pathname === '/tarjeta-lealtad';
 
   if (!isSameOrigin || isApiRequest) {
     event.respondWith(fetch(request));
@@ -59,10 +71,12 @@ self.addEventListener('fetch', (event) => {
 
   if (isNavigationRequest && isLoyaltyPage) {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'no-store' })
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put('/tarjeta-lealtad.html', copy));
+          if (response.ok && response.type === 'basic') {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put('/tarjeta-lealtad.html', copy));
+          }
           return response;
         })
         .catch(async () => (await caches.match('/tarjeta-lealtad.html')) || Response.error())
@@ -71,31 +85,28 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (isNavigationRequest) {
-    event.respondWith(
-      fetch(request).catch(async () => (await caches.match('/tarjeta-lealtad.html')) || Response.error())
-    );
+    event.respondWith(fetch(request));
     return;
   }
 
-  const isStaticAsset = /\.(?:js|css|png|jpg|jpeg|svg|webp|ico|woff2?|ttf|json)$/i.test(requestUrl.pathname);
+  const isStaticAsset = STATIC_CACHE_PATTERNS.some((pattern) => pattern.test(requestUrl.pathname));
   if (!isStaticAsset) {
     event.respondWith(fetch(request));
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
-
-      return fetch(request).then((response) => {
-        if (response.ok && isSameOrigin) {
+  event.respondWith((async () => {
+    const cached = await caches.match(request);
+    const networkFetch = fetch(request)
+      .then((response) => {
+        if (response.ok && response.type === 'basic') {
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         }
         return response;
-      });
-    })
-  );
+      })
+      .catch(() => cached);
+
+    return cached || networkFetch || Response.error();
+  })());
 });
