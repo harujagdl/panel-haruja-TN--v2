@@ -1,13 +1,4 @@
-function calcularUtilidadYMargen(precio, costo) {
-  const p = Number(precio) || 0;
-  const c = Number(costo) || 0;
-  const utilidad = Math.max(0, p - c);
-  const margen = p > 0 ? (utilidad / p) * 100 : 0;
-  return {
-    utilidad: Number(utilidad.toFixed(2)),
-    margen: Number(margen.toFixed(1))
-  };
-}
+import { calcularUtilidadYMargen, normalizeNumber } from "./pricing-utils.js";
 
 export async function loadBaseRowsFromSheets() {
   const res = await fetch("/api/core?action=prendas-list");
@@ -21,13 +12,11 @@ export async function loadBaseRowsFromSheets() {
 
   return rows.map((row, index) => {
     const codigo = row["Código"] || `row-${index}`;
-    const precio = Number(row["Precio"] || 0);
-    const costo = Number(row["Costo"] || 0);
-    const existencia = Number(row["Existencia"] ?? row["Existencias"] ?? 0);
-    const { utilidad: utilidadCalculada, margen: margenCalculado } = calcularUtilidadYMargen(precio, costo);
-    const utilidad = Number(row["Utilidad"] ?? utilidadCalculada ?? 0);
-    const margen = Number(row["Margen"] ?? margenCalculado ?? 0);
-    const orden = Number(row["Orden"] || index + 1);
+    const precio = normalizeNumber(row["Precio"], { fallback: 0 }) || 0;
+    const costo = normalizeNumber(row["Costo"], { fallback: 0 }) || 0;
+    const existencia = normalizeNumber(row["Existencia"] ?? row["Existencias"], { fallback: 0 }) || 0;
+    const { utilidad, margen } = calcularUtilidadYMargen(precio, costo);
+    const orden = normalizeNumber(row["Orden"], { fallback: index + 1 }) || index + 1;
 
     return {
       docId: codigo,
