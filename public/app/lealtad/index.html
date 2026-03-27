@@ -937,10 +937,13 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
+        const SW_RELEASE_TAG = '2026-03-27-b3.1';
+        const RELOAD_KEY = 'sw-lealtad-reloaded';
         try {
           const registration = await navigator.serviceWorker.register('/lealtad/sw.js', {
             scope: '/lealtad/'
           });
+          console.log('[SW lealtad] registered release', SW_RELEASE_TAG);
           if (registration.waiting) {
             registration.waiting.postMessage({ type: 'SKIP_WAITING' });
           }
@@ -955,7 +958,11 @@
             });
           });
           navigator.serviceWorker.addEventListener('controllerchange', () => {
-            console.log('[SW lealtad] controlador actualizado');
+            console.log('[SW lealtad] controlador actualizado', SW_RELEASE_TAG);
+            if (!sessionStorage.getItem(RELOAD_KEY)) {
+              sessionStorage.setItem(RELOAD_KEY, '1');
+              window.location.reload();
+            }
           });
           console.log('Service Worker registrado correctamente');
         } catch (error) {
