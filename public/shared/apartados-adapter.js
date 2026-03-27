@@ -18,14 +18,21 @@ export async function fetchNextFolioFromSheets() {
 }
 
 export async function registrarApartadoInSheets(payload) {
-  const response = await fetch(`/api/core?action=apartados&op=create`, {
+  const isAbono = Boolean(payload?.usarFolioExistente);
+  const op = isAbono ? "abono" : "create";
+  const safePayload = { ...(payload || {}) };
+  if (isAbono) {
+    safePayload.operationId = String(safePayload.operationId || (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)).trim();
+  }
+
+  const response = await fetch(`/api/core?action=apartados&op=${op}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: JSON.stringify(payload || {}),
+    body: JSON.stringify(safePayload),
   });
 
-  return parseApiResponse(response, "No se pudo registrar el apartado.");
+  return parseApiResponse(response, isAbono ? "No se pudo registrar el abono." : "No se pudo registrar el apartado.");
 }
