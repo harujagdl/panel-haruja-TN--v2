@@ -385,9 +385,12 @@
   }
 
   // ---------- enviar ----------
+  let isSubmitting = false;
   async function enviar(){
+    if (isSubmitting) return;
     try{
       showMsg('', '');
+      isSubmitting = true;
       setBtnLoading(true);
 
       const esAbono = document.getElementById('usarFolioExistente').checked;
@@ -408,7 +411,8 @@
 
         generarTicket:$('genTicket').checked,
         usarFolioExistente: esAbono,
-        folio:        $('folio').value.trim()
+        folio:        $('folio').value.trim(),
+        operationId: esAbono ? String(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`).trim() : ''
       };
 
       if (!esAbono) {
@@ -451,7 +455,15 @@
 
       setBtnLoading(false);
 
-      showMsg('Guardado. Folio: <b>'+res.folio+'</b>', 'ok');
+      if (esAbono) {
+        if (res.partial) {
+          showMsg('Abono registrado correctamente, pero no se pudo generar el ticket. Folio: <b>'+res.folio+'</b>', 'ok');
+        } else {
+          showMsg('Abono registrado y ticket generado correctamente. Folio: <b>'+res.folio+'</b>', 'ok');
+        }
+      } else {
+        showMsg('Guardado. Folio: <b>'+res.folio+'</b>', 'ok');
+      }
 
       const r = res.resumen || {};
       openModal({
@@ -470,7 +482,11 @@
     }catch(err){
       setBtnLoading(false);
       const msg = (err && err.message) ? err.message : String(err || 'Error sin respuesta');
-      showMsg('Error: '+msg, 'err');
+      const esAbono = document.getElementById('usarFolioExistente').checked;
+      if (esAbono) showMsg('No se pudo registrar el abono, no se realizaron cambios. Detalle: '+msg, 'err');
+      else showMsg('Error: '+msg, 'err');
+    } finally {
+      isSubmitting = false;
     }
   }
 
