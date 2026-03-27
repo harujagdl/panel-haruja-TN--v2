@@ -3965,12 +3965,27 @@ Errores: 0</pre>
 
         try {
           const configResponse = await fetch("/api/core?action=ventas-config");
-          if (!configResponse.ok) throw new Error("No fue posible cargar configuración de ventas");
+          if (!configResponse.ok) {
+            const configErrorPayload = await safeJson(configResponse);
+            const configError = new Error("No fue posible cargar configuración de ventas");
+            configError.status = configResponse.status;
+            configError.code = configErrorPayload?.error?.code || configErrorPayload?.code;
+            throw configError;
+          }
           const configPayload = await safeJson(configResponse);
           const config = configPayload?.data || null;
           hasConfig = Boolean(config?.store_id);
         } catch (error) {
-          console.error("ventas-config error", error);
+          console.warn("ventas-config skipped:", error);
+
+          if (error?.code === "ADMIN_SESSION_REQUIRED" || error?.status === 401) {
+            salesMiniTotal.textContent = "Configura storeId";
+            salesMiniTopSeller.textContent = "—";
+            salesMiniUnassigned.textContent = "—";
+            return;
+          }
+
+          console.error("ventas-config error real:", error);
         }
 
         if (!hasConfig) {
