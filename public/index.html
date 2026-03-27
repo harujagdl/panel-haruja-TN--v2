@@ -3149,6 +3149,12 @@ Errores: 0</pre>
           return false;
         }
       };
+      function safeStorageRemove(storage, key) {
+        try {
+          if (!storage || !key) return;
+          storage.removeItem(key);
+        } catch (_) {}
+      }
       const warmupAuthFlow = async () => loadGoogleIdentity().catch(() => null);
       const initializeFirestore = () => null;
       const collection = (...parts) => ({ __type: "collection", parts });
