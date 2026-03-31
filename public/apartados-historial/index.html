@@ -133,6 +133,10 @@
         const hasPdf = Boolean(pdfUrl);
         const copyTarget = hasPdf ? pdfUrl : '';
         const abonoUrl = `/apartados?abono=1&folio=${encodeURIComponent(folio)}`;
+        const saldoPendiente = Number(item.saldo || 0);
+        const estado = String(item.estatus || '').trim().toUpperCase();
+        const isLiquidado = estado === 'LIQUIDADO' || saldoPendiente <= 0;
+        const estadoLabel = isLiquidado ? 'LIQUIDADO' : (item.estatus || 'ACTIVO');
 
         const ticketButton = ticketUrl
           ? `<a class="action ticket" href="${ticketUrl}" target="_blank" rel="noopener noreferrer">Ver ticket</a>`
@@ -146,6 +150,9 @@
         const copyButton = copyTarget
           ? `<button class="action copy" data-url="${copyTarget}" onclick="copyLink(this)">Copiar link PDF</button>`
           : `<button class="action copy" type="button" onclick="showGeneratePdfHint('${folio}')">Copiar link PDF</button>`;
+        const abonarButton = isLiquidado
+          ? ''
+          : `<a class="action abonar" href="${abonoUrl}">Abonar</a>`;
 
         return `
           <tr>
@@ -156,8 +163,8 @@
             <td>${formatMoney(item.total)}</td>
             <td>${formatMoney(item.anticipo)}</td>
             <td>${formatMoney(item.saldo)}</td>
-            <td><span class="estado ${estadoClass(item.estatus)}">${item.estatus || 'ACTIVO'}</span></td>
-            <td><div class="actions"><a class="action abonar" href="${abonoUrl}">Abonar</a>${ticketButton}${pdfButton}${regenButton}${copyButton}</div></td>
+            <td><span class="estado ${estadoClass(estadoLabel)}">${estadoLabel}</span></td>
+            <td><div class="actions">${abonarButton}${ticketButton}${pdfButton}${regenButton}${copyButton}</div></td>
           </tr>
         `;
       }).join('');
