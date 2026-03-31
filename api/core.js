@@ -693,7 +693,8 @@ async function handleApartados(req, res) {
 
   if (req.method === 'GET' && op === 'detail') {
     if (!folio) return sendErr(res, 400, 'folio es obligatorio.');
-    const result = await getApartadoDetail(folio);
+    const syncPdf = String(req.query?.syncPdf || req.body?.syncPdf || '').trim() === '1';
+    const result = await getApartadoDetail(folio, { syncPdf });
     if (result?.status) return res.status(result.status).json(result.body);
     return sendOk(res, result);
   }

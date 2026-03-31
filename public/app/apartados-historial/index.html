@@ -88,6 +88,9 @@
     const btnFiltrar = document.getElementById('btn-filtrar');
     let debounceTimer = null;
     let currentController = null;
+    let isLoading = false;
+    let pendingReload = false;
+    let retryAfterTs = 0;
 
     async function generateOfficialPdfViaApi(folio) {
       const resp = await fetch('/api/core?action=apartados&op=pdf-refresh', {
@@ -249,17 +252,39 @@
       return raw;
     }
 
-    async function fetchList() {
+    function scheduleSoftRetryWindow() {
+      const waitMs = 2000 + Math.floor(Math.random() * 2000);
+      retryAfterTs = Date.now() + waitMs;
+      return waitMs;
+    }
+
+    async function fetchList({ force = false } = {}) {
+      if (isLoading) {
+        pendingReload = true;
+        return;
+      }
+      if (!force && retryAfterTs && Date.now() < retryAfterTs) {
+        const secs = Math.max(1, Math.ceil((retryAfterTs - Date.now()) / 1000));
+        statusEl.textContent = `El historial está temporalmente saturado. Espera ${secs}s y reintenta manualmente.`;
+        statusEl.className = 'status err';
+        return;
+      }
+
       if (currentController) currentController.abort();
       currentController = new AbortController();
       const listUrl = buildListUrl();
       try {
+        isLoading = true;
+        pendingReload = false;
+        retryAfterTs = 0;
         statusEl.textContent = 'Cargando apartados...';
         statusEl.className = 'status muted';
         const resp = await fetch(listUrl, { signal: currentController.signal });
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok || !data.ok) {
-          throw new Error(data?.message || 'No se pudo cargar el historial.');
+          const error = new Error(data?.message || 'No se pudo cargar el historial.');
+          error.status = resp.status;
+          throw error;
         }
 
         const body = data.data || {};
@@ -269,15 +294,28 @@
         statusEl.className = 'status muted';
       } catch (error) {
         if (error?.name === 'AbortError') return;
+        if (Number(error?.status) === 429) {
+          const waitMs = scheduleSoftRetryWindow();
+          const secs = Math.ceil(waitMs / 1000);
+          statusEl.textContent = `Demasiadas solicitudes. Intenta nuevamente en ${secs}s con el botón "Filtrar".`;
+          statusEl.className = 'status err';
+          return;
+        }
         statusEl.textContent = mapQuotaError(error.message || 'Error cargando historial.');
         statusEl.className = 'status err';
         rowsEl.innerHTML = '<tr><td colspan="9" class="muted">Sin datos.</td></tr>';
+      } finally {
+        isLoading = false;
+        if (pendingReload) {
+          pendingReload = false;
+          fetchList({ force: true });
+        }
       }
     }
 
     function fetchListDebounced() {
       clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(fetchList, 350);
+      debounceTimer = setTimeout(() => fetchList(), 350);
     }
 
     searchEl.addEventListener('input', fetchListDebounced);
