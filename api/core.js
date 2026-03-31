@@ -89,8 +89,8 @@ const ADMIN_ACTIONS = new Set([
   'ventas-rebuild',
   'tiendanube-webhooks-register',
 ]);
-const APARTADOS_PUBLIC_OPS = new Set(['list', 'next', 'search', 'detail', 'historial', 'create', 'abono']);
-const APARTADOS_ADMIN_OPS = new Set(['update-status', 'missing-pdf', 'pdf-webapp-proxy', 'pdf-refresh', 'pdf-drive-test', 'cancel']);
+const APARTADOS_PUBLIC_OPS = new Set(['list', 'next', 'search', 'detail', 'historial', 'create', 'abono', 'pdf-webapp-proxy']);
+const APARTADOS_ADMIN_OPS = new Set(['update-status', 'missing-pdf', 'pdf-refresh', 'pdf-drive-test', 'cancel']);
 const ADMIN_ALLOWED_METHODS_BY_ACTION = new Map([
   ['prendas-update', new Set(['POST'])],
   ['prendas', new Set(['GET', 'POST'])],

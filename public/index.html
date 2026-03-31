@@ -3950,12 +3950,16 @@ Errores: 0</pre>
         return `Haru ${haru} / Vendedora ${vendedora}`;
       };
 
+      const setSalesMiniNeutralCard = (message) => {
+        salesMiniTotal.textContent = message;
+        salesMiniTopSeller.textContent = "—";
+        salesMiniUnassigned.textContent = "—";
+      };
+
       const loadSalesMiniDashboard = async () => {
         if (!salesMiniTotal || !salesMiniTopSeller || !salesMiniUnassigned) return;
         if (isEmbeddedApp) {
-          salesMiniTotal.textContent = "Modo embed";
-          salesMiniTopSeller.textContent = "—";
-          salesMiniUnassigned.textContent = "—";
+          setSalesMiniNeutralCard("Modo embed");
           debugLog("sales mini omitido en embed");
           return;
         }
@@ -3966,7 +3970,12 @@ Errores: 0</pre>
         try {
           const configResponse = await fetch("/api/core?action=ventas-config");
           if (!configResponse.ok) {
-            const configErrorPayload = await safeJson(configResponse);
+            let configErrorPayload = {};
+            try {
+              configErrorPayload = await safeJson(configResponse);
+            } catch (_ignored) {
+              configErrorPayload = {};
+            }
             const configError = new Error("No fue posible cargar configuración de ventas");
             configError.status = configResponse.status;
             configError.code = configErrorPayload?.error?.code || configErrorPayload?.code;
@@ -3976,12 +3985,9 @@ Errores: 0</pre>
           const config = configPayload?.data || null;
           hasConfig = Boolean(config?.store_id);
         } catch (error) {
-          console.warn("ventas-config skipped:", error);
-
-          if (error?.code === "ADMIN_SESSION_REQUIRED" || error?.status === 401) {
-            salesMiniTotal.textContent = "Configura storeId";
-            salesMiniTopSeller.textContent = "—";
-            salesMiniUnassigned.textContent = "—";
+          const isNonAdminExpected = error?.code === "ADMIN_SESSION_REQUIRED" || error?.status === 401 || error?.status === 403;
+          if (isNonAdminExpected) {
+            setSalesMiniNeutralCard("Inicia sesión para ver resumen");
             return;
           }
 
@@ -3989,9 +3995,7 @@ Errores: 0</pre>
         }
 
         if (!hasConfig) {
-          salesMiniTotal.textContent = "Configura storeId";
-          salesMiniTopSeller.textContent = "—";
-          salesMiniUnassigned.textContent = "—";
+          setSalesMiniNeutralCard("Configura storeId");
           return;
         }
 
