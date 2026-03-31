@@ -3964,49 +3964,16 @@ Errores: 0</pre>
           return;
         }
 
-        let hasConfig = false;
         let month = resolveSalesContext().month;
-
-        try {
-          const configResponse = await fetch("/api/core?action=ventas-config");
-          if (!configResponse.ok) {
-            let configErrorPayload = {};
-            try {
-              configErrorPayload = await safeJson(configResponse);
-            } catch (_ignored) {
-              configErrorPayload = {};
-            }
-            const configError = new Error("No fue posible cargar configuración de ventas");
-            configError.status = configResponse.status;
-            configError.code = configErrorPayload?.error?.code || configErrorPayload?.code;
-            throw configError;
-          }
-          const configPayload = await safeJson(configResponse);
-          const config = configPayload?.data || null;
-          hasConfig = Boolean(config?.store_id);
-        } catch (error) {
-          const isNonAdminExpected = error?.code === "ADMIN_SESSION_REQUIRED" || error?.status === 401 || error?.status === 403;
-          if (isNonAdminExpected) {
-            setSalesMiniNeutralCard("Inicia sesión para ver resumen");
-            return;
-          }
-
-          console.error("ventas-config error real:", error);
-        }
-
-        if (!hasConfig) {
-          setSalesMiniNeutralCard("Configura storeId");
-          return;
-        }
 
         if (!isValidMonthKey(month)) month = new Date().toISOString().slice(0, 7);
 
         try {
           const url = new URL("/api/core", window.location.origin);
-          url.searchParams.set("action", "ventas-resumen");
+          url.searchParams.set("action", "ventas-mini-public");
           url.searchParams.set("month", month);
           const response = await fetch(url.toString());
-          if (!response.ok) throw new Error("No fue posible cargar resumen de ventas");
+          if (!response.ok) throw new Error("No fue posible cargar resumen mini de ventas");
           const payload = await safeJson(response);
           const summary = payload?.data || {};
 

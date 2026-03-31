@@ -151,9 +151,9 @@
         const copyTarget = hasPdf ? pdfUrl : '';
         const abonoUrl = `/apartados?abono=1&folio=${encodeURIComponent(folio)}`;
         const saldoPendiente = Number(item.saldo || 0);
-        const estado = String(item.estatus || '').trim().toUpperCase();
+        const estado = String(item.status || item.estatus || '').trim().toUpperCase();
         const isLiquidado = estado === 'LIQUIDADO' || saldoPendiente <= 0;
-        const estadoLabel = isLiquidado ? 'LIQUIDADO' : (item.estatus || 'ACTIVO');
+        const estadoLabel = isLiquidado ? 'LIQUIDADO' : (item.status || item.estatus || 'ACTIVO');
 
         const ticketButton = ticketUrl
           ? `<a class="action ticket" href="${ticketUrl}" target="_blank" rel="noopener noreferrer">Ver ticket</a>`

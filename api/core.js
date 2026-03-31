@@ -10,6 +10,7 @@ import {
   getVentasComisiones,
   getVentasConfig,
   getVentasDetalle,
+  getVentasMiniPublic,
   getVentasResumen,
   getVentasSinAsignar,
   listPrendas,
@@ -69,6 +70,7 @@ const PUBLIC_ACTIONS = new Set([
   'prendas-generar-codigo',
   'prendas-create',
   'apartados',
+  'ventas-mini-public',
   'admin-session',
 ]);
 const ADMIN_ACTIONS = new Set([
@@ -115,6 +117,7 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['prendas-list', new Set(['GET'])],
   ['prendas-generar-codigo', new Set(['POST'])],
   ['prendas-create', new Set(['POST'])],
+  ['ventas-mini-public', new Set(['GET'])],
   ['admin-session', new Set(['GET', 'POST'])],
   ['apartados', new Set(['GET', 'POST'])],
 ]);
@@ -798,6 +801,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'ventas-resumen' || action === 'resumen') return sendOk(res, await getVentasResumen(req.query?.month));
+    if (action === 'ventas-mini-public') return sendOk(res, await getVentasMiniPublic(req.query?.month));
     if (action === 'ventas-detalle' || action === 'detalle') return sendOk(res, await getVentasDetalle(req.query?.month, req.query?.q || req.query?.search));
     if (action === 'ventas-webhook-status') return sendOk(res, await getLatestWebhookEvent());
     if (action === 'catalogos') return sendOk(res, await getCatalogosCached());
