@@ -117,7 +117,7 @@
 
     function isLiquidado(item) {
       const saldoPendiente = Number(item?.saldo || 0);
-      const estado = String(item?.status || item?.estatus || '').trim().toUpperCase();
+      const estado = String(item?.status || item?.estatus || item?.estado || '').trim().toUpperCase();
       return estado === 'LIQUIDADO' || saldoPendiente <= 0;
     }
 
