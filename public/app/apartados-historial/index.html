@@ -89,7 +89,6 @@
     let debounceTimer = null;
     let currentController = null;
     let isLoading = false;
-    let pendingReload = false;
     let retryAfterTs = 0;
 
     async function generateOfficialPdfViaApi(folio) {
@@ -260,7 +259,6 @@
 
     async function fetchList({ force = false } = {}) {
       if (isLoading) {
-        pendingReload = true;
         return;
       }
       if (!force && retryAfterTs && Date.now() < retryAfterTs) {
@@ -275,8 +273,8 @@
       const listUrl = buildListUrl();
       try {
         isLoading = true;
-        pendingReload = false;
         retryAfterTs = 0;
+        btnFiltrar.disabled = true;
         statusEl.textContent = 'Cargando apartados...';
         statusEl.className = 'status muted';
         const resp = await fetch(listUrl, { signal: currentController.signal });
@@ -306,10 +304,7 @@
         rowsEl.innerHTML = '<tr><td colspan="9" class="muted">Sin datos.</td></tr>';
       } finally {
         isLoading = false;
-        if (pendingReload) {
-          pendingReload = false;
-          fetchList({ force: true });
-        }
+        btnFiltrar.disabled = false;
       }
     }
 
@@ -318,10 +313,13 @@
       debounceTimer = setTimeout(() => fetchList(), 350);
     }
 
-    searchEl.addEventListener('input', fetchListDebounced);
-    estadoEl.addEventListener('change', fetchList);
-    btnFiltrar.addEventListener('click', fetchList);
-    fetchList();
+    if (!window.__harujaApartadosHistorialInit) {
+      window.__harujaApartadosHistorialInit = true;
+      searchEl.addEventListener('input', fetchListDebounced);
+      estadoEl.addEventListener('change', fetchList);
+      btnFiltrar.addEventListener('click', fetchList);
+      fetchList();
+    }
   </script>
 </body>
 </html>
