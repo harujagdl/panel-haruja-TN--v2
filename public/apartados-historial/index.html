@@ -115,6 +115,12 @@
       return 'activo';
     }
 
+    function isLiquidado(item) {
+      const saldoPendiente = Number(item?.saldo || 0);
+      const estado = String(item?.status || item?.estatus || '').trim().toUpperCase();
+      return estado === 'LIQUIDADO' || saldoPendiente <= 0;
+    }
+
     function ticketUrlFor(item) {
       const ticketUrl = String(item.ticketUrl || '').trim();
       if (ticketUrl) return ticketUrl;
@@ -135,10 +141,8 @@
         const hasPdf = Boolean(pdfUrl);
         const copyTarget = hasPdf ? pdfUrl : '';
         const abonoUrl = `/apartados?abono=1&folio=${encodeURIComponent(folio)}`;
-        const saldoPendiente = Number(item.saldo || 0);
-        const estado = String(item.status || item.estatus || '').trim().toUpperCase();
-        const isLiquidado = estado === 'LIQUIDADO' || saldoPendiente <= 0;
-        const estadoLabel = isLiquidado ? 'LIQUIDADO' : (item.status || item.estatus || 'ACTIVO');
+        const isApartadoLiquidado = isLiquidado(item);
+        const estadoLabel = isApartadoLiquidado ? 'LIQUIDADO' : (item.status || item.estatus || 'ACTIVO');
 
         const ticketButton = ticketUrl
           ? `<a class="action ticket" href="${ticketUrl}" target="_blank" rel="noopener noreferrer">Ver ticket</a>`
@@ -152,7 +156,7 @@
         const copyButton = copyTarget
           ? `<button class="action copy" data-url="${copyTarget}" onclick="copyLink(this)">Copiar link PDF</button>`
           : `<button class="action copy" type="button" onclick="showGeneratePdfHint('${folio}')">Copiar link PDF</button>`;
-        const abonarButton = isLiquidado
+        const abonarButton = isApartadoLiquidado
           ? ''
           : `<a class="action abonar" href="${abonoUrl}">Abonar</a>`;
 
