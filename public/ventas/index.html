@@ -232,6 +232,7 @@
 
     const paymentStatusEs = { paid: "Pagado", pending: "Pendiente", authorized: "Autorizado", cancelled: "Cancelado", refunded: "Reembolsado", voided: "Anulado" };
     const fulfillmentStatusEs = { delivered: "Entregado", unpacked: "No preparado", packed: "Empacado", shipped: "Enviado", unfulfilled: "No surtido", fulfilled: "Surtido" };
+    const DEBUG_ASSIGNMENTS = new URLSearchParams(location.search).get('debugAssignments') === '1';
 
     const normalizeSeller = (value = "") => {
       const raw = String(value).trim().toLowerCase();
@@ -243,7 +244,7 @@
     const sellerSelectHtml = (selected = "") => {
       const currentSeller = normalizeSeller(selected);
       return `
-        <select data-seller>
+        <select data-seller data-current-seller="${currentSeller || '__unassigned__'}">
           <option value="__unassigned__" ${!currentSeller ? "selected" : ""}>Sin asignar</option>
           <option value="Haru" ${currentSeller === "Haru" ? "selected" : ""}>Haru</option>
           <option value="Vendedora" ${currentSeller === "Vendedora" ? "selected" : ""}>Vendedora</option>
@@ -362,11 +363,14 @@
     const asignarVendedora = async (orderId, seller) => {
       const normalized = normalizeSeller(seller);
       if (!normalized) throw new Error('Selecciona una vendedora válida (Haru o Vendedora)');
-      await safeJson(await fetch('/api/core?action=venta-asignar-vendedora', {
+      const body = { order_id: orderId, seller: normalized, source: 'ventas_html' };
+      if (DEBUG_ASSIGNMENTS) console.debug('[ventas:assign:request]', body);
+      const response = await safeJson(await fetch('/api/core?action=venta-asignar-vendedora', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: orderId, seller: normalized }),
+        body: JSON.stringify(body),
       }), 'No se pudo asignar vendedora');
+      if (DEBUG_ASSIGNMENTS) console.debug('[ventas:assign:response]', response);
       await loadVentasFull();
     };
 
@@ -459,8 +463,25 @@
       const row = ev.target.closest('tr');
       const orderId = row?.getAttribute('data-order-id') || '';
       const seller = ev.target.value;
-      if (!orderId || seller === '__unassigned__') return;
-      asignarVendedora(orderId, seller).catch((e) => setStatus(e.message || String(e), 'error'));
+      const previousSeller = ev.target.getAttribute('data-current-seller') || '__unassigned__';
+      if (!orderId || seller === '__unassigned__') {
+        ev.target.value = previousSeller;
+        setStatus('Selecciona Haru o Vendedora para guardar la asignación.', 'error');
+        return;
+      }
+      ev.target.disabled = true;
+      asignarVendedora(orderId, seller)
+        .then(() => {
+          ev.target.setAttribute('data-current-seller', seller);
+          setStatus(`Asignación guardada para orden ${orderId}.`);
+        })
+        .catch((e) => {
+          ev.target.value = previousSeller;
+          setStatus(`Error al guardar asignación (${orderId}): ${e.message || String(e)}`, 'error');
+        })
+        .finally(() => {
+          ev.target.disabled = false;
+        });
     });
 
     monthInput.value = getMexicoMonthKey(new Date());
