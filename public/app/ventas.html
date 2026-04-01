@@ -117,7 +117,20 @@
     };
 
     const formatMoney = (value) => moneyMx.format(Number(value) || 0);
-    const formatDate = (value) => value ? new Date(value).toLocaleDateString("es-MX") : "—";
+    const getMexicoMonthKey = (input) => {
+      const date = new Date(input || Date.now());
+      if (Number.isNaN(date.getTime())) return '';
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Mexico_City',
+        year: 'numeric',
+        month: '2-digit',
+      }).formatToParts(date);
+      const year = Number(parts.find((part) => part.type === 'year')?.value || 0);
+      const month = Number(parts.find((part) => part.type === 'month')?.value || 0);
+      if (!year || !month) return '';
+      return `${year}-${String(month).padStart(2, '0')}`;
+    };
+    const formatDate = (value) => value ? new Date(value).toLocaleDateString("es-MX", { timeZone: 'America/Mexico_City' }) : "—";
     const formatMonth = (value) => String(value || "").slice(0, 7);
 
     const normalizeSeller = (value = "") => {
@@ -245,7 +258,7 @@
       asignarVendedora(orderId, seller).catch((e) => setStatus(e.message || String(e), "error"));
     });
 
-    monthInput.value = new Date().toISOString().slice(0, 7);
+    monthInput.value = getMexicoMonthKey(new Date());
     (async () => {
       try {
         await loadVentasConfig();
