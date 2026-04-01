@@ -15,6 +15,7 @@ import {
   getVentasSinAsignar,
   listPrendas,
   rebuildVentasResumen,
+  repairVentasMonthKeys,
   saveVentasConfig,
   registerTiendanubeWebhooks,
   updateVentasComisiones,
@@ -89,6 +90,7 @@ const ADMIN_ACTIONS = new Set([
   'assign-seller',
   'venta-asignar-vendedora',
   'ventas-rebuild',
+  'ventas-repair-month-keys',
   'tiendanube-webhooks-register',
 ]);
 const APARTADOS_PUBLIC_OPS = new Set(['list', 'next', 'search', 'detail', 'historial', 'create', 'abono', 'pdf-webapp-proxy']);
@@ -109,6 +111,7 @@ const ADMIN_ALLOWED_METHODS_BY_ACTION = new Map([
   ['assign-seller', new Set(['POST'])],
   ['venta-asignar-vendedora', new Set(['POST'])],
   ['ventas-rebuild', new Set(['POST'])],
+  ['ventas-repair-month-keys', new Set(['POST'])],
   ['tiendanube-webhooks-register', new Set(['POST'])],
 ]);
 const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
@@ -854,6 +857,7 @@ export default async function handler(req, res) {
     if (action === 'ventas-sin-asignar') return sendOk(res, await getVentasSinAsignar(req.query?.month));
     if (action === 'assign-seller' || action === 'venta-asignar-vendedora') return sendOk(res, await assignVentaSeller({ ...(req.body || {}), traceId }));
     if (action === 'ventas-rebuild') return sendOk(res, await rebuildVentasResumen(req.body?.month || req.query?.month));
+    if (action === 'ventas-repair-month-keys') return sendOk(res, await repairVentasMonthKeys({ dryRun: String(req.body?.dryRun ?? req.query?.dryRun ?? 'true').toLowerCase() !== 'false' }));
     if (action === 'tiendanube-webhooks-register') return sendOk(res, await registerTiendanubeWebhooks(getBaseUrl(req)));
 
     return sendErr(res, 400, 'Acción inválida para /api/core.');
