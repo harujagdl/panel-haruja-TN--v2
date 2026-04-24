@@ -42,6 +42,7 @@ import {
   getCatalogoIABaseProducts,
   getCatalogoIADraft,
   listCatalogoIADrafts,
+  uploadCatalogoIAImage,
   updateCatalogoIADraft,
 } from '../lib/api/catalogoIA.js';
 import { AdminSessionConfigError, getAdminSessionSecret } from '../lib/security/adminSessionConfig.js';
@@ -90,6 +91,7 @@ const PUBLIC_ACTIONS = new Set([
   'catalogo-ia-draft-create',
   'catalogo-ia-draft-update',
   'catalogo-ia-draft-archive',
+  'catalogo-ia-image-upload',
 ]);
 const ADMIN_ACTIONS = new Set([
   'prendas-update',
@@ -147,6 +149,7 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['catalogo-ia-draft-create', new Set(['POST'])],
   ['catalogo-ia-draft-update', new Set(['POST'])],
   ['catalogo-ia-draft-archive', new Set(['POST'])],
+  ['catalogo-ia-image-upload', new Set(['POST'])],
 ]);
 const PUBLIC_PRENDA_FIELDS = [
   'Orden',
@@ -934,6 +937,7 @@ export default async function handler(req, res) {
     if (action === 'catalogo-ia-draft-create') return sendOk(res, await createCatalogoIADraft(req.body || {}, readAdminSession(req) || {}));
     if (action === 'catalogo-ia-draft-update') return sendOk(res, await updateCatalogoIADraft(req.body?.id || req.query?.id || '', req.body?.payload || req.body || {}, readAdminSession(req) || {}));
     if (action === 'catalogo-ia-draft-archive') return sendOk(res, await archiveCatalogoIADraft(req.body?.id || req.query?.id || '', readAdminSession(req) || {}));
+    if (action === 'catalogo-ia-image-upload') return sendOk(res, await uploadCatalogoIAImage(req.body || {}, readAdminSession(req) || {}));
 
     if (action === 'ventas-comisiones') {
       if (req.method === 'GET') return sendOk(res, await getVentasComisiones(req.query || {}, req));
