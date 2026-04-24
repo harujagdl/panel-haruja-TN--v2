@@ -2830,19 +2830,34 @@ body.haruja-col-resizing{
           </section>
         </section>
 
-        <section id="view-catalogo-ia" class="view">
+                <section id="view-catalogo-ia" class="view">
           <section class="section" id="catalogoIAView">
             <button type="button" class="secondary js-go-panel" data-go-panel="1">← Volver al panel</button>
             <h2>Catálogo IA</h2>
-            <p>Convierte fotos editadas en fichas listas para Tiendanube.</p>
+            <p>Convierte fotos editadas y datos base en fichas listas para Tiendanube.</p>
 
             <div class="catalogo-ia-wrap">
               <div class="catalogo-ia-summary">
-                <article class="catalogo-ia-stat"><small>Productos pendientes</small><strong>0</strong></article>
-                <article class="catalogo-ia-stat"><small>Fichas generadas</small><strong>0</strong></article>
-                <article class="catalogo-ia-stat"><small>Listos para CSV</small><strong>0</strong></article>
-                <article class="catalogo-ia-stat"><small>Requieren revisión</small><strong>0</strong></article>
+                <article class="catalogo-ia-stat"><small>Productos pendientes</small><strong id="catalogoIAMetricPendientes">0</strong></article>
+                <article class="catalogo-ia-stat"><small>Fichas generadas</small><strong id="catalogoIAMetricGeneradas">0</strong></article>
+                <article class="catalogo-ia-stat"><small>Listos para CSV</small><strong id="catalogoIAMetricCSV">0</strong></article>
+                <article class="catalogo-ia-stat"><small>Requieren revisión</small><strong id="catalogoIAMetricRevision">0</strong></article>
               </div>
+
+              <article class="catalogo-ia-card">
+                <h3 style="margin-top:0;">Buscar producto base</h3>
+                <div class="catalogo-ia-section-grid">
+                  <label class="full">Buscar por SKU / descripción <input type="text" id="catalogoIASearchInput" placeholder="Ej. HARUJA-123 o vestido" /></label>
+                  <label>Categoría
+                    <select id="catalogoIACategoriaFilter"><option value="">Todas</option></select>
+                  </label>
+                  <label>Status
+                    <select id="catalogoIAStatusFilter"><option value="">Todos</option></select>
+                  </label>
+                  <div><button type="button" class="btn btn-primary" id="catalogoIABaseSearchBtn">Buscar en base</button></div>
+                </div>
+                <div id="catalogoIABaseResults" class="catalogo-ia-table-wrap"></div>
+              </article>
 
               <div class="catalogo-ia-grid">
                 <article class="catalogo-ia-card">
@@ -2850,7 +2865,7 @@ body.haruja-col-resizing{
                   <p class="muted">Sube una foto editada del producto para preparar su ficha de Tiendanube.</p>
                   <div class="catalogo-ia-dropzone" id="catalogoIADropzone">
                     <img id="catalogoIAPreview" class="catalogo-ia-preview" alt="Preview de imagen seleccionada" />
-                    <small class="muted">Formatos compatibles: JPG, PNG, WEBP</small>
+                    <small class="muted">Formatos compatibles: JPG, JPEG, PNG, WEBP</small>
                     <div>
                       <button type="button" class="btn btn-primary" id="catalogoIASelectImageBtn">Seleccionar imagen</button>
                       <input id="catalogoIAImageInput" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" style="display:none;" />
@@ -2862,13 +2877,10 @@ body.haruja-col-resizing{
                   <h3 style="margin-top:0;">Ficha generada</h3>
                   <div class="catalogo-ia-badges">
                     <span class="catalogo-ia-badge is-active" id="catalogoIAStatusBadge">Pendiente imagen</span>
-                    <span class="catalogo-ia-badge">Pendiente IA</span>
-                    <span class="catalogo-ia-badge">En revisión</span>
-                    <span class="catalogo-ia-badge">Listo para CSV</span>
                   </div>
                   <div class="catalogo-ia-form-grid">
                     <section class="catalogo-ia-section">
-                      <h4>A) Información principal</h4>
+                      <h4>1) Información principal</h4>
                       <div class="catalogo-ia-section-grid">
                         <label>Identificador de URL <input type="text" id="catalogoIAUrlHandle" placeholder="producto-demo" /></label>
                         <label>Nombre <input type="text" id="catalogoIANombre" /></label>
@@ -2879,7 +2891,7 @@ body.haruja-col-resizing{
                     </section>
 
                     <section class="catalogo-ia-section">
-                      <h4>B) Variantes</h4>
+                      <h4>2) Variantes</h4>
                       <div class="catalogo-ia-section-grid">
                         <label>Nombre de propiedad 1 <input type="text" id="catalogoIAProp1Nombre" /></label>
                         <label>Valor de propiedad 1 <input type="text" id="catalogoIAProp1Valor" /></label>
@@ -2891,7 +2903,7 @@ body.haruja-col-resizing{
                     </section>
 
                     <section class="catalogo-ia-section">
-                      <h4>C) Precio e inventario</h4>
+                      <h4>3) Precio e inventario</h4>
                       <div class="catalogo-ia-section-grid">
                         <label>Precio <input type="number" id="catalogoIAPrecio" min="0" step="0.01" /></label>
                         <label>Precio promocional <input type="number" id="catalogoIAPrecioPromocional" min="0" step="0.01" /></label>
@@ -2902,7 +2914,7 @@ body.haruja-col-resizing{
                     </section>
 
                     <section class="catalogo-ia-section">
-                      <h4>D) Configuración Tiendanube</h4>
+                      <h4>4) Configuración Tiendanube</h4>
                       <div class="catalogo-ia-section-grid">
                         <label>Mostrar en tienda <input type="text" id="catalogoIAMostrarTienda" /></label>
                         <label>Envío sin cargo <input type="text" id="catalogoIAEnvioSinCargo" /></label>
@@ -2911,12 +2923,22 @@ body.haruja-col-resizing{
                     </section>
 
                     <section class="catalogo-ia-section">
-                      <h4>E) Contenido IA / SEO</h4>
+                      <h4>5) Contenido IA / SEO</h4>
                       <div class="catalogo-ia-section-grid">
                         <label class="full">Descripción <textarea id="catalogoIADescripcion" rows="3"></textarea></label>
                         <label class="full">Tags <input type="text" id="catalogoIATags" placeholder="vestido, verano, lino" /></label>
                         <label>Título para SEO <input type="text" id="catalogoIASeoTitulo" /></label>
                         <label>Descripción para SEO <textarea id="catalogoIASeoDescripcion" rows="2"></textarea></label>
+                      </div>
+                    </section>
+
+                    <section class="catalogo-ia-section">
+                      <h4>6) Control interno</h4>
+                      <div class="catalogo-ia-section-grid">
+                        <label>Estado <select id="catalogoIAEstado"><option>Pendiente imagen</option><option>Pendiente IA</option><option>En revisión</option><option>Listo para CSV</option><option>Archivado</option></select></label>
+                        <label>Estado IA <select id="catalogoIAEstadoIA"><option>Sin generar</option><option>Generado</option><option>Requiere revisión</option></select></label>
+                        <label>Estado CSV <select id="catalogoIAEstadoCSV"><option>No listo</option><option>Listo</option><option>Exportado</option></select></label>
+                        <label class="full">Notas internas <textarea id="catalogoIANotasInternas" rows="2"></textarea></label>
                       </div>
                     </section>
                   </div>
@@ -2925,39 +2947,23 @@ body.haruja-col-resizing{
                     <button type="button" class="btn secondary" id="catalogoIASaveDraftBtn">Guardar borrador</button>
                     <button type="button" class="btn secondary" id="catalogoIAReviewBtn">Marcar como revisado</button>
                     <button type="button" class="btn secondary" id="catalogoIAExportBtn">Exportar CSV</button>
+                    <button type="button" class="btn secondary" id="catalogoIAResetBtn">Limpiar</button>
                   </div>
                   <p id="catalogoIAMessage" class="catalogo-ia-message hidden" role="status" aria-live="polite"></p>
                 </article>
               </div>
 
               <article class="catalogo-ia-card">
-                <h3 style="margin-top:0;">Productos del catálogo</h3>
+                <h3 style="margin-top:0;">Borradores guardados</h3>
                 <div class="catalogo-ia-table-wrap">
                   <table class="table">
                     <thead>
                       <tr>
-                        <th>Foto</th><th>SKU</th><th>Nombre</th><th>Categoría</th><th>Talla</th><th>Color</th><th>Precio</th><th>Stock</th><th>Estado</th><th>SEO</th><th>CSV</th><th>Acciones</th>
+                        <th>Foto</th><th>SKU</th><th>Nombre</th><th>Categoría</th><th>Talla</th><th>Color</th><th>Precio</th><th>Stock</th><th>Estado</th><th>SEO</th><th>CSV</th><th>Última edición</th><th>Acciones</th>
                       </tr>
                     </thead>
                     <tbody id="catalogoIATableBody">
-                      <tr>
-                        <td><span class="catalogo-ia-thumb" aria-hidden="true">🛍️</span></td>
-                        <td>HARUJA-DEMO-001</td>
-                        <td>Producto de ejemplo</td>
-                        <td>Vestidos</td>
-                        <td>CH</td>
-                        <td>Negro</td>
-                        <td>$499.00</td>
-                        <td>8</td>
-                        <td><span class="catalogo-ia-badge">Pendiente IA</span></td>
-                        <td>Sin generar</td>
-                        <td>No listo</td>
-                        <td>
-                          <button type="button" class="secondary small">Ver</button>
-                          <button type="button" class="secondary small">Editar</button>
-                          <button type="button" class="secondary small">Eliminar</button>
-                        </td>
-                      </tr>
+                      <tr><td colspan="13" class="muted">Sin borradores guardados.</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -2966,7 +2972,7 @@ body.haruja-col-resizing{
           </section>
         </section>
 
-        <section id="view-registro" class="view">
+<section id="view-registro" class="view">
         <section class="section" id="registro">
           <button type="button" id="btnBackRegistro" class="secondary js-go-panel" data-go-panel="1">← Volver al panel</button>
           <h2>Registro de nuevas prendas</h2>
@@ -3677,290 +3683,99 @@ Errores: 0</pre>
       let dbInited = false;
       let catalogoIAInited = false;
       let catalogoIAObjectUrl = null;
+      let catalogoIACurrentDraftId = "";
+      let catalogoIADrafts = [];
+      let catalogoIASelectedImageName = "";
+      const CATALOGO_IA_SPREADSHEET_ID = "16pqujWAAsrlmivy2YzsMizQOjms8MuqDWJVNUGESNv0";
+      const BASE_PANEL_SPREADSHEET_ID = "1sGWRwLiyZD4gznruHvhgZ92KLZcaEjWww3zvypn7iA0";
       const TIENDANUBE_CSV_COLUMNS = [
-        "Identificador de URL",
-        "Nombre",
-        "Categorías",
-        "Nombre de propiedad 1",
-        "Valor de propiedad 1",
-        "Nombre de propiedad 2",
-        "Valor de propiedad 2",
-        "Nombre de propiedad 3",
-        "Valor de propiedad 3",
-        "Precio",
-        "Precio promocional",
-        "Stock",
-        "SKU",
-        "Código de barras",
-        "Mostrar en tienda",
-        "Envío sin cargo",
-        "Descripción",
-        "Tags",
-        "Título para SEO",
-        "Descripción para SEO",
-        "Marca",
-        "Producto Físico",
-        "Costo"
+        "Identificador de URL", "Nombre", "Categorías", "Nombre de propiedad 1", "Valor de propiedad 1",
+        "Nombre de propiedad 2", "Valor de propiedad 2", "Nombre de propiedad 3", "Valor de propiedad 3", "Precio",
+        "Precio promocional", "Stock", "SKU", "Código de barras", "Mostrar en tienda", "Envío sin cargo",
+        "Descripción", "Tags", "Título para SEO", "Descripción para SEO", "Marca", "Producto Físico", "Costo"
       ];
+      const CATALOGO_IA_INTERNAL_COLUMNS = [
+        "ID interno", "SKU base", "Foto principal URL", "Foto principal ID", "Estado", "Estado IA", "Estado CSV", "Fuente",
+        "Fecha creación", "Última edición", "Creado por", "Editado por", "Notas internas", "Archivado"
+      ];
+      const CATALOGO_IA_COLUMNS = [...CATALOGO_IA_INTERNAL_COLUMNS, ...TIENDANUBE_CSV_COLUMNS];
       const DEFAULT_CATALOGO_IA_ROW = Object.freeze({
-        "Identificador de URL": "",
-        "Nombre": "",
-        "Categorías": "",
-        "Nombre de propiedad 1": "Talla",
-        "Valor de propiedad 1": "",
-        "Nombre de propiedad 2": "Color",
-        "Valor de propiedad 2": "",
-        "Nombre de propiedad 3": "",
-        "Valor de propiedad 3": "",
-        "Precio": "",
-        "Precio promocional": "",
-        "Stock": "",
-        "SKU": "",
-        "Código de barras": "",
-        "Mostrar en tienda": "SÍ",
-        "Envío sin cargo": "NO",
-        "Descripción": "",
-        "Tags": "",
-        "Título para SEO": "",
-        "Descripción para SEO": "",
-        "Marca": "HarujaGdl",
-        "Producto Físico": "SÍ",
-        "Costo": ""
+        "ID interno": "", "SKU base": "", "Foto principal URL": "", "Foto principal ID": "", "Estado": "Pendiente imagen",
+        "Estado IA": "Sin generar", "Estado CSV": "No listo", "Fuente": "Base Panel Haruja TN v2", "Fecha creación": "",
+        "Última edición": "", "Creado por": "", "Editado por": "", "Notas internas": "", "Archivado": "NO",
+        "Identificador de URL": "", "Nombre": "", "Categorías": "", "Nombre de propiedad 1": "Talla", "Valor de propiedad 1": "",
+        "Nombre de propiedad 2": "Color", "Valor de propiedad 2": "", "Nombre de propiedad 3": "", "Valor de propiedad 3": "",
+        "Precio": "", "Precio promocional": "", "Stock": "", "SKU": "", "Código de barras": "", "Mostrar en tienda": "SÍ",
+        "Envío sin cargo": "NO", "Descripción": "", "Tags": "", "Título para SEO": "", "Descripción para SEO": "",
+        "Marca": "HarujaGdl", "Producto Físico": "SÍ", "Costo": ""
       });
       const CATALOGO_IA_FIELD_IDS = {
-        "Identificador de URL": "catalogoIAUrlHandle",
-        "Nombre": "catalogoIANombre",
-        "Categorías": "catalogoIACategorias",
-        "Nombre de propiedad 1": "catalogoIAProp1Nombre",
-        "Valor de propiedad 1": "catalogoIAProp1Valor",
-        "Nombre de propiedad 2": "catalogoIAProp2Nombre",
-        "Valor de propiedad 2": "catalogoIAProp2Valor",
-        "Nombre de propiedad 3": "catalogoIAProp3Nombre",
-        "Valor de propiedad 3": "catalogoIAProp3Valor",
-        "Precio": "catalogoIAPrecio",
-        "Precio promocional": "catalogoIAPrecioPromocional",
-        "Stock": "catalogoIAStock",
-        "SKU": "catalogoIASKU",
-        "Código de barras": "catalogoIACodigoBarras",
-        "Mostrar en tienda": "catalogoIAMostrarTienda",
-        "Envío sin cargo": "catalogoIAEnvioSinCargo",
-        "Descripción": "catalogoIADescripcion",
-        "Tags": "catalogoIATags",
-        "Título para SEO": "catalogoIASeoTitulo",
-        "Descripción para SEO": "catalogoIASeoDescripcion",
-        "Marca": "catalogoIAMarca",
-        "Producto Físico": "catalogoIAProductoFisico",
-        "Costo": "catalogoIACosto"
+        "Identificador de URL": "catalogoIAUrlHandle", "Nombre": "catalogoIANombre", "Categorías": "catalogoIACategorias", "SKU": "catalogoIASKU",
+        "Nombre de propiedad 1": "catalogoIAProp1Nombre", "Valor de propiedad 1": "catalogoIAProp1Valor",
+        "Nombre de propiedad 2": "catalogoIAProp2Nombre", "Valor de propiedad 2": "catalogoIAProp2Valor",
+        "Nombre de propiedad 3": "catalogoIAProp3Nombre", "Valor de propiedad 3": "catalogoIAProp3Valor", "Precio": "catalogoIAPrecio",
+        "Precio promocional": "catalogoIAPrecioPromocional", "Stock": "catalogoIAStock", "Código de barras": "catalogoIACodigoBarras",
+        "Mostrar en tienda": "catalogoIAMostrarTienda", "Envío sin cargo": "catalogoIAEnvioSinCargo", "Descripción": "catalogoIADescripcion",
+        "Tags": "catalogoIATags", "Título para SEO": "catalogoIASeoTitulo", "Descripción para SEO": "catalogoIASeoDescripcion",
+        "Marca": "catalogoIAMarca", "Producto Físico": "catalogoIAProductoFisico", "Costo": "catalogoIACosto",
+        "Estado": "catalogoIAEstado", "Estado IA": "catalogoIAEstadoIA", "Estado CSV": "catalogoIAEstadoCSV", "Notas internas": "catalogoIANotasInternas"
       };
-      if ((window.location.hash || "").startsWith("#/panel")) {
-        clearLastToolRouteState();
-      }
-      let currentView = getViewFromUrl();
 
-      function setView(name) {
-        const nextView = VIEWS.includes(name) ? name : "panel";
-        currentView = nextView;
-        VIEWS.forEach((viewName) => {
-          const view = document.getElementById(`view-${viewName}`);
-          if (!view) return;
-          view.classList.toggle("is-active", viewName === nextView);
+      const normalizeCatalogoIAText = (value) => String(value ?? "").trim();
+      const normalizeCatalogoIALower = (value) => normalizeCatalogoIAText(value).toLowerCase();
+      const slugifyCatalogoIA = (value = "") => normalizeCatalogoIAText(value)
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/ñ/gi, "n")
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, " ")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+
+      const callCatalogoIAApi = async ({ action, method = "GET", payload = null, query = {} } = {}) => {
+        const params = new URLSearchParams({ action, ...query });
+        const response = await fetch(`/api/core?${params.toString()}`, {
+          method,
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: payload && method !== "GET" ? JSON.stringify(payload) : undefined
         });
-
-        if (nextView === "registro") initRegistroView();
-        if (nextView === "codigos") initDbView();
-        if (nextView === "catalogo-ia") {
-          initCatalogoIA();
-          hydrateCatalogoIAFormDefaults();
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data?.ok) {
+          throw new Error(data?.message || data?.error || "Error en catálogo IA.");
         }
-        if (nextView === "meta-vs-venta") {
-          loadMetaVsVenta({ force: true });
-        }
+        return data?.data;
+      };
 
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }
-
-      function navigateTo(view, { replace = false } = {}) {
-        const nextView = VIEWS.includes(view) ? view : "panel";
-        const state = { view: nextView };
-        const url = `#/${nextView}`;
-        if (replace) {
-          history.replaceState(state, "", url);
-        } else {
-          history.pushState(state, "", url);
-        }
-        setView(nextView);
-      }
-
-      function clearLastToolRouteState() {
-        const keys = [
-          "lastTool", "lastRoute", "lastView",
-          "activeTool", "activeRoute",
-          "panel:lastTool", "panel:lastRoute", "panel:lastView"
-        ];
-        keys.forEach((key) => {
-          try {
-            localStorage.removeItem(key);
-          } catch (_) {}
-          try {
-            sessionStorage.removeItem(key);
-          } catch (_) {}
+      const collectCatalogoIAForm = () => {
+        const row = { ...DEFAULT_CATALOGO_IA_ROW };
+        CATALOGO_IA_COLUMNS.forEach((column) => {
+          const inputId = CATALOGO_IA_FIELD_IDS[column];
+          if (!inputId) return;
+          const node = document.getElementById(inputId);
+          if (!node) return;
+          row[column] = normalizeCatalogoIAText(node.value);
         });
-      }
-
-      window.goToPanel = function goToPanel(event) {
-        if (event) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-        clearLastToolRouteState();
-        sessionStorage.removeItem("metaVsVentaOrigin");
-
-        // Siempre volver al panel en raíz (evita quedar atrapado en /tools/*)
-        const target = `${window.location.origin}/#/panel`;
-
-        const topWindow = (() => {
-          try {
-            return window.top && window.top !== window ? window.top : null;
-          } catch (_) {
-            return null;
-          }
-        })();
-
-        if (topWindow) {
-          topWindow.location.replace(target);
-          return;
-        }
-
-        window.location.replace(target);
+        row["ID interno"] = catalogoIACurrentDraftId || row["ID interno"];
+        if (!row["SKU base"]) row["SKU base"] = row.SKU || "";
+        row["Foto principal ID"] = catalogoIASelectedImageName || row["Foto principal ID"];
+        if (!row["Identificador de URL"]) row["Identificador de URL"] = slugifyCatalogoIA(row.Nombre || row.SKU);
+        return row;
       };
 
-      function getViewFromUrl() {
-        if (window.location.pathname === "/tools/meta-vs-venta") {
-          return "meta-vs-venta";
-        }
-        const hash = location.hash || "#/panel";
-        const match = hash.match(/^#\/(panel|registro|codigos|meta-vs-venta|catalogo-ia)$/);
-        return match ? match[1] : "panel";
-      }
-
-      window.addEventListener("popstate", (event) => {
-        const view = event.state?.view || getViewFromUrl();
-        setView(view);
-        updateDebugPanel();
-      });
-
-      window.addEventListener("hashchange", () => {
-        setView(getViewFromUrl());
-        updateDebugPanel();
-      });
-
-      const chunkArray = (items, size) => {
-        const chunks = [];
-        for (let i = 0; i < items.length; i += size) {
-          chunks.push(items.slice(i, i + size));
-        }
-        return chunks;
-      };
-
-      const loadAdminCostMap = async () => {
-        console.log("[admin-table] Firestore path neutralized");
-        return new Map();
-      };
-
-      const mergeAdminFields = async (rows = []) => {
-        console.log("[admin-table] mergeAdminFields skipped");
-        return rows;
-      };
-
-      const loadBaseRows = async () => {
-        const cacheKey = "sheets";
-
-        if (prendasState.baseRows.length && prendasState.baseRowsCacheKey === cacheKey) {
-          return prendasState.baseRows;
-        }
-
-        const rows = await loadBaseRowsFromSheets();
-        console.log(`[admin-table] baseRows loaded: ${Array.isArray(rows) ? rows.length : 0}`);
-
-        const orderedRows = [...rows].sort(compareItemsByOrdenAsc);
-
-        orderedRows.forEach((row, index) => {
-          const generatedOrder = index + 1;
-          row.__order = generatedOrder;
-          row._rowNumber = generatedOrder;
-
-          if (!Number.isFinite(toNumberOrNull(row.orden))) {
-            row.orden = generatedOrder;
-          }
+      const fillCatalogoIAForm = (row = {}) => {
+        CATALOGO_IA_COLUMNS.forEach((column) => {
+          const inputId = CATALOGO_IA_FIELD_IDS[column];
+          if (!inputId) return;
+          const node = document.getElementById(inputId);
+          if (!node) return;
+          node.value = row?.[column] ?? DEFAULT_CATALOGO_IA_ROW[column] ?? "";
         });
-
-        prendasState.baseRows = orderedRows;
-        prendasState.baseRowsCacheKey = cacheKey;
-        return prendasState.baseRows;
+        catalogoIACurrentDraftId = normalizeCatalogoIAText(row?.["ID interno"]);
+        const statusBadge = document.getElementById("catalogoIAStatusBadge");
+        if (statusBadge) statusBadge.textContent = normalizeCatalogoIAText(row?.Estado || "Pendiente imagen");
       };
-
-      const resetPrendasState = () => {
-        prendasState.filtered = [];
-        prendasState.baseRows = [];
-        prendasState.baseRowsCacheKey = activePrendasPublicCollection || (prendasState.isAdmin ? "admin" : "public");
-        prendasState.rowsAfterGlobal = [];
-        prendasState.rowsAfterAll = [];
-        prendasState.isDone = false;
-        prendasState.filtersActive = false;
-        prendasState.showingTotal = null;
-        prendasState.queryKey = "";
-        prendasState.pageIndex = 0;
-        prendasState.hasNextPage = false;
-        prendasState.filters.global = getCurrentGlobalFilters();
-        prendasState.filters.header = createEmptyHeaderFilters();
-        prendasState.sort = restorePersistedSort();
-        prendasState.uniqueOptions = {};
-        closeHeaderPopover();
-        resetCounters();
-      };
-
-      const renderLoadingPlaceholder = () => {
-        if (!prendasTbody) return;
-
-        prendasTbody.textContent = "";
-
-        const row = document.createElement("tr");
-        const cell = document.createElement("td");
-
-        cell.colSpan = 20;
-        cell.textContent = "Cargando base de datos...";
-
-        row.appendChild(cell);
-        prendasTbody.appendChild(row);
-
-        setCounter(0, prendasState.showingTotal);
-      };
-
-      const btnOpenRegistro = document.getElementById("btnOpenRegistro");
-      if (btnOpenRegistro) {
-        btnOpenRegistro.addEventListener("click", () => navigateTo("registro"));
-      }
-
-      const btnOpenCodigos = document.getElementById("btnOpenCodigos");
-      if (btnOpenCodigos) {
-        btnOpenCodigos.addEventListener("click", () => navigateTo("codigos"));
-      }
-      const btnOpenMetaVsVenta = document.getElementById("btnOpenMetaVsVenta");
-      if (btnOpenMetaVsVenta) {
-        btnOpenMetaVsVenta.addEventListener("click", () => {
-          sessionStorage.setItem("metaVsVentaOrigin", "panel");
-          // usa el router interno (hash) para no cambiar pathname
-          navigateTo("meta-vs-venta");
-        });
-      }
-      const btnOpenCatalogoIA = document.getElementById("btnOpenCatalogoIA");
-      if (btnOpenCatalogoIA) {
-        btnOpenCatalogoIA.addEventListener("click", () => openCatalogoIA());
-      }
-
-      function openCatalogoIA() {
-        navigateTo("catalogo-ia");
-      }
 
       function showCatalogoIAMessage(message, type = "info") {
         const node = document.getElementById("catalogoIAMessage");
@@ -3973,25 +3788,113 @@ Errores: 0</pre>
       function resetCatalogoIAForm() {
         const preview = document.getElementById("catalogoIAPreview");
         const imageInput = document.getElementById("catalogoIAImageInput");
-        const statusBadge = document.getElementById("catalogoIAStatusBadge");
         if (imageInput) imageInput.value = "";
         if (preview) preview.removeAttribute("src");
-        if (statusBadge) statusBadge.textContent = "Pendiente imagen";
-        TIENDANUBE_CSV_COLUMNS.forEach((column) => {
-          const inputId = CATALOGO_IA_FIELD_IDS[column];
-          if (!inputId) return;
-          const input = document.getElementById(inputId);
-          if (!input) return;
-          input.value = DEFAULT_CATALOGO_IA_ROW[column] ?? "";
-        });
         if (catalogoIAObjectUrl) {
           URL.revokeObjectURL(catalogoIAObjectUrl);
           catalogoIAObjectUrl = null;
         }
+        catalogoIACurrentDraftId = "";
+        catalogoIASelectedImageName = "";
+        fillCatalogoIAForm(DEFAULT_CATALOGO_IA_ROW);
       }
 
       function hydrateCatalogoIAFormDefaults() {
         resetCatalogoIAForm();
+      }
+
+      async function refreshCatalogoIADrafts() {
+        try {
+          const data = await callCatalogoIAApi({ action: "catalogo-ia-drafts-list", method: "GET" });
+          catalogoIADrafts = Array.isArray(data?.items) ? data.items : [];
+          const tbody = document.getElementById("catalogoIATableBody");
+          if (tbody) {
+            if (!catalogoIADrafts.length) {
+              tbody.innerHTML = '<tr><td colspan="13" class="muted">Sin borradores guardados.</td></tr>';
+            } else {
+              tbody.innerHTML = catalogoIADrafts.map((item) => `
+                <tr>
+                  <td><span class="catalogo-ia-thumb">${item["Foto principal URL"] ? "🖼️" : "🛍️"}</span></td>
+                  <td>${item.SKU || ""}</td>
+                  <td>${item.Nombre || ""}</td>
+                  <td>${item["Categorías"] || ""}</td>
+                  <td>${item["Valor de propiedad 1"] || ""}</td>
+                  <td>${item["Valor de propiedad 2"] || ""}</td>
+                  <td>${item.Precio || ""}</td>
+                  <td>${item.Stock || ""}</td>
+                  <td>${item.Estado || ""}</td>
+                  <td>${item["Estado IA"] || ""}</td>
+                  <td>${item["Estado CSV"] || ""}</td>
+                  <td>${item["Última edición"] || ""}</td>
+                  <td>
+                    <button type="button" class="secondary small" data-cia-action="edit" data-cia-id="${item["ID interno"]}">Ver / Editar</button>
+                    <button type="button" class="secondary small" data-cia-action="archive" data-cia-id="${item["ID interno"]}">Archivar</button>
+                  </td>
+                </tr>
+              `).join("");
+            }
+          }
+          const byEstado = (name) => catalogoIADrafts.filter((item) => normalizeCatalogoIALower(item.Estado) === normalizeCatalogoIALower(name)).length;
+          document.getElementById("catalogoIAMetricPendientes").textContent = String(byEstado("Pendiente imagen") + byEstado("Pendiente IA"));
+          document.getElementById("catalogoIAMetricGeneradas").textContent = String(catalogoIADrafts.filter((item) => normalizeCatalogoIALower(item["Estado IA"]) === "generado").length);
+          document.getElementById("catalogoIAMetricCSV").textContent = String(catalogoIADrafts.filter((item) => normalizeCatalogoIALower(item["Estado CSV"]) === "listo").length);
+          document.getElementById("catalogoIAMetricRevision").textContent = String(catalogoIADrafts.filter((item) => normalizeCatalogoIALower(item["Estado IA"]) === "requiere revisión").length);
+        } catch (_error) {
+          ["catalogoIAMetricPendientes", "catalogoIAMetricGeneradas", "catalogoIAMetricCSV", "catalogoIAMetricRevision"].forEach((id) => {
+            const node = document.getElementById(id);
+            if (node) node.textContent = "0";
+          });
+          showCatalogoIAMessage("No fue posible leer borradores. Se muestran métricas en 0.", "warning");
+        }
+      }
+
+      async function searchCatalogoIABaseProducts() {
+        const q = document.getElementById("catalogoIASearchInput")?.value || "";
+        const categoria = document.getElementById("catalogoIACategoriaFilter")?.value || "";
+        const status = document.getElementById("catalogoIAStatusFilter")?.value || "";
+        const resultsNode = document.getElementById("catalogoIABaseResults");
+        if (!resultsNode) return;
+        try {
+          const data = await callCatalogoIAApi({ action: "catalogo-ia-base-products", method: "GET", query: { q, categoria, status } });
+          const items = Array.isArray(data?.items) ? data.items : [];
+          if (!items.length) {
+            resultsNode.innerHTML = '<p class="muted">Sin resultados.</p>';
+            showCatalogoIAMessage("Búsqueda sin resultados.", "warning");
+            return;
+          }
+          const categorias = [...new Set(items.map((item) => normalizeCatalogoIAText(item.categoria)).filter(Boolean))];
+          const statuses = [...new Set(items.map((item) => normalizeCatalogoIAText(item.status)).filter(Boolean))];
+          const catSel = document.getElementById("catalogoIACategoriaFilter");
+          const statSel = document.getElementById("catalogoIAStatusFilter");
+          if (catSel && catSel.options.length <= 1) catSel.innerHTML = '<option value="">Todas</option>' + categorias.map((x) => `<option>${x}</option>`).join("");
+          if (statSel && statSel.options.length <= 1) statSel.innerHTML = '<option value="">Todos</option>' + statuses.map((x) => `<option>${x}</option>`).join("");
+          resultsNode.innerHTML = `<table class="table"><thead><tr><th>SKU</th><th>Descripción</th><th>Categoría</th><th>Color</th><th>Talla</th><th>Precio</th><th>Stock</th><th></th></tr></thead><tbody>${items.map((item, index) => `<tr><td>${item.sku || ""}</td><td>${item.descripcion || ""}</td><td>${item.categoria || ""}</td><td>${item.color || ""}</td><td>${item.talla || ""}</td><td>${item.precio || ""}</td><td>${item.stock || ""}</td><td><button type="button" class="secondary small" data-cia-base-index="${index}">Usar</button></td></tr>`).join("")}</tbody></table>`;
+          resultsNode.dataset.items = JSON.stringify(items);
+        } catch (_error) {
+          resultsNode.innerHTML = "";
+          showCatalogoIAMessage("Error leyendo base de productos.", "error");
+        }
+      }
+
+      function mapBaseProductToForm(item = {}) {
+        const maybeCosto = normalizeCatalogoIAText(item.costo);
+        const activeAdminSession = typeof adminSession !== "undefined" ? adminSession : null;
+        const isAdminCatalog = Boolean(activeAdminSession?.isAdmin) && isAdminUser(activeAdminSession);
+        const mapped = {
+          ...DEFAULT_CATALOGO_IA_ROW,
+          "SKU": item.sku || "",
+          "SKU base": item.sku || "",
+          "Categorías": item.categoria || "",
+          "Valor de propiedad 2": item.color || "",
+          "Valor de propiedad 1": item.talla || "",
+          "Precio": item.precio || "",
+          "Stock": item.stock || "",
+          "Nombre": item.descripcion || "",
+          "Descripción": item.descripcion || "",
+          "Costo": isAdminCatalog ? maybeCosto : ""
+        };
+        mapped["Identificador de URL"] = slugifyCatalogoIA(mapped.Nombre || mapped.SKU);
+        fillCatalogoIAForm(mapped);
       }
 
       function handleCatalogoIAImagePreview(event) {
@@ -3999,20 +3902,26 @@ Errores: 0</pre>
         if (!file) return;
         const isValidType = ["image/jpeg", "image/png", "image/webp"].includes(file.type);
         if (!isValidType) {
-          showCatalogoIAMessage("Formato no compatible. Usa JPG, PNG o WEBP.", "error");
+          showCatalogoIAMessage("Formato no compatible. Usa JPG, JPEG, PNG o WEBP.", "error");
           return;
         }
         const preview = document.getElementById("catalogoIAPreview");
         const statusBadge = document.getElementById("catalogoIAStatusBadge");
         if (catalogoIAObjectUrl) URL.revokeObjectURL(catalogoIAObjectUrl);
         catalogoIAObjectUrl = URL.createObjectURL(file);
+        catalogoIASelectedImageName = file.name || "";
         if (preview) preview.src = catalogoIAObjectUrl;
         if (statusBadge) statusBadge.textContent = "Pendiente IA";
-        showCatalogoIAMessage("Imagen cargada localmente. Función preparada para conexión posterior.", "info");
+        showCatalogoIAMessage("Imagen cargada localmente. No se sube a Drive en esta fase.", "info");
       }
 
-      function initCatalogoIA() {
+      async function initCatalogoIA() {
         if (catalogoIAInited) return;
+        try {
+          await callCatalogoIAApi({ action: "catalogo-ia-ensure-sheets", method: "POST", payload: {} });
+        } catch (_error) {
+          showCatalogoIAMessage("No fue posible validar estructura de Sheets de Catálogo IA.", "warning");
+        }
         const imageInput = document.getElementById("catalogoIAImageInput");
         const selectBtn = document.getElementById("catalogoIASelectImageBtn");
         const dropzone = document.getElementById("catalogoIADropzone");
@@ -4020,30 +3929,70 @@ Errores: 0</pre>
         const saveBtn = document.getElementById("catalogoIASaveDraftBtn");
         const reviewBtn = document.getElementById("catalogoIAReviewBtn");
         const exportBtn = document.getElementById("catalogoIAExportBtn");
-
-        if (selectBtn && imageInput) {
-          selectBtn.addEventListener("click", () => imageInput.click());
+        const resetBtn = document.getElementById("catalogoIAResetBtn");
+        const searchBtn = document.getElementById("catalogoIABaseSearchBtn");
+        const tableBody = document.getElementById("catalogoIATableBody");
+        const costoInput = document.getElementById("catalogoIACosto");
+        const activeAdminSession = typeof adminSession !== "undefined" ? adminSession : null;
+        const canSeeCost = Boolean(activeAdminSession?.isAdmin) && isAdminUser(activeAdminSession);
+        if (costoInput && !canSeeCost) {
+          costoInput.value = "";
+          costoInput.placeholder = "Solo admin";
+          costoInput.setAttribute("disabled", "disabled");
         }
-        if (imageInput) {
-          imageInput.addEventListener("change", handleCatalogoIAImagePreview);
+
+        if (selectBtn && imageInput) selectBtn.addEventListener("click", () => imageInput.click());
+        if (imageInput) imageInput.addEventListener("change", handleCatalogoIAImagePreview);
+        if (searchBtn) searchBtn.addEventListener("click", () => searchCatalogoIABaseProducts());
+        if (resetBtn) resetBtn.addEventListener("click", () => {
+          hydrateCatalogoIAFormDefaults();
+          showCatalogoIAMessage("Formulario limpiado con valores por defecto.", "info");
+        });
+
+        if (tableBody) {
+          tableBody.addEventListener("click", async (event) => {
+            const button = event.target?.closest?.("button[data-cia-action]");
+            if (!button) return;
+            const action = button.dataset.ciaAction;
+            const id = button.dataset.ciaId;
+            if (!id) return;
+            if (action === "edit") {
+              const draft = await callCatalogoIAApi({ action: "catalogo-ia-draft-get", method: "GET", query: { id } });
+              fillCatalogoIAForm(draft || {});
+              showCatalogoIAMessage("Borrador cargado para edición.", "info");
+            }
+            if (action === "archive") {
+              await callCatalogoIAApi({ action: "catalogo-ia-draft-archive", method: "POST", payload: { id } });
+              showCatalogoIAMessage("Borrador archivado.", "success");
+              await refreshCatalogoIADrafts();
+            }
+          });
+        }
+
+        const baseResults = document.getElementById("catalogoIABaseResults");
+        if (baseResults) {
+          baseResults.addEventListener("click", (event) => {
+            const button = event.target?.closest?.("button[data-cia-base-index]");
+            if (!button) return;
+            const items = JSON.parse(baseResults.dataset.items || "[]");
+            const item = items?.[Number(button.dataset.ciaBaseIndex)] || null;
+            if (!item) return;
+            mapBaseProductToForm(item);
+            showCatalogoIAMessage("Producto base seleccionado y mapeado al formulario.", "success");
+          });
         }
 
         if (dropzone && imageInput) {
-          ["dragenter", "dragover"].forEach((eventName) => {
-            dropzone.addEventListener(eventName, (event) => {
-              event.preventDefault();
-              dropzone.classList.add("is-dragover");
-            });
-          });
-          ["dragleave", "drop"].forEach((eventName) => {
-            dropzone.addEventListener(eventName, (event) => {
-              event.preventDefault();
-              dropzone.classList.remove("is-dragover");
-            });
-          });
+          ["dragenter", "dragover"].forEach((eventName) => dropzone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            dropzone.classList.add("is-dragover");
+          }));
+          ["dragleave", "drop"].forEach((eventName) => dropzone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            dropzone.classList.remove("is-dragover");
+          }));
           dropzone.addEventListener("drop", (event) => {
-            const droppedFiles = event.dataTransfer?.files;
-            if (!droppedFiles?.length) return;
+            if (!event.dataTransfer?.files?.length) return;
             handleCatalogoIAImagePreview({ dataTransfer: event.dataTransfer });
           });
         }
@@ -4051,24 +4000,46 @@ Errores: 0</pre>
         if (generateBtn) {
           generateBtn.addEventListener("click", () => {
             const hasImage = Boolean(document.getElementById("catalogoIAPreview")?.getAttribute("src"));
-            if (!hasImage) {
-              showCatalogoIAMessage("Primero sube una foto editada del producto.", "error");
-              return;
-            }
+            if (!hasImage) return showCatalogoIAMessage("Primero sube una foto editada del producto.", "warning");
             showCatalogoIAMessage("Vista lista. La conexión con IA se agregará en la siguiente fase.", "info");
           });
         }
 
-        const safeMessage = "Función preparada para conexión posterior.";
-        if (saveBtn) saveBtn.addEventListener("click", () => showCatalogoIAMessage(safeMessage, "info"));
-        if (reviewBtn) reviewBtn.addEventListener("click", () => showCatalogoIAMessage(safeMessage, "info"));
-        if (exportBtn) {
-          exportBtn.addEventListener("click", () => {
-            showCatalogoIAMessage("Exportación CSV preparada. Se conectará en la siguiente fase.", "info");
+        if (saveBtn) {
+          saveBtn.addEventListener("click", async () => {
+            const payload = collectCatalogoIAForm();
+            if (catalogoIACurrentDraftId) {
+              await callCatalogoIAApi({ action: "catalogo-ia-draft-update", method: "POST", payload: { id: catalogoIACurrentDraftId, payload } });
+              showCatalogoIAMessage("Borrador actualizado.", "success");
+            } else {
+              const created = await callCatalogoIAApi({ action: "catalogo-ia-draft-create", method: "POST", payload });
+              catalogoIACurrentDraftId = created?.["ID interno"] || "";
+              showCatalogoIAMessage("Borrador guardado.", "success");
+            }
+            await refreshCatalogoIADrafts();
           });
         }
 
+        if (reviewBtn) {
+          reviewBtn.addEventListener("click", async () => {
+            const payload = collectCatalogoIAForm();
+            const basicReady = Boolean(payload.Nombre && payload.SKU && payload.Precio && payload.Stock);
+            payload["Estado"] = basicReady ? "Listo para CSV" : "En revisión";
+            payload["Estado IA"] = basicReady ? "Generado" : "Requiere revisión";
+            payload["Estado CSV"] = basicReady ? "Listo" : "No listo";
+            fillCatalogoIAForm(payload);
+            if (catalogoIACurrentDraftId) {
+              await callCatalogoIAApi({ action: "catalogo-ia-draft-update", method: "POST", payload: { id: catalogoIACurrentDraftId, payload } });
+            }
+            showCatalogoIAMessage("Estado de revisión actualizado.", "success");
+            await refreshCatalogoIADrafts();
+          });
+        }
+
+        if (exportBtn) exportBtn.addEventListener("click", () => showCatalogoIAMessage("Exportación CSV preparada. Se conectará en la siguiente fase.", "info"));
+
         catalogoIAInited = true;
+        await refreshCatalogoIADrafts();
       }
       document.addEventListener("DOMContentLoaded", () => {
         const harujaLogoButton = document.getElementById("haruja-logo");
