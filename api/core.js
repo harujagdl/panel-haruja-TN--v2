@@ -35,6 +35,15 @@ import {
   updateApartadoStatus,
 } from '../lib/api/apartados.js';
 import { runApartadoPdfDriveWriteTest } from '../lib/apartados/pdf-sync.js';
+import {
+  archiveCatalogoIADraft,
+  createCatalogoIADraft,
+  ensureCatalogoIASheets,
+  getCatalogoIABaseProducts,
+  getCatalogoIADraft,
+  listCatalogoIADrafts,
+  updateCatalogoIADraft,
+} from '../lib/api/catalogoIA.js';
 import { AdminSessionConfigError, getAdminSessionSecret } from '../lib/security/adminSessionConfig.js';
 import { createTraceId, getErrorMessage, logError, logInfo, logWarn } from '../lib/observability/logger.js';
 
@@ -73,6 +82,13 @@ const PUBLIC_ACTIONS = new Set([
   'apartados',
   'ventas-mini-public',
   'admin-session',
+  'catalogo-ia-ensure-sheets',
+  'catalogo-ia-base-products',
+  'catalogo-ia-drafts-list',
+  'catalogo-ia-draft-get',
+  'catalogo-ia-draft-create',
+  'catalogo-ia-draft-update',
+  'catalogo-ia-draft-archive',
 ]);
 const ADMIN_ACTIONS = new Set([
   'prendas-update',
@@ -123,6 +139,13 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['ventas-mini-public', new Set(['GET'])],
   ['admin-session', new Set(['GET', 'POST'])],
   ['apartados', new Set(['GET', 'POST'])],
+  ['catalogo-ia-ensure-sheets', new Set(['POST'])],
+  ['catalogo-ia-base-products', new Set(['GET'])],
+  ['catalogo-ia-drafts-list', new Set(['GET'])],
+  ['catalogo-ia-draft-get', new Set(['GET'])],
+  ['catalogo-ia-draft-create', new Set(['POST'])],
+  ['catalogo-ia-draft-update', new Set(['POST'])],
+  ['catalogo-ia-draft-archive', new Set(['POST'])],
 ]);
 const PUBLIC_PRENDA_FIELDS = ['Código', 'Descripción', 'Tipo', 'Color', 'Talla', 'Status', 'Disponibilidad', 'Existencia', 'Existencias', 'Precio'];
 const PUBLIC_CREATE_ALLOWED_FIELDS = new Set([
@@ -841,6 +864,14 @@ export default async function handler(req, res) {
     if (action === 'admin-session') return await handleAdminSession(req, res);
 
     if (action === 'apartados') return await handleApartados(req, res);
+
+    if (action === 'catalogo-ia-ensure-sheets') return sendOk(res, await ensureCatalogoIASheets());
+    if (action === 'catalogo-ia-base-products') return sendOk(res, await getCatalogoIABaseProducts(req.query || {}, readAdminSession(req) || {}));
+    if (action === 'catalogo-ia-drafts-list') return sendOk(res, await listCatalogoIADrafts(req.query || {}, readAdminSession(req) || {}));
+    if (action === 'catalogo-ia-draft-get') return sendOk(res, await getCatalogoIADraft(req.query?.id || req.body?.id || '', readAdminSession(req) || {}));
+    if (action === 'catalogo-ia-draft-create') return sendOk(res, await createCatalogoIADraft(req.body || {}, readAdminSession(req) || {}));
+    if (action === 'catalogo-ia-draft-update') return sendOk(res, await updateCatalogoIADraft(req.body?.id || req.query?.id || '', req.body?.payload || req.body || {}, readAdminSession(req) || {}));
+    if (action === 'catalogo-ia-draft-archive') return sendOk(res, await archiveCatalogoIADraft(req.body?.id || req.query?.id || '', readAdminSession(req) || {}));
 
     if (action === 'ventas-comisiones') {
       if (req.method === 'GET') return sendOk(res, await getVentasComisiones(req.query || {}, req));
