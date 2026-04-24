@@ -959,11 +959,12 @@ export default async function handler(req, res) {
 
     return sendErr(res, 400, 'Acción inválida para /api/core.');
   } catch (error) {
+    const errorMessage = getErrorMessage(error);
     logError('api.core.failed', {
       action,
       traceId,
       method: req?.method,
-      message: getErrorMessage(error),
+      message: errorMessage,
       errorCode: String(error?.code || '').trim() || undefined,
     });
     if (isSheetsQuotaExceededError(error)) {
@@ -979,7 +980,10 @@ export default async function handler(req, res) {
       ok: false,
       code: String(error?.code || '').trim() || 'ADMIN_TEMP_UNAVAILABLE',
       traceId,
-      message: 'No se pudo completar la operación solicitada.',
+      message:
+        action === 'catalogo-ia-image-upload'
+          ? (errorMessage || 'No se pudo completar la operación solicitada.')
+          : 'No se pudo completar la operación solicitada.',
     });
   }
 }
