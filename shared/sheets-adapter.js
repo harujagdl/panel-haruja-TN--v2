@@ -1,5 +1,56 @@
 import { calcularUtilidadYMargenDesdeBaseVenta, normalizeNumber } from "./pricing-utils.js";
 
+const PROVEEDOR_ALIASES = ["Proveedor", "proveedor", "Supplier", "supplier", "Marca", "marca"];
+const FECHA_ALIASES = ["Fecha", "fecha", "Fecha alta", "Fecha Alta", "Fecha de alta", "Alta", "Created At", "created_at", "fechaTexto", "FechaTexto"];
+
+const normalizeText = (value) => String(value ?? "").trim();
+
+const pickFirst = (row, aliases = []) => {
+  for (const key of aliases) {
+    const value = row?.[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      return value;
+    }
+  }
+  return "";
+};
+
+const formatDateDDMMYYYY = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "--";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const parseSheetsSerialDate = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  // Serial date compatible con Google Sheets / Excel (epoch 1899-12-30).
+  const epoch = Date.UTC(1899, 11, 30);
+  const ms = Math.round(numeric * 86400000);
+  const parsed = new Date(epoch + ms);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatFechaDisplay = (value) => {
+  if (value === null || value === undefined || value === "") return "--";
+  if (typeof value === "number") {
+    const parsed = parseSheetsSerialDate(value);
+    return parsed ? formatDateDDMMYYYY(parsed) : "--";
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return "--";
+
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    const parsedSerial = parseSheetsSerialDate(raw);
+    if (parsedSerial) return formatDateDDMMYYYY(parsedSerial);
+  }
+
+  return raw;
+};
+
 export async function loadBaseRowsFromSheets() {
   const res = await fetch("/api/core?action=prendas-list");
 
@@ -17,8 +68,12 @@ export async function loadBaseRowsFromSheets() {
     const existencia = normalizeNumber(row["Existencia"] ?? row["Existencias"], { fallback: 0 }) || 0;
     const { utilidad, margen } = calcularUtilidadYMargenDesdeBaseVenta(precio, costo);
     const orden = normalizeNumber(row["Orden"], { fallback: index + 1 }) || index + 1;
+    const proveedorValue = normalizeText(pickFirst(row, PROVEEDOR_ALIASES));
+    const fechaValue = pickFirst(row, FECHA_ALIASES);
+    const fecha = normalizeText(fechaValue);
+    const fechaTexto = formatFechaDisplay(fechaValue);
 
-    return {
+    const mapped = {
       docId: codigo,
       id: codigo,
 
@@ -31,7 +86,7 @@ export async function loadBaseRowsFromSheets() {
       tipo: row["Tipo"] || "",
       color: row["Color"] || "",
       talla: row["Talla"] || "",
-      proveedor: row["Proveedor"] || "",
+      proveedor: proveedorValue,
 
       tn: row["TN"] || "",
       status: row["Status"] || "",
@@ -42,7 +97,8 @@ export async function loadBaseRowsFromSheets() {
       qtyAvailable: existencia,
       existencia,
 
-      fecha: row["Fecha"] || "",
+      fecha,
+      fechaTexto,
       pVenta: precio,
       pVentaDisplay: precio,
       precio,
@@ -58,5 +114,16 @@ export async function loadBaseRowsFromSheets() {
       statusManual: null,
       disponibilidadManual: null
     };
+
+    if (index === 0) {
+      console.info("[Prendas] sample mapped row", {
+        codigo: mapped.codigo,
+        proveedor: mapped.proveedor,
+        fecha: mapped.fecha,
+        fechaTexto: mapped.fechaTexto
+      });
+    }
+
+    return mapped;
   });
 }

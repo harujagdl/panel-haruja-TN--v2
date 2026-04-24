@@ -6899,13 +6899,15 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
         const tipoLabel = safeString(data.tipoLabel ?? "").trim();
         const tipo = safeString(data.tipo || data.Tipo || tipoCodigo || "").trim();
         const proveedorCodigo = safeString(
-          data.proveedorCodigo ?? data.proveedor ?? data.providerCode ?? data.Proveedor ?? ""
+          data.proveedorCodigo ?? data.proveedor ?? data.providerCode ?? data.Proveedor ?? data.supplier ?? data.Supplier ?? data.marca ?? data.Marca ?? ""
         ).trim();
         const proveedorNombre = safeString(
           data.proveedorNombre ?? data.providerName ?? ""
         ).trim() || parseNameFromOptionText(data.proveedorLabel);
         const proveedorLabel = safeString(data.proveedorLabel ?? "").trim();
-        const proveedor = safeString(data.proveedor || data.Proveedor || proveedorCodigo || "").trim();
+        const proveedor = safeString(
+          data.proveedor || data.Proveedor || data.supplier || data.Supplier || data.marca || data.Marca || proveedorCodigo || ""
+        ).trim();
         console.log('[mapper] proveedorNombre final:', proveedorNombre);
         console.log('[mapper] proveedorCodigo final:', proveedorCodigo);
         console.log('[mapper] tipoNombre final:', tipoNombre);
@@ -6950,9 +6952,11 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
         const orden = Number(data.orden ?? data.seqNumber ?? data.Orden ?? 0);
         const seqNumber = toNumberOrNull(data.seqNumber ?? data.seq ?? data.secuencia);
         const fechaAltaTexto = safeString(
-          data.fechaAltaTexto ?? data.FechaAltaTexto ?? data.fechaTexto ?? data.FechaTexto ?? ""
+          data.fechaAltaTexto ?? data.FechaAltaTexto ?? data.fechaTexto ?? data.FechaTexto ?? data.fechaAlta ?? data.FechaAlta ?? data.created_at ?? data.createdAt ?? data.Alta ?? ""
         ).trim();
-        const fechaTexto = safeString(data.fechaTexto || data.FechaTexto || data.fecha || data.Fecha || "").trim();
+        const fechaTexto = safeString(
+          data.fechaTexto || data.FechaTexto || data.fecha || data.Fecha || data.fechaAlta || data.FechaAlta || data.created_at || data.createdAt || data.Alta || ""
+        ).trim();
         const inventorySource = safeString(data.inventorySource).trim();
         const lastInventorySyncAt = data.lastInventorySyncAt ?? null;
         const lastInventorySyncAtText = safeString(data.lastInventorySyncAtText).trim();
