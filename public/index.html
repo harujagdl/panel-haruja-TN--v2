@@ -3681,6 +3681,211 @@ Errores: 0</pre>
 
       let registroInited = false;
       let dbInited = false;
+      if ((window.location.hash || "").startsWith("#/panel")) {
+        clearLastToolRouteState();
+      }
+      let currentView = getViewFromUrl();
+
+      function setView(name) {
+        const nextView = VIEWS.includes(name) ? name : "panel";
+        currentView = nextView;
+        VIEWS.forEach((viewName) => {
+          const view = document.getElementById(`view-${viewName}`);
+          if (!view) return;
+          view.classList.toggle("is-active", viewName === nextView);
+        });
+
+        if (nextView === "registro") initRegistroView();
+        if (nextView === "codigos") initDbView();
+        if (nextView === "meta-vs-venta") {
+          loadMetaVsVenta({ force: true });
+        }
+        if (nextView === "catalogo-ia") {
+          initCatalogoIA();
+        }
+
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      function navigateTo(view, { replace = false } = {}) {
+        const nextView = VIEWS.includes(view) ? view : "panel";
+        const state = { view: nextView };
+        const url = `#/${nextView}`;
+        if (replace) {
+          history.replaceState(state, "", url);
+        } else {
+          history.pushState(state, "", url);
+        }
+        setView(nextView);
+      }
+
+      function clearLastToolRouteState() {
+        const keys = [
+          "lastTool", "lastRoute", "lastView",
+          "activeTool", "activeRoute",
+          "panel:lastTool", "panel:lastRoute", "panel:lastView"
+        ];
+        keys.forEach((key) => {
+          try {
+            localStorage.removeItem(key);
+          } catch (_) {}
+          try {
+            sessionStorage.removeItem(key);
+          } catch (_) {}
+        });
+      }
+
+      window.goToPanel = function goToPanel(event) {
+        if (event) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        clearLastToolRouteState();
+        sessionStorage.removeItem("metaVsVentaOrigin");
+
+        const target = `${window.location.origin}/#/panel`;
+
+        const topWindow = (() => {
+          try {
+            return window.top && window.top !== window ? window.top : null;
+          } catch (_) {
+            return null;
+          }
+        })();
+
+        if (topWindow) {
+          topWindow.location.replace(target);
+          return;
+        }
+
+        window.location.replace(target);
+      };
+
+      function getViewFromUrl() {
+        if (window.location.pathname === "/tools/meta-vs-venta") {
+          return "meta-vs-venta";
+        }
+        const hash = location.hash || "#/panel";
+        const match = hash.match(/^#\/(panel|registro|codigos|meta-vs-venta|catalogo-ia)$/);
+        return match ? match[1] : "panel";
+      }
+
+      window.addEventListener("popstate", (event) => {
+        const view = event.state?.view || getViewFromUrl();
+        setView(view);
+        updateDebugPanel();
+      });
+
+      window.addEventListener("hashchange", () => {
+        setView(getViewFromUrl());
+        updateDebugPanel();
+      });
+
+      const chunkArray = (items, size) => {
+        const chunks = [];
+        for (let i = 0; i < items.length; i += size) {
+          chunks.push(items.slice(i, i + size));
+        }
+        return chunks;
+      };
+
+      const loadAdminCostMap = async () => {
+        console.log("[admin-table] Firestore path neutralized");
+        return new Map();
+      };
+
+      const mergeAdminFields = async (rows = []) => {
+        console.log("[admin-table] mergeAdminFields skipped");
+        return rows;
+      };
+
+      const loadBaseRows = async () => {
+        const cacheKey = "sheets";
+
+        if (prendasState.baseRows.length && prendasState.baseRowsCacheKey === cacheKey) {
+          return prendasState.baseRows;
+        }
+
+        const rows = await loadBaseRowsFromSheets();
+        console.log(`[admin-table] baseRows loaded: ${Array.isArray(rows) ? rows.length : 0}`);
+
+        const orderedRows = [...rows].sort(compareItemsByOrdenAsc);
+
+        orderedRows.forEach((row, index) => {
+          const generatedOrder = index + 1;
+          row.__order = generatedOrder;
+          row._rowNumber = generatedOrder;
+
+          if (!Number.isFinite(toNumberOrNull(row.orden))) {
+            row.orden = generatedOrder;
+          }
+        });
+
+        prendasState.baseRows = orderedRows;
+        prendasState.baseRowsCacheKey = cacheKey;
+        return prendasState.baseRows;
+      };
+
+      function resetPrendasState() {
+        prendasState.filtered = [];
+        prendasState.baseRows = [];
+        prendasState.baseRowsCacheKey = activePrendasPublicCollection || (prendasState.isAdmin ? "admin" : "public");
+        prendasState.rowsAfterGlobal = [];
+        prendasState.rowsAfterAll = [];
+        prendasState.isDone = false;
+        prendasState.filtersActive = false;
+        prendasState.showingTotal = null;
+        prendasState.queryKey = "";
+        prendasState.pageIndex = 0;
+        prendasState.hasNextPage = false;
+        prendasState.filters.global = getCurrentGlobalFilters();
+        prendasState.filters.header = createEmptyHeaderFilters();
+        prendasState.sort = restorePersistedSort();
+        prendasState.uniqueOptions = {};
+        closeHeaderPopover();
+        resetCounters();
+      }
+
+      const renderLoadingPlaceholder = () => {
+        if (!prendasTbody) return;
+
+        prendasTbody.textContent = "";
+
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+
+        cell.colSpan = 20;
+        cell.textContent = "Cargando base de datos...";
+
+        row.appendChild(cell);
+        prendasTbody.appendChild(row);
+
+        setCounter(0, prendasState.showingTotal);
+      };
+
+      const btnOpenRegistro = document.getElementById("btnOpenRegistro");
+      if (btnOpenRegistro) {
+        btnOpenRegistro.addEventListener("click", () => navigateTo("registro"));
+      }
+
+      const btnOpenCodigos = document.getElementById("btnOpenCodigos");
+      if (btnOpenCodigos) {
+        btnOpenCodigos.addEventListener("click", () => navigateTo("codigos"));
+      }
+
+      const btnOpenMetaVsVenta = document.getElementById("btnOpenMetaVsVenta");
+      if (btnOpenMetaVsVenta) {
+        btnOpenMetaVsVenta.addEventListener("click", () => {
+          sessionStorage.setItem("metaVsVentaOrigin", "panel");
+          navigateTo("meta-vs-venta");
+        });
+      }
+
+      const btnOpenCatalogoIA = document.getElementById("btnOpenCatalogoIA");
+      if (btnOpenCatalogoIA) {
+        btnOpenCatalogoIA.addEventListener("click", () => navigateTo("catalogo-ia"));
+      }
+
       let catalogoIAInited = false;
       let catalogoIAObjectUrl = null;
       let catalogoIACurrentDraftId = "";
