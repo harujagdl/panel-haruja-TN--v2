@@ -429,6 +429,33 @@ const verifyGoogleIdToken = async (credential) => {
   };
 };
 
+const verifyGoogleAccessToken = async ({ accessToken, profile } = {}) => {
+  const token = String(accessToken || '').trim();
+  if (!token) throw new Error('Access token de Google requerido.');
+
+  const response = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('No se pudo validar la cuenta de Google con access token.');
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  const requestProfile = profile && typeof profile === 'object' ? profile : {};
+
+  return {
+    email: normalizeEmail(payload.email || requestProfile.email),
+    email_verified: payload.email_verified === true || requestProfile.email_verified === true,
+    sub: String(payload.sub || requestProfile.sub || '').trim(),
+    aud: GOOGLE_CLIENT_ID,
+    name: String(payload.name || requestProfile.name || '').trim() || null,
+    picture: String(payload.picture || requestProfile.picture || '').trim() || null,
+  };
+};
+
 function getBaseUrl(reqLike = {}) {
   const configured = String(process.env.APP_URL || '').trim().replace(/\/$/, '');
   if (configured) return configured;
@@ -622,7 +649,13 @@ async function handleAdminSession(req, res) {
   if (req.method === 'POST' && op === 'google-login') {
     let verifiedEmail = '';
     try {
-      const verified = await verifyGoogleIdToken(req.body?.credential);
+      const hasCredential = Boolean(String(req.body?.credential || '').trim());
+      const verified = hasCredential
+        ? await verifyGoogleIdToken(req.body?.credential)
+        : await verifyGoogleAccessToken({
+          accessToken: req.body?.accessToken,
+          profile: req.body?.profile,
+        });
       const email = normalizeEmail(verified?.email);
       verifiedEmail = email;
       const emailVerified = verified?.email_verified === true;

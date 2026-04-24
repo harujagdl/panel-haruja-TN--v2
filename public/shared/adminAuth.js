@@ -10,6 +10,9 @@ const GOOGLE_GSI_SRC = "https://accounts.google.com/gsi/client";
 
 let googleIdentityPromise = null;
 let googleClientIdPromise = null;
+let googleIdentityInitialized = false;
+let googleTokenClient = null;
+let googleTokenClientId = "";
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
 
@@ -56,7 +59,7 @@ const getGoogleClientId = async () => {
 };
 
 export function loadGoogleIdentity() {
-  if (window.google?.accounts?.id) return Promise.resolve(window.google);
+  if (window.google?.accounts?.id && window.google?.accounts?.oauth2) return Promise.resolve(window.google);
   if (googleIdentityPromise) return googleIdentityPromise;
 
   googleIdentityPromise = new Promise((resolve, reject) => {
@@ -79,57 +82,116 @@ export function loadGoogleIdentity() {
   return googleIdentityPromise;
 }
 
-const requestGoogleCredential = async (clientId) => {
+const initGoogleIdentity = ({ clientId, callback }) => {
+  if (googleIdentityInitialized) return;
+  if (!window.google?.accounts?.id) return;
+
+  googleIdentityInitialized = true;
+  window.google.accounts.id.initialize({
+    client_id: clientId,
+    callback,
+    use_fedcm_for_prompt: false,
+    cancel_on_tap_outside: false,
+    auto_select: false,
+    context: "signin"
+  });
+  console.info("[admin-auth] Google auth initialized once");
+};
+
+const fetchGoogleUserInfo = async (accessToken) => {
+  const response = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!response.ok) {
+    throw new Error("No se pudo validar la cuenta Google con userinfo.");
+  }
+  const payload = await response.json();
+  return {
+    email: normalizeEmail(payload?.email),
+    email_verified: payload?.email_verified === true,
+    sub: String(payload?.sub || "").trim(),
+    name: String(payload?.name || "").trim() || null,
+    picture: String(payload?.picture || "").trim() || null
+  };
+};
+
+const initGoogleTokenClient = ({ clientId }) => {
+  if (googleTokenClient && googleTokenClientId === clientId) return googleTokenClient;
+  if (!window.google?.accounts?.oauth2) return null;
+
+  googleTokenClientId = clientId;
+  googleTokenClient = window.google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: "openid email profile",
+    callback: () => {},
+    error_callback: (err) => {
+      console.error("[admin-auth] Google login popup failed", err);
+    }
+  });
+
+  return googleTokenClient;
+};
+
+const requestGoogleAccessToken = async (clientId) => {
   await loadGoogleIdentity();
-  if (!window.google?.accounts?.id) {
-    throw new Error("Google Identity Services no está disponible.");
+  if (!window.google?.accounts?.oauth2) {
+    throw new Error("Google Sign-In no está disponible todavía. Recarga la página e intenta de nuevo.");
+  }
+
+  initGoogleIdentity({ clientId, callback: () => {} });
+  const tokenClient = initGoogleTokenClient({ clientId });
+  if (!tokenClient) {
+    throw new Error("Google Sign-In no está disponible todavía. Recarga la página e intenta de nuevo.");
   }
 
   return new Promise((resolve, reject) => {
-    let settled = false;
-    const complete = (fn, value) => {
-      if (settled) return;
-      settled = true;
-      fn(value);
-    };
-
     const timeout = window.setTimeout(() => {
-      complete(reject, new Error("No se recibió credencial de Google. Intenta de nuevo."));
+      reject(new Error("No se recibió respuesta de Google. Intenta de nuevo."));
     }, 20000);
 
-    window.google.accounts.id.initialize({
-      client_id: clientId,
-      callback: (response) => {
-        window.clearTimeout(timeout);
-        const credential = String(response?.credential || "").trim();
-        if (!credential) {
-          complete(reject, new Error("Google no devolvió una credencial válida."));
-          return;
-        }
-        complete(resolve, credential);
-      },
-      auto_select: false,
-      cancel_on_tap_outside: true,
-      context: "signin"
-    });
-
-    window.google.accounts.id.prompt((notification) => {
-      if (settled) return;
-      if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
-        window.clearTimeout(timeout);
-        complete(reject, new Error("No se pudo abrir el inicio de sesión de Google en este navegador."));
+    tokenClient.callback = (response) => {
+      window.clearTimeout(timeout);
+      const accessToken = String(response?.access_token || "").trim();
+      if (!accessToken) {
+        reject(new Error("Google no devolvió un access token válido."));
+        return;
       }
-    });
+      resolve(accessToken);
+    };
+
+    try {
+      tokenClient.requestAccessToken({ prompt: "consent" });
+    } catch (error) {
+      window.clearTimeout(timeout);
+      reject(error);
+    }
   });
 };
 
 export async function googleAdminSignIn() {
   const clientId = await getGoogleClientId();
-  const credential = await requestGoogleCredential(clientId);
-  return callAdminSession("google-login", {
-    method: "POST",
-    body: { credential }
-  });
+  try {
+    const accessToken = await requestGoogleAccessToken(clientId);
+    const userInfo = await fetchGoogleUserInfo(accessToken);
+
+    if (!userInfo.email || !ADMIN_ALLOWLIST_SET.has(userInfo.email)) {
+      throw new Error("Tu cuenta Google no está autorizada para modo admin.");
+    }
+
+    return callAdminSession("google-login", {
+      method: "POST",
+      body: {
+        accessToken,
+        profile: userInfo
+      }
+    });
+  } catch (error) {
+    const message = String(error?.message || "");
+    if (/popup|closed_by_user|access_denied/i.test(message)) {
+      throw new Error("No se pudo abrir el inicio de sesión de Google. Revisa pop-ups, cookies de terceros o intenta en incógnito.");
+    }
+    throw error;
+  }
 }
 
 export async function getAdminSession() {
