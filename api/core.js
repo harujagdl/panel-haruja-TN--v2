@@ -46,6 +46,7 @@ import {
 } from '../lib/api/catalogoIA.js';
 import { AdminSessionConfigError, getAdminSessionSecret } from '../lib/security/adminSessionConfig.js';
 import { createTraceId, getErrorMessage, logError, logInfo, logWarn } from '../lib/observability/logger.js';
+import { getSpreadsheetId } from '../lib/google/sheetsClient.js';
 
 export const sendOk = (res, data) => res.status(200).json({ ok: true, data });
 export const sendErr = (res, status, message, _error, code) =>
@@ -147,7 +148,28 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['catalogo-ia-draft-update', new Set(['POST'])],
   ['catalogo-ia-draft-archive', new Set(['POST'])],
 ]);
-const PUBLIC_PRENDA_FIELDS = ['Código', 'Descripción', 'Tipo', 'Color', 'Talla', 'Status', 'Disponibilidad', 'Existencia', 'Existencias', 'Precio'];
+const PUBLIC_PRENDA_FIELDS = [
+  'Orden',
+  'Código',
+  'Descripción',
+  'Tipo',
+  'Color',
+  'Talla',
+  'Proveedor',
+  'proveedor',
+  'TN',
+  'Status',
+  'Disponibilidad',
+  'Existencia',
+  'Existencias',
+  'Fecha',
+  'fecha',
+  'fechaTexto',
+  'Precio',
+  'Costo',
+  'Margen',
+  'Utilidad',
+];
 const PUBLIC_CREATE_ALLOWED_FIELDS = new Set([
   'codigo',
   'descripcion',
@@ -871,7 +893,14 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, ...data });
     }
 
-    if (action === 'prendas-list') return sendOk(res, sanitizePrendasPublicRows(await listPrendas()));
+    if (action === 'prendas-list') {
+      const rows = await listPrendas();
+      console.info('[prendas-list] spreadsheetId', getSpreadsheetId?.() || process.env.GOOGLE_SHEETS_SPREADSHEET_ID);
+      console.info('[prendas-list] rows count', rows.length);
+      console.info('[prendas-list] first raw row', rows[0]);
+      console.info('[prendas-list] first raw keys', Object.keys(rows[0] || {}));
+      return sendOk(res, sanitizePrendasPublicRows(rows));
+    }
     if (action === 'prendas-generar-codigo') return sendOk(res, await generarCodigoPrenda(req.body || {}));
     if (action === 'prendas-create') {
       const { payload, blockedKeys } = sanitizePublicCreatePayload(req.body || {});
