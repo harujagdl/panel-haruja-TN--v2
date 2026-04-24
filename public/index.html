@@ -1938,6 +1938,24 @@ body.admin-on .admin-only{ display:table-cell; }
   gap:10px;
 }
 .catalogo-ia-form-grid .full{ grid-column:1 / -1; }
+.catalogo-ia-section{
+  grid-column:1 / -1;
+  border:1px solid #e2e8f0;
+  border-radius:12px;
+  padding:10px;
+  background:#f8fafc;
+}
+.catalogo-ia-section h4{
+  margin:0 0 10px;
+  font-size:13px;
+  color:#0f172a;
+}
+.catalogo-ia-section-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.catalogo-ia-section-grid .full{ grid-column:1 / -1; }
 .catalogo-ia-actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
 .catalogo-ia-message{
   margin-top:10px;
@@ -2849,18 +2867,58 @@ body.haruja-col-resizing{
                     <span class="catalogo-ia-badge">Listo para CSV</span>
                   </div>
                   <div class="catalogo-ia-form-grid">
-                    <label>SKU <input type="text" id="catalogoIASkuInput" placeholder="Ej: HARUJA-0001" /></label>
-                    <label>Nombre del producto <input type="text" /></label>
-                    <label>Categoría <input type="text" /></label>
-                    <label>Color <input type="text" /></label>
-                    <label>Talla <input type="text" /></label>
-                    <label>Precio <input type="number" min="0" step="0.01" /></label>
-                    <label>Stock <input type="number" min="0" step="1" /></label>
-                    <label class="full">Descripción <textarea rows="3"></textarea></label>
-                    <label class="full">Tags <input type="text" placeholder="vestido, verano, lino" /></label>
-                    <label class="full">Título SEO <input type="text" /></label>
-                    <label class="full">Descripción SEO <textarea rows="2"></textarea></label>
-                    <label class="full">Identificador URL <input type="text" placeholder="producto-demo" /></label>
+                    <section class="catalogo-ia-section">
+                      <h4>A) Información principal</h4>
+                      <div class="catalogo-ia-section-grid">
+                        <label>Identificador de URL <input type="text" id="catalogoIAUrlHandle" placeholder="producto-demo" /></label>
+                        <label>Nombre <input type="text" id="catalogoIANombre" /></label>
+                        <label>Categorías <input type="text" id="catalogoIACategorias" /></label>
+                        <label>SKU <input type="text" id="catalogoIASKU" placeholder="Ej: HARUJA-0001" /></label>
+                        <label>Marca <input type="text" id="catalogoIAMarca" /></label>
+                      </div>
+                    </section>
+
+                    <section class="catalogo-ia-section">
+                      <h4>B) Variantes</h4>
+                      <div class="catalogo-ia-section-grid">
+                        <label>Nombre de propiedad 1 <input type="text" id="catalogoIAProp1Nombre" /></label>
+                        <label>Valor de propiedad 1 <input type="text" id="catalogoIAProp1Valor" /></label>
+                        <label>Nombre de propiedad 2 <input type="text" id="catalogoIAProp2Nombre" /></label>
+                        <label>Valor de propiedad 2 <input type="text" id="catalogoIAProp2Valor" /></label>
+                        <label>Nombre de propiedad 3 <input type="text" id="catalogoIAProp3Nombre" /></label>
+                        <label>Valor de propiedad 3 <input type="text" id="catalogoIAProp3Valor" /></label>
+                      </div>
+                    </section>
+
+                    <section class="catalogo-ia-section">
+                      <h4>C) Precio e inventario</h4>
+                      <div class="catalogo-ia-section-grid">
+                        <label>Precio <input type="number" id="catalogoIAPrecio" min="0" step="0.01" /></label>
+                        <label>Precio promocional <input type="number" id="catalogoIAPrecioPromocional" min="0" step="0.01" /></label>
+                        <label>Costo <input type="number" id="catalogoIACosto" min="0" step="0.01" /></label>
+                        <label>Stock <input type="number" id="catalogoIAStock" min="0" step="1" /></label>
+                        <label>Código de barras <input type="text" id="catalogoIACodigoBarras" /></label>
+                      </div>
+                    </section>
+
+                    <section class="catalogo-ia-section">
+                      <h4>D) Configuración Tiendanube</h4>
+                      <div class="catalogo-ia-section-grid">
+                        <label>Mostrar en tienda <input type="text" id="catalogoIAMostrarTienda" /></label>
+                        <label>Envío sin cargo <input type="text" id="catalogoIAEnvioSinCargo" /></label>
+                        <label>Producto Físico <input type="text" id="catalogoIAProductoFisico" /></label>
+                      </div>
+                    </section>
+
+                    <section class="catalogo-ia-section">
+                      <h4>E) Contenido IA / SEO</h4>
+                      <div class="catalogo-ia-section-grid">
+                        <label class="full">Descripción <textarea id="catalogoIADescripcion" rows="3"></textarea></label>
+                        <label class="full">Tags <input type="text" id="catalogoIATags" placeholder="vestido, verano, lino" /></label>
+                        <label>Título para SEO <input type="text" id="catalogoIASeoTitulo" /></label>
+                        <label>Descripción para SEO <textarea id="catalogoIASeoDescripcion" rows="2"></textarea></label>
+                      </div>
+                    </section>
                   </div>
                   <div class="catalogo-ia-actions">
                     <button type="button" class="btn btn-primary" id="catalogoIAGenerateBtn">Generar ficha IA</button>
@@ -2878,7 +2936,7 @@ body.haruja-col-resizing{
                   <table class="table">
                     <thead>
                       <tr>
-                        <th>Foto</th><th>SKU</th><th>Producto</th><th>Estado</th><th>SEO</th><th>CSV</th><th>Última edición</th><th>Acciones</th>
+                        <th>Foto</th><th>SKU</th><th>Nombre</th><th>Categoría</th><th>Talla</th><th>Color</th><th>Precio</th><th>Stock</th><th>Estado</th><th>SEO</th><th>CSV</th><th>Acciones</th>
                       </tr>
                     </thead>
                     <tbody id="catalogoIATableBody">
@@ -2886,10 +2944,14 @@ body.haruja-col-resizing{
                         <td><span class="catalogo-ia-thumb" aria-hidden="true">🛍️</span></td>
                         <td>HARUJA-DEMO-001</td>
                         <td>Producto de ejemplo</td>
+                        <td>Vestidos</td>
+                        <td>CH</td>
+                        <td>Negro</td>
+                        <td>$499.00</td>
+                        <td>8</td>
                         <td><span class="catalogo-ia-badge">Pendiente IA</span></td>
                         <td>Sin generar</td>
                         <td>No listo</td>
-                        <td>24/04/2026</td>
                         <td>
                           <button type="button" class="secondary small">Ver</button>
                           <button type="button" class="secondary small">Editar</button>
@@ -3615,6 +3677,81 @@ Errores: 0</pre>
       let dbInited = false;
       let catalogoIAInited = false;
       let catalogoIAObjectUrl = null;
+      const TIENDANUBE_CSV_COLUMNS = [
+        "Identificador de URL",
+        "Nombre",
+        "Categorías",
+        "Nombre de propiedad 1",
+        "Valor de propiedad 1",
+        "Nombre de propiedad 2",
+        "Valor de propiedad 2",
+        "Nombre de propiedad 3",
+        "Valor de propiedad 3",
+        "Precio",
+        "Precio promocional",
+        "Stock",
+        "SKU",
+        "Código de barras",
+        "Mostrar en tienda",
+        "Envío sin cargo",
+        "Descripción",
+        "Tags",
+        "Título para SEO",
+        "Descripción para SEO",
+        "Marca",
+        "Producto Físico",
+        "Costo"
+      ];
+      const DEFAULT_CATALOGO_IA_ROW = Object.freeze({
+        "Identificador de URL": "",
+        "Nombre": "",
+        "Categorías": "",
+        "Nombre de propiedad 1": "Talla",
+        "Valor de propiedad 1": "",
+        "Nombre de propiedad 2": "Color",
+        "Valor de propiedad 2": "",
+        "Nombre de propiedad 3": "",
+        "Valor de propiedad 3": "",
+        "Precio": "",
+        "Precio promocional": "",
+        "Stock": "",
+        "SKU": "",
+        "Código de barras": "",
+        "Mostrar en tienda": "SÍ",
+        "Envío sin cargo": "NO",
+        "Descripción": "",
+        "Tags": "",
+        "Título para SEO": "",
+        "Descripción para SEO": "",
+        "Marca": "HarujaGdl",
+        "Producto Físico": "SÍ",
+        "Costo": ""
+      });
+      const CATALOGO_IA_FIELD_IDS = {
+        "Identificador de URL": "catalogoIAUrlHandle",
+        "Nombre": "catalogoIANombre",
+        "Categorías": "catalogoIACategorias",
+        "Nombre de propiedad 1": "catalogoIAProp1Nombre",
+        "Valor de propiedad 1": "catalogoIAProp1Valor",
+        "Nombre de propiedad 2": "catalogoIAProp2Nombre",
+        "Valor de propiedad 2": "catalogoIAProp2Valor",
+        "Nombre de propiedad 3": "catalogoIAProp3Nombre",
+        "Valor de propiedad 3": "catalogoIAProp3Valor",
+        "Precio": "catalogoIAPrecio",
+        "Precio promocional": "catalogoIAPrecioPromocional",
+        "Stock": "catalogoIAStock",
+        "SKU": "catalogoIASKU",
+        "Código de barras": "catalogoIACodigoBarras",
+        "Mostrar en tienda": "catalogoIAMostrarTienda",
+        "Envío sin cargo": "catalogoIAEnvioSinCargo",
+        "Descripción": "catalogoIADescripcion",
+        "Tags": "catalogoIATags",
+        "Título para SEO": "catalogoIASeoTitulo",
+        "Descripción para SEO": "catalogoIASeoDescripcion",
+        "Marca": "catalogoIAMarca",
+        "Producto Físico": "catalogoIAProductoFisico",
+        "Costo": "catalogoIACosto"
+      };
       if ((window.location.hash || "").startsWith("#/panel")) {
         clearLastToolRouteState();
       }
@@ -3631,7 +3768,10 @@ Errores: 0</pre>
 
         if (nextView === "registro") initRegistroView();
         if (nextView === "codigos") initDbView();
-        if (nextView === "catalogo-ia") initCatalogoIA();
+        if (nextView === "catalogo-ia") {
+          initCatalogoIA();
+          hydrateCatalogoIAFormDefaults();
+        }
         if (nextView === "meta-vs-venta") {
           loadMetaVsVenta({ force: true });
         }
@@ -3837,10 +3977,21 @@ Errores: 0</pre>
         if (imageInput) imageInput.value = "";
         if (preview) preview.removeAttribute("src");
         if (statusBadge) statusBadge.textContent = "Pendiente imagen";
+        TIENDANUBE_CSV_COLUMNS.forEach((column) => {
+          const inputId = CATALOGO_IA_FIELD_IDS[column];
+          if (!inputId) return;
+          const input = document.getElementById(inputId);
+          if (!input) return;
+          input.value = DEFAULT_CATALOGO_IA_ROW[column] ?? "";
+        });
         if (catalogoIAObjectUrl) {
           URL.revokeObjectURL(catalogoIAObjectUrl);
           catalogoIAObjectUrl = null;
         }
+      }
+
+      function hydrateCatalogoIAFormDefaults() {
+        resetCatalogoIAForm();
       }
 
       function handleCatalogoIAImagePreview(event) {
@@ -3911,7 +4062,11 @@ Errores: 0</pre>
         const safeMessage = "Función preparada para conexión posterior.";
         if (saveBtn) saveBtn.addEventListener("click", () => showCatalogoIAMessage(safeMessage, "info"));
         if (reviewBtn) reviewBtn.addEventListener("click", () => showCatalogoIAMessage(safeMessage, "info"));
-        if (exportBtn) exportBtn.addEventListener("click", () => showCatalogoIAMessage(safeMessage, "info"));
+        if (exportBtn) {
+          exportBtn.addEventListener("click", () => {
+            showCatalogoIAMessage("Exportación CSV preparada. Se conectará en la siguiente fase.", "info");
+          });
+        }
 
         catalogoIAInited = true;
       }
