@@ -68,10 +68,12 @@ export async function loadBaseRowsFromSheets() {
     const existencia = normalizeNumber(row["Existencia"] ?? row["Existencias"], { fallback: 0 }) || 0;
     const { utilidad, margen } = calcularUtilidadYMargenDesdeBaseVenta(precio, costo);
     const orden = normalizeNumber(row["Orden"], { fallback: index + 1 }) || index + 1;
-    const proveedorValue = normalizeText(pickFirst(row, PROVEEDOR_ALIASES));
-    const fechaValue = pickFirst(row, FECHA_ALIASES);
+    const proveedorValue = normalizeText(
+      row.proveedor || row.Proveedor || row.Marca || row.marca || pickFirst(row, PROVEEDOR_ALIASES)
+    );
+    const fechaValue = row.fecha || row.Fecha || pickFirst(row, FECHA_ALIASES);
     const fecha = normalizeText(fechaValue);
-    const fechaTexto = formatFechaDisplay(fechaValue);
+    const fechaTexto = row.fechaTexto || row.FechaTexto || row.fecha || row.Fecha || formatFechaDisplay(fechaValue);
 
     const mapped = {
       docId: codigo,
