@@ -1862,6 +1862,108 @@ body.admin-on .admin-only{ display:table-cell; }
   line-height: 1.35;
 }
 .toolcard-actions{ margin-top: 10px; }
+
+/* ===== Catálogo IA (visual-only module) ===== */
+.catalogo-ia-wrap{
+  display:grid;
+  gap:16px;
+}
+.catalogo-ia-summary{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+}
+.catalogo-ia-stat{
+  background:#fff;
+  border:1px solid #e6eaf2;
+  border-radius:14px;
+  padding:12px 14px;
+  box-shadow:0 4px 14px rgba(15,23,42,.05);
+}
+.catalogo-ia-stat small{ color:#64748b; display:block; margin-bottom:6px; }
+.catalogo-ia-stat strong{ font-size:1.3rem; color:#0f172a; }
+.catalogo-ia-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+}
+.catalogo-ia-card{
+  background:#fff;
+  border:1px solid #e6eaf2;
+  border-radius:16px;
+  padding:14px;
+  box-shadow:0 6px 20px rgba(15,23,42,.05);
+}
+.catalogo-ia-dropzone{
+  border:2px dashed #cbd5e1;
+  border-radius:14px;
+  background:#f8fafc;
+  padding:18px;
+  text-align:center;
+  display:grid;
+  gap:10px;
+}
+.catalogo-ia-dropzone.is-dragover{
+  border-color:#3b82f6;
+  background:#eff6ff;
+}
+.catalogo-ia-preview{
+  width:100%;
+  min-height:220px;
+  border-radius:12px;
+  border:1px solid #dbe4f0;
+  background:#f8fafc;
+  object-fit:cover;
+}
+.catalogo-ia-badges{ display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 10px; }
+.catalogo-ia-badge{
+  display:inline-flex;
+  align-items:center;
+  border-radius:999px;
+  padding:4px 10px;
+  font-size:12px;
+  font-weight:700;
+  border:1px solid #dbe4f0;
+  color:#334155;
+  background:#f8fafc;
+}
+.catalogo-ia-badge.is-active{
+  color:#1d4ed8;
+  border-color:#bfdbfe;
+  background:#eff6ff;
+}
+.catalogo-ia-form-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.catalogo-ia-form-grid .full{ grid-column:1 / -1; }
+.catalogo-ia-actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.catalogo-ia-message{
+  margin-top:10px;
+  border-radius:10px;
+  padding:9px 11px;
+  font-size:13px;
+  border:1px solid #dbeafe;
+  background:#eff6ff;
+  color:#1d4ed8;
+}
+.catalogo-ia-message.is-error{
+  border-color:#fecaca;
+  background:#fef2f2;
+  color:#b91c1c;
+}
+.catalogo-ia-table-wrap{ overflow-x:auto; margin-top:14px; }
+.catalogo-ia-table-wrap table{ min-width:860px; }
+.catalogo-ia-thumb{
+  width:42px;
+  height:42px;
+  border-radius:10px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:#f1f5f9;
+}
 .launcher .btn{
   display:inline-flex;
   align-items:center;
@@ -2454,8 +2556,11 @@ body.haruja-col-resizing{
       padding: 12px;
     }
 
-    .toolcard-title,
-    .card h2 { font-size: 1rem; }
+  .toolcard-title,
+  .card h2 { font-size: 1rem; }
+  .catalogo-ia-summary{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .catalogo-ia-grid{ grid-template-columns:1fr; }
+  .catalogo-ia-form-grid{ grid-template-columns:1fr; }
 
     #dbCodigosSection table.table { min-width: 640px; }
 
@@ -2589,6 +2694,17 @@ body.haruja-col-resizing{
                   </div>
                 </div>
               </div>
+
+              <div class="toolcard" aria-label="Abrir Catálogo IA">
+                <div class="toolcard-icon" aria-hidden="true">✨</div>
+                <div class="toolcard-body">
+                  <div class="toolcard-title">Catálogo IA</div>
+                  <div class="toolcard-desc">Genera descripciones, SEO y fichas para Tiendanube a partir de fotos editadas.</div>
+                  <div class="toolcard-actions">
+                    <button type="button" class="btn btn-primary tool-open" id="btnOpenCatalogoIA">Abrir</button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -2692,6 +2808,98 @@ body.haruja-col-resizing{
                 </div>
               </div>
               <p id="metaAdminMessage" class="status hidden"></p>
+            </div>
+          </section>
+        </section>
+
+        <section id="view-catalogo-ia" class="view">
+          <section class="section" id="catalogoIAView">
+            <button type="button" class="secondary js-go-panel" data-go-panel="1">← Volver al panel</button>
+            <h2>Catálogo IA</h2>
+            <p>Convierte fotos editadas en fichas listas para Tiendanube.</p>
+
+            <div class="catalogo-ia-wrap">
+              <div class="catalogo-ia-summary">
+                <article class="catalogo-ia-stat"><small>Productos pendientes</small><strong>0</strong></article>
+                <article class="catalogo-ia-stat"><small>Fichas generadas</small><strong>0</strong></article>
+                <article class="catalogo-ia-stat"><small>Listos para CSV</small><strong>0</strong></article>
+                <article class="catalogo-ia-stat"><small>Requieren revisión</small><strong>0</strong></article>
+              </div>
+
+              <div class="catalogo-ia-grid">
+                <article class="catalogo-ia-card">
+                  <h3 style="margin-top:0;">Foto editada del producto</h3>
+                  <p class="muted">Sube una foto editada del producto para preparar su ficha de Tiendanube.</p>
+                  <div class="catalogo-ia-dropzone" id="catalogoIADropzone">
+                    <img id="catalogoIAPreview" class="catalogo-ia-preview" alt="Preview de imagen seleccionada" />
+                    <small class="muted">Formatos compatibles: JPG, PNG, WEBP</small>
+                    <div>
+                      <button type="button" class="btn btn-primary" id="catalogoIASelectImageBtn">Seleccionar imagen</button>
+                      <input id="catalogoIAImageInput" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" style="display:none;" />
+                    </div>
+                  </div>
+                </article>
+
+                <article class="catalogo-ia-card">
+                  <h3 style="margin-top:0;">Ficha generada</h3>
+                  <div class="catalogo-ia-badges">
+                    <span class="catalogo-ia-badge is-active" id="catalogoIAStatusBadge">Pendiente imagen</span>
+                    <span class="catalogo-ia-badge">Pendiente IA</span>
+                    <span class="catalogo-ia-badge">En revisión</span>
+                    <span class="catalogo-ia-badge">Listo para CSV</span>
+                  </div>
+                  <div class="catalogo-ia-form-grid">
+                    <label>SKU <input type="text" id="catalogoIASkuInput" placeholder="Ej: HARUJA-0001" /></label>
+                    <label>Nombre del producto <input type="text" /></label>
+                    <label>Categoría <input type="text" /></label>
+                    <label>Color <input type="text" /></label>
+                    <label>Talla <input type="text" /></label>
+                    <label>Precio <input type="number" min="0" step="0.01" /></label>
+                    <label>Stock <input type="number" min="0" step="1" /></label>
+                    <label class="full">Descripción <textarea rows="3"></textarea></label>
+                    <label class="full">Tags <input type="text" placeholder="vestido, verano, lino" /></label>
+                    <label class="full">Título SEO <input type="text" /></label>
+                    <label class="full">Descripción SEO <textarea rows="2"></textarea></label>
+                    <label class="full">Identificador URL <input type="text" placeholder="producto-demo" /></label>
+                  </div>
+                  <div class="catalogo-ia-actions">
+                    <button type="button" class="btn btn-primary" id="catalogoIAGenerateBtn">Generar ficha IA</button>
+                    <button type="button" class="btn secondary" id="catalogoIASaveDraftBtn">Guardar borrador</button>
+                    <button type="button" class="btn secondary" id="catalogoIAReviewBtn">Marcar como revisado</button>
+                    <button type="button" class="btn secondary" id="catalogoIAExportBtn">Exportar CSV</button>
+                  </div>
+                  <p id="catalogoIAMessage" class="catalogo-ia-message hidden" role="status" aria-live="polite"></p>
+                </article>
+              </div>
+
+              <article class="catalogo-ia-card">
+                <h3 style="margin-top:0;">Productos del catálogo</h3>
+                <div class="catalogo-ia-table-wrap">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Foto</th><th>SKU</th><th>Producto</th><th>Estado</th><th>SEO</th><th>CSV</th><th>Última edición</th><th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody id="catalogoIATableBody">
+                      <tr>
+                        <td><span class="catalogo-ia-thumb" aria-hidden="true">🛍️</span></td>
+                        <td>HARUJA-DEMO-001</td>
+                        <td>Producto de ejemplo</td>
+                        <td><span class="catalogo-ia-badge">Pendiente IA</span></td>
+                        <td>Sin generar</td>
+                        <td>No listo</td>
+                        <td>24/04/2026</td>
+                        <td>
+                          <button type="button" class="secondary small">Ver</button>
+                          <button type="button" class="secondary small">Editar</button>
+                          <button type="button" class="secondary small">Eliminar</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </article>
             </div>
           </section>
         </section>
@@ -3399,12 +3607,14 @@ Errores: 0</pre>
       const adminSessionExpiredModal = document.getElementById("adminSessionExpiredModal");
       const adminSessionReauthBtn = document.getElementById("adminSessionReauthBtn");
       const adminSessionExpiredMessage = document.getElementById("adminSessionExpiredMessage");
-      const VIEWS = ["panel", "registro", "codigos", "meta-vs-venta"];
+      const VIEWS = ["panel", "registro", "codigos", "meta-vs-venta", "catalogo-ia"];
 
       const ENABLE_DESC_BETTER_UI = true;
 
       let registroInited = false;
       let dbInited = false;
+      let catalogoIAInited = false;
+      let catalogoIAObjectUrl = null;
       if ((window.location.hash || "").startsWith("#/panel")) {
         clearLastToolRouteState();
       }
@@ -3421,6 +3631,7 @@ Errores: 0</pre>
 
         if (nextView === "registro") initRegistroView();
         if (nextView === "codigos") initDbView();
+        if (nextView === "catalogo-ia") initCatalogoIA();
         if (nextView === "meta-vs-venta") {
           loadMetaVsVenta({ force: true });
         }
@@ -3488,7 +3699,7 @@ Errores: 0</pre>
           return "meta-vs-venta";
         }
         const hash = location.hash || "#/panel";
-        const match = hash.match(/^#\/(panel|registro|codigos|meta-vs-venta)$/);
+        const match = hash.match(/^#\/(panel|registro|codigos|meta-vs-venta|catalogo-ia)$/);
         return match ? match[1] : "panel";
       }
 
@@ -3601,6 +3812,108 @@ Errores: 0</pre>
           // usa el router interno (hash) para no cambiar pathname
           navigateTo("meta-vs-venta");
         });
+      }
+      const btnOpenCatalogoIA = document.getElementById("btnOpenCatalogoIA");
+      if (btnOpenCatalogoIA) {
+        btnOpenCatalogoIA.addEventListener("click", () => openCatalogoIA());
+      }
+
+      function openCatalogoIA() {
+        navigateTo("catalogo-ia");
+      }
+
+      function showCatalogoIAMessage(message, type = "info") {
+        const node = document.getElementById("catalogoIAMessage");
+        if (!node) return;
+        node.textContent = message || "Función preparada para conexión posterior.";
+        node.classList.remove("hidden", "is-error");
+        if (type === "error") node.classList.add("is-error");
+      }
+
+      function resetCatalogoIAForm() {
+        const preview = document.getElementById("catalogoIAPreview");
+        const imageInput = document.getElementById("catalogoIAImageInput");
+        const statusBadge = document.getElementById("catalogoIAStatusBadge");
+        if (imageInput) imageInput.value = "";
+        if (preview) preview.removeAttribute("src");
+        if (statusBadge) statusBadge.textContent = "Pendiente imagen";
+        if (catalogoIAObjectUrl) {
+          URL.revokeObjectURL(catalogoIAObjectUrl);
+          catalogoIAObjectUrl = null;
+        }
+      }
+
+      function handleCatalogoIAImagePreview(event) {
+        const file = event?.target?.files?.[0] || event?.dataTransfer?.files?.[0];
+        if (!file) return;
+        const isValidType = ["image/jpeg", "image/png", "image/webp"].includes(file.type);
+        if (!isValidType) {
+          showCatalogoIAMessage("Formato no compatible. Usa JPG, PNG o WEBP.", "error");
+          return;
+        }
+        const preview = document.getElementById("catalogoIAPreview");
+        const statusBadge = document.getElementById("catalogoIAStatusBadge");
+        if (catalogoIAObjectUrl) URL.revokeObjectURL(catalogoIAObjectUrl);
+        catalogoIAObjectUrl = URL.createObjectURL(file);
+        if (preview) preview.src = catalogoIAObjectUrl;
+        if (statusBadge) statusBadge.textContent = "Pendiente IA";
+        showCatalogoIAMessage("Imagen cargada localmente. Función preparada para conexión posterior.", "info");
+      }
+
+      function initCatalogoIA() {
+        if (catalogoIAInited) return;
+        const imageInput = document.getElementById("catalogoIAImageInput");
+        const selectBtn = document.getElementById("catalogoIASelectImageBtn");
+        const dropzone = document.getElementById("catalogoIADropzone");
+        const generateBtn = document.getElementById("catalogoIAGenerateBtn");
+        const saveBtn = document.getElementById("catalogoIASaveDraftBtn");
+        const reviewBtn = document.getElementById("catalogoIAReviewBtn");
+        const exportBtn = document.getElementById("catalogoIAExportBtn");
+
+        if (selectBtn && imageInput) {
+          selectBtn.addEventListener("click", () => imageInput.click());
+        }
+        if (imageInput) {
+          imageInput.addEventListener("change", handleCatalogoIAImagePreview);
+        }
+
+        if (dropzone && imageInput) {
+          ["dragenter", "dragover"].forEach((eventName) => {
+            dropzone.addEventListener(eventName, (event) => {
+              event.preventDefault();
+              dropzone.classList.add("is-dragover");
+            });
+          });
+          ["dragleave", "drop"].forEach((eventName) => {
+            dropzone.addEventListener(eventName, (event) => {
+              event.preventDefault();
+              dropzone.classList.remove("is-dragover");
+            });
+          });
+          dropzone.addEventListener("drop", (event) => {
+            const droppedFiles = event.dataTransfer?.files;
+            if (!droppedFiles?.length) return;
+            handleCatalogoIAImagePreview({ dataTransfer: event.dataTransfer });
+          });
+        }
+
+        if (generateBtn) {
+          generateBtn.addEventListener("click", () => {
+            const hasImage = Boolean(document.getElementById("catalogoIAPreview")?.getAttribute("src"));
+            if (!hasImage) {
+              showCatalogoIAMessage("Primero sube una foto editada del producto.", "error");
+              return;
+            }
+            showCatalogoIAMessage("Vista lista. La conexión con IA se agregará en la siguiente fase.", "info");
+          });
+        }
+
+        const safeMessage = "Función preparada para conexión posterior.";
+        if (saveBtn) saveBtn.addEventListener("click", () => showCatalogoIAMessage(safeMessage, "info"));
+        if (reviewBtn) reviewBtn.addEventListener("click", () => showCatalogoIAMessage(safeMessage, "info"));
+        if (exportBtn) exportBtn.addEventListener("click", () => showCatalogoIAMessage(safeMessage, "info"));
+
+        catalogoIAInited = true;
       }
       document.addEventListener("DOMContentLoaded", () => {
         const harujaLogoButton = document.getElementById("haruja-logo");
