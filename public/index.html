@@ -3890,7 +3890,7 @@ Errores: 0</pre>
       let catalogoIAObjectUrl = null;
       let catalogoIACurrentDraftId = "";
       let catalogoIADrafts = [];
-      let catalogoIASelectedImageName = "";
+      let catalogoIASelectedImageFile = null;
       const CATALOGO_IA_SPREADSHEET_ID = "16pqujWAAsrlmivy2YzsMizQOjms8MuqDWJVNUGESNv0";
       const BASE_PANEL_SPREADSHEET_ID = "1sGWRwLiyZD4gznruHvhgZ92KLZcaEjWww3zvypn7iA0";
       const TIENDANUBE_CSV_COLUMNS = [
@@ -3953,6 +3953,18 @@ Errores: 0</pre>
         return data?.data;
       };
 
+      function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = String(reader.result || "");
+            resolve(result.includes(",") ? result.split(",")[1] : result);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+
       const collectCatalogoIAForm = () => {
         const row = { ...DEFAULT_CATALOGO_IA_ROW };
         CATALOGO_IA_COLUMNS.forEach((column) => {
@@ -3964,7 +3976,6 @@ Errores: 0</pre>
         });
         row["ID interno"] = catalogoIACurrentDraftId || row["ID interno"];
         if (!row["SKU base"]) row["SKU base"] = row.SKU || "";
-        row["Foto principal ID"] = catalogoIASelectedImageName || row["Foto principal ID"];
         if (!row["Identificador de URL"]) row["Identificador de URL"] = slugifyCatalogoIA(row.Nombre || row.SKU);
         return row;
       };
@@ -4000,7 +4011,7 @@ Errores: 0</pre>
           catalogoIAObjectUrl = null;
         }
         catalogoIACurrentDraftId = "";
-        catalogoIASelectedImageName = "";
+        catalogoIASelectedImageFile = null;
         fillCatalogoIAForm(DEFAULT_CATALOGO_IA_ROW);
       }
 
@@ -4114,10 +4125,10 @@ Errores: 0</pre>
         const statusBadge = document.getElementById("catalogoIAStatusBadge");
         if (catalogoIAObjectUrl) URL.revokeObjectURL(catalogoIAObjectUrl);
         catalogoIAObjectUrl = URL.createObjectURL(file);
-        catalogoIASelectedImageName = file.name || "";
+        catalogoIASelectedImageFile = file;
         if (preview) preview.src = catalogoIAObjectUrl;
         if (statusBadge) statusBadge.textContent = "Pendiente IA";
-        showCatalogoIAMessage("Imagen cargada localmente. No se sube a Drive en esta fase.", "info");
+        showCatalogoIAMessage("Imagen cargada localmente. Se subirá a Drive al guardar.", "info");
       }
 
       async function initCatalogoIA() {
@@ -4212,16 +4223,46 @@ Errores: 0</pre>
 
         if (saveBtn) {
           saveBtn.addEventListener("click", async () => {
-            const payload = collectCatalogoIAForm();
-            if (catalogoIACurrentDraftId) {
-              await callCatalogoIAApi({ action: "catalogo-ia-draft-update", method: "POST", payload: { id: catalogoIACurrentDraftId, payload } });
-              showCatalogoIAMessage("Borrador actualizado.", "success");
-            } else {
-              const created = await callCatalogoIAApi({ action: "catalogo-ia-draft-create", method: "POST", payload });
-              catalogoIACurrentDraftId = created?.["ID interno"] || "";
-              showCatalogoIAMessage("Borrador guardado.", "success");
+            const hadPendingImage = Boolean(catalogoIASelectedImageFile);
+            try {
+              const payload = collectCatalogoIAForm();
+              if (catalogoIASelectedImageFile && !normalizeCatalogoIAText(payload.SKU)) {
+                return showCatalogoIAMessage("Primero captura o selecciona un SKU para nombrar la foto.", "error");
+              }
+
+              if (catalogoIASelectedImageFile) {
+                if (catalogoIASelectedImageFile.size > (10 * 1024 * 1024)) {
+                  return showCatalogoIAMessage("La imagen supera el tamaño máximo permitido (10 MB).", "error");
+                }
+                showCatalogoIAMessage("Subiendo foto a Drive...", "info");
+                const base64 = await fileToBase64(catalogoIASelectedImageFile);
+                const photo = await callCatalogoIAApi({
+                  action: "catalogo-ia-image-upload",
+                  method: "POST",
+                  payload: {
+                    sku: payload.SKU,
+                    draftId: catalogoIACurrentDraftId || "",
+                    fileName: catalogoIASelectedImageFile.name || "",
+                    mimeType: catalogoIASelectedImageFile.type || "",
+                    base64
+                  }
+                });
+                payload["Foto principal ID"] = photo?.fileId || "";
+                payload["Foto principal URL"] = photo?.webViewLink || "";
+              }
+
+              if (catalogoIACurrentDraftId) {
+                await callCatalogoIAApi({ action: "catalogo-ia-draft-update", method: "POST", payload: { id: catalogoIACurrentDraftId, payload } });
+              } else {
+                const created = await callCatalogoIAApi({ action: "catalogo-ia-draft-create", method: "POST", payload });
+                catalogoIACurrentDraftId = created?.["ID interno"] || "";
+              }
+              catalogoIASelectedImageFile = null;
+              showCatalogoIAMessage("Foto subida y borrador guardado.", "success");
+              await refreshCatalogoIADrafts();
+            } catch (_error) {
+              showCatalogoIAMessage(hadPendingImage ? "No fue posible subir la foto a Drive." : "No fue posible guardar el borrador.", "error");
             }
-            await refreshCatalogoIADrafts();
           });
         }
 
