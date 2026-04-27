@@ -1915,6 +1915,31 @@ body.admin-on .admin-only{ display:table-cell; }
   background:#f8fafc;
   object-fit:cover;
 }
+.catalogo-ia-gallery{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:12px;
+  margin-top:12px;
+}
+.catalogo-ia-photo-card{
+  border:1px solid var(--border,#e5e7eb);
+  border-radius:16px;
+  padding:10px;
+  background:#fff;
+}
+.catalogo-ia-photo-card img{
+  width:100%;
+  height:130px;
+  object-fit:cover;
+  border-radius:12px;
+  display:block;
+  margin-bottom:8px;
+}
+.catalogo-ia-photo-card strong{
+  display:block;
+  font-size:12px;
+  word-break:break-all;
+}
 .catalogo-ia-badges{ display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 10px; }
 .catalogo-ia-badge{
   display:inline-flex;
@@ -2862,14 +2887,16 @@ body.haruja-col-resizing{
               <div class="catalogo-ia-grid">
                 <article class="catalogo-ia-card">
                   <h3 style="margin-top:0;">Foto editada del producto</h3>
-                  <p class="muted">Sube una foto editada del producto para preparar su ficha de Tiendanube.</p>
+                  <p class="muted">Sube una o varias fotos editadas. Se usarán como referencia visual y podrás descargarlas renombradas con el SKU.</p>
                   <div class="catalogo-ia-dropzone" id="catalogoIADropzone">
                     <img id="catalogoIAPreview" class="catalogo-ia-preview" alt="Preview de imagen seleccionada" />
                     <small class="muted">Formatos compatibles: JPG, JPEG, PNG, WEBP</small>
                     <div>
                       <button type="button" class="btn btn-primary" id="catalogoIASelectImageBtn">Seleccionar imagen</button>
-                      <input id="catalogoIAImageInput" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" style="display:none;" />
+                      <button type="button" class="btn secondary" id="catalogoIADownloadRenamedBtn">Descargar fotos renombradas</button>
+                      <input id="catalogoIAImageInput" type="file" multiple accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" style="display:none;" />
                     </div>
+                    <div id="catalogoIAGallery" class="catalogo-ia-gallery"><p class="muted">Aún no hay fotos seleccionadas.</p></div>
                   </div>
                 </article>
 
@@ -3887,12 +3914,12 @@ Errores: 0</pre>
       }
 
       let catalogoIAInited = false;
-      let catalogoIAObjectUrl = null;
+      let catalogoIAObjectUrls = [];
       let catalogoIACurrentDraftId = "";
       let catalogoIADrafts = [];
       let catalogoIADraftsLastFetch = 0;
       let catalogoIADraftsRefreshPromise = null;
-      let catalogoIASelectedImageFile = null;
+      let catalogoIASelectedImageFiles = [];
       let catalogoIAInitPromise = null;
       const CATALOGO_IA_DRAFTS_CACHE_MS = 20000;
       const CATALOGO_IA_SPREADSHEET_ID = "16pqujWAAsrlmivy2YzsMizQOjms8MuqDWJVNUGESNv0";
@@ -3973,16 +4000,24 @@ Errores: 0</pre>
         }
       }
 
-      function fileToBase64(file) {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = String(reader.result || "");
-            resolve(result.includes(",") ? result.split(",")[1] : result);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
+      function cleanSkuForFileName(sku = "") {
+        return String(sku || "")
+          .trim()
+          .replace(/[^a-z0-9]/gi, "");
+      }
+
+      function getExtensionFromFile(file) {
+        const type = String(file?.type || "").toLowerCase();
+        if (type === "image/png") return ".png";
+        if (type === "image/webp") return ".webp";
+        return ".jpg";
+      }
+
+      function buildCatalogoIAImageName(sku, index, file) {
+        const cleanSku = cleanSkuForFileName(sku);
+        const ext = getExtensionFromFile(file);
+        const num = String(index + 1).padStart(2, "0");
+        return `${cleanSku}-${num}${ext}`;
       }
 
       const collectCatalogoIAForm = () => {
@@ -4026,13 +4061,12 @@ Errores: 0</pre>
         const imageInput = document.getElementById("catalogoIAImageInput");
         if (imageInput) imageInput.value = "";
         if (preview) preview.removeAttribute("src");
-        if (catalogoIAObjectUrl) {
-          URL.revokeObjectURL(catalogoIAObjectUrl);
-          catalogoIAObjectUrl = null;
-        }
+        catalogoIAObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+        catalogoIAObjectUrls = [];
         catalogoIACurrentDraftId = "";
-        catalogoIASelectedImageFile = null;
+        catalogoIASelectedImageFiles = [];
         fillCatalogoIAForm(DEFAULT_CATALOGO_IA_ROW);
+        renderCatalogoIAGallery();
       }
 
       function hydrateCatalogoIAFormDefaults() {
@@ -4153,21 +4187,84 @@ Errores: 0</pre>
       }
 
       function handleCatalogoIAImagePreview(event) {
-        const file = event?.target?.files?.[0] || event?.dataTransfer?.files?.[0];
-        if (!file) return;
-        const isValidType = ["image/jpeg", "image/png", "image/webp"].includes(file.type);
-        if (!isValidType) {
+        const files = Array.from(event?.target?.files || event?.dataTransfer?.files || []);
+        const validFiles = files.filter((file) =>
+          ["image/jpeg", "image/png", "image/webp"].includes(file.type)
+        );
+        if (!validFiles.length) {
           showCatalogoIAMessage("Formato no compatible. Usa JPG, JPEG, PNG o WEBP.", "error");
           return;
         }
         const preview = document.getElementById("catalogoIAPreview");
         const statusBadge = document.getElementById("catalogoIAStatusBadge");
-        if (catalogoIAObjectUrl) URL.revokeObjectURL(catalogoIAObjectUrl);
-        catalogoIAObjectUrl = URL.createObjectURL(file);
-        catalogoIASelectedImageFile = file;
-        if (preview) preview.src = catalogoIAObjectUrl;
+        catalogoIAObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+        catalogoIAObjectUrls = [];
+        catalogoIASelectedImageFiles = validFiles;
+        validFiles.forEach((file) => {
+          catalogoIAObjectUrls.push(URL.createObjectURL(file));
+        });
+        if (preview && catalogoIAObjectUrls[0]) preview.src = catalogoIAObjectUrls[0];
+        renderCatalogoIAGallery();
         if (statusBadge) statusBadge.textContent = "Pendiente IA";
-        showCatalogoIAMessage("Imagen cargada localmente. Se subirá a Drive al guardar.", "info");
+        showCatalogoIAMessage(
+          `${validFiles.length} foto(s) cargada(s) como referencia local. No se subirán a Drive.`,
+          "info"
+        );
+      }
+
+      function renderCatalogoIAGallery() {
+        const gallery = document.getElementById("catalogoIAGallery");
+        if (!gallery) return;
+        const sku = document.getElementById("catalogoIASKU")?.value || "";
+        if (!catalogoIASelectedImageFiles.length) {
+          gallery.innerHTML = '<p class="muted">Aún no hay fotos seleccionadas.</p>';
+          return;
+        }
+        gallery.innerHTML = catalogoIASelectedImageFiles.map((file, index) => {
+          const url = catalogoIAObjectUrls[index] || "";
+          const suggestedName = cleanSkuForFileName(sku)
+            ? buildCatalogoIAImageName(sku, index, file)
+            : "Captura SKU para generar nombre";
+          return `
+            <article class="catalogo-ia-photo-card">
+              <img src="${url}" alt="Foto referencia ${index + 1}" />
+              <small class="muted">Original: ${file.name || ""}</small>
+              <strong>${suggestedName}</strong>
+            </article>
+          `;
+        }).join("");
+      }
+
+      function downloadBlobWithName(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      async function downloadCatalogoIARenamedImages() {
+        const sku = document.getElementById("catalogoIASKU")?.value || "";
+        const cleanSku = cleanSkuForFileName(sku);
+        if (!cleanSku) {
+          showCatalogoIAMessage("Primero captura o selecciona un SKU para nombrar las fotos.", "error");
+          return;
+        }
+        if (!catalogoIASelectedImageFiles.length) {
+          showCatalogoIAMessage("Primero selecciona una o varias fotos.", "warning");
+          return;
+        }
+        catalogoIASelectedImageFiles.forEach((file, index) => {
+          const filename = buildCatalogoIAImageName(sku, index, file);
+          downloadBlobWithName(file, filename);
+        });
+        showCatalogoIAMessage(
+          "Fotos descargadas con nombre basado en SKU. Guárdalas en tu carpeta del equipo.",
+          "success"
+        );
       }
 
       async function initCatalogoIA() {
@@ -4185,6 +4282,7 @@ Errores: 0</pre>
         const dropzone = document.getElementById("catalogoIADropzone");
         const generateBtn = document.getElementById("catalogoIAGenerateBtn");
         const saveBtn = document.getElementById("catalogoIASaveDraftBtn");
+        const downloadBtn = document.getElementById("catalogoIADownloadRenamedBtn");
         const reviewBtn = document.getElementById("catalogoIAReviewBtn");
         const exportBtn = document.getElementById("catalogoIAExportBtn");
         const resetBtn = document.getElementById("catalogoIAResetBtn");
@@ -4201,6 +4299,9 @@ Errores: 0</pre>
 
         if (selectBtn && imageInput) selectBtn.addEventListener("click", () => imageInput.click());
         if (imageInput) imageInput.addEventListener("change", handleCatalogoIAImagePreview);
+        if (downloadBtn) downloadBtn.addEventListener("click", downloadCatalogoIARenamedImages);
+        const skuInput = document.getElementById("catalogoIASKU");
+        if (skuInput) skuInput.addEventListener("input", renderCatalogoIAGallery);
         if (searchBtn) {
           searchBtn.addEventListener("click", () => withCatalogoIAButtonLock(searchBtn, () => searchCatalogoIABaseProducts()));
         }
@@ -4269,7 +4370,7 @@ Errores: 0</pre>
 
         if (generateBtn) {
           generateBtn.addEventListener("click", () => {
-            const hasImage = Boolean(document.getElementById("catalogoIAPreview")?.getAttribute("src"));
+            const hasImage = Boolean(catalogoIASelectedImageFiles.length);
             if (!hasImage) return showCatalogoIAMessage("Primero sube una foto editada del producto.", "warning");
             showCatalogoIAMessage("Vista lista. La conexión con IA se agregará en la siguiente fase.", "info");
           });
@@ -4278,32 +4379,13 @@ Errores: 0</pre>
         if (saveBtn) {
           saveBtn.addEventListener("click", async () => {
             await withCatalogoIAButtonLock(saveBtn, async () => {
-              const hadPendingImage = Boolean(catalogoIASelectedImageFile);
               try {
                 const payload = collectCatalogoIAForm();
-                if (catalogoIASelectedImageFile && !normalizeCatalogoIAText(payload.SKU)) {
-                  return showCatalogoIAMessage("Primero captura o selecciona un SKU para nombrar la foto.", "error");
-                }
-
-                if (catalogoIASelectedImageFile) {
-                  if (catalogoIASelectedImageFile.size > (10 * 1024 * 1024)) {
-                    return showCatalogoIAMessage("La imagen supera el tamaño máximo permitido (10 MB).", "error");
-                  }
-                  showCatalogoIAMessage("Subiendo foto a Drive...", "info");
-                  const base64 = await fileToBase64(catalogoIASelectedImageFile);
-                  const photo = await callCatalogoIAApi({
-                    action: "catalogo-ia-image-upload",
-                    method: "POST",
-                    payload: {
-                      sku: payload.SKU,
-                      draftId: catalogoIACurrentDraftId || "",
-                      fileName: catalogoIASelectedImageFile.name || "",
-                      mimeType: catalogoIASelectedImageFile.type || "",
-                      base64
-                    }
-                  });
-                  payload["Foto principal ID"] = photo?.fileId || "";
-                  payload["Foto principal URL"] = photo?.webViewLink || "";
+                if (catalogoIASelectedImageFiles.length) {
+                  payload["Notas internas"] = [
+                    payload["Notas internas"],
+                    `Fotos referencia locales: ${catalogoIASelectedImageFiles.length}`
+                  ].filter(Boolean).join(" | ");
                 }
 
                 if (catalogoIACurrentDraftId) {
@@ -4312,11 +4394,10 @@ Errores: 0</pre>
                   const created = await callCatalogoIAApi({ action: "catalogo-ia-draft-create", method: "POST", payload });
                   catalogoIACurrentDraftId = created?.["ID interno"] || "";
                 }
-                catalogoIASelectedImageFile = null;
-                showCatalogoIAMessage("Foto subida y borrador guardado.", "success");
+                showCatalogoIAMessage("Borrador guardado. Las fotos quedan solo como referencia local.", "success");
                 await refreshCatalogoIADrafts({ force: true });
               } catch (_error) {
-                showCatalogoIAMessage(hadPendingImage ? "No fue posible subir la foto a Drive." : "No fue posible guardar el borrador.", "error");
+                showCatalogoIAMessage("No fue posible guardar el borrador.", "error");
               }
             });
           });
