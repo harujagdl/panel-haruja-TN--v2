@@ -4899,7 +4899,11 @@ Errores: 0</pre>
         try {
           await callCatalogoIAApi({ action: "catalogo-ia-ensure-sheets", method: "POST", payload: {} });
         } catch (_error) {
-          showCatalogoIAMessage("No fue posible validar estructura de Sheets de Catálogo IA.", "warning");
+          console.error("[catalogo-ia-ensure-sheets]", _error);
+          showCatalogoIAMessage(
+            _error?.message || "No fue posible validar estructura de Sheets de Catálogo IA.",
+            "warning"
+          );
         }
         const imageInput = document.getElementById("catalogoIAImageInput");
         const selectBtn = document.getElementById("catalogoIASelectImageBtn");
@@ -8598,6 +8602,7 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
         reset = false,
         reason = "manual"
       } = {}) => {
+        if (getViewFromUrl() !== "codigos") return;
         if (prendasState.isLoadingInitial) {
           return;
         }
