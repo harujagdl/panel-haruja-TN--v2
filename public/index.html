@@ -9557,18 +9557,21 @@ const createPrendaRow = (item) => {
         }
       };
 
-      function initDbView() {
+      async function initDbView() {
+        const activeView = getViewFromUrl();
+        if (activeView !== "codigos") return;
         if (!dbInited) {
           dbInited = true;
           if (zplForm) zplForm.addEventListener("submit", handlePrintLabel);
         }
         if (dbInitialRowsLoaded) return;
         dbInitialRowsLoaded = true;
-        loadPrendasPage({ reset: true, reason: "view-codigos-init" })
-          .catch((error) => {
-            dbInitialRowsLoaded = false;
-            console.error("[Prendas] No se pudo cargar al abrir Base de datos", error);
-          });
+        try {
+          await loadPrendasPage({ reset: true, reason: "view-codigos-init" });
+        } catch (error) {
+          dbInitialRowsLoaded = false;
+          console.error("[Prendas] No se pudo cargar al abrir Base de datos", error);
+        }
       }
 
       // ADMIN DB MODE START
@@ -10420,7 +10423,7 @@ document.addEventListener("keydown", (event) => {
           }
 
           if (initialView === "codigos") {
-            initDbView();
+            await initDbView();
           }
 
           if (initialView === "catalogo-ia") {
