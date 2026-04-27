@@ -2719,6 +2719,222 @@ body.haruja-col-resizing{
 
     .edit-modal-sheet { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
   }
+
+
+  /* PLAN CODEX — PanelTN responsive móvil ultra quirúrgico */
+  @media (max-width: 768px) {
+    html, body {
+      width: 100%;
+      overflow-x: hidden;
+    }
+
+    body {
+      font-size: 14px;
+    }
+
+    main,
+    .section,
+    .card,
+    .panel,
+    .catalogo-ia-card {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .section {
+      padding: 14px;
+      border-radius: 16px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .toolbar,
+    .actions,
+    .catalogo-ia-actions,
+    .catalogo-ia-preficha-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    button,
+    .btn,
+    .secondary,
+    .btn-primary {
+      width: 100%;
+      min-height: 44px;
+      justify-content: center;
+    }
+
+    .small {
+      width: auto;
+      min-height: 36px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    input,
+    select,
+    textarea {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+
+    .form,
+    .form-row,
+    .catalogo-ia-form-grid,
+    .catalogo-ia-section-grid,
+    .edit-modal-grid {
+      grid-template-columns: 1fr !important;
+    }
+
+    .catalogo-ia-form-grid .full,
+    .catalogo-ia-section-grid .full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .catalogo-ia-wrap,
+    .catalogo-ia-grid,
+    .catalogo-ia-summary {
+      grid-template-columns: 1fr !important;
+    }
+
+    .catalogo-ia-stat {
+      min-height: auto;
+    }
+
+    .catalogo-ia-preview {
+      min-height: 180px;
+      max-height: 280px;
+    }
+
+    .catalogo-ia-gallery {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .catalogo-ia-photo-card img {
+      height: 120px;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .catalogo-ia-gallery {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .catalogo-ia-preficha-panel {
+      width: calc(100vw - 16px);
+      max-height: calc(100vh - 16px);
+      margin: 8px auto;
+      padding: 14px;
+      border-radius: 18px;
+    }
+
+    .catalogo-ia-preficha-header {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .catalogo-ia-preficha-body {
+      grid-template-columns: 1fr !important;
+    }
+
+    .catalogo-ia-preficha-media img {
+      max-height: 320px;
+    }
+
+    .catalogo-ia-preficha-content dl {
+      grid-template-columns: 1fr;
+    }
+
+    .catalogo-ia-preficha-actions {
+      position: sticky;
+      bottom: 0;
+      background: #fff;
+      padding-bottom: 8px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .table-wrap,
+    .catalogo-ia-table-wrap,
+    .prendas-table-wrap,
+    .ventas-table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      width: 100%;
+    }
+
+    table,
+    .table {
+      min-width: 760px;
+    }
+
+    th,
+    td {
+      white-space: nowrap;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .edit-modal-sheet,
+    .modal-sheet,
+    .sheet,
+    .dialog {
+      width: calc(100vw - 16px);
+      max-height: calc(100vh - 16px);
+      overflow: auto;
+      margin: 8px auto;
+      border-radius: 18px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    header,
+    .header,
+    .topbar {
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .launcher,
+    .launcher-grid,
+    .dashboard-grid {
+      grid-template-columns: 1fr !important;
+    }
+
+    .launcher .btn {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 768px) {
+    img,
+    video,
+    canvas {
+      max-width: 100%;
+    }
+
+    pre,
+    code {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  }
 </style>
 </head>
   <body>
