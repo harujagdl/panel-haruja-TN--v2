@@ -2935,6 +2935,107 @@ body.haruja-col-resizing{
       display: none !important;
     }
   }
+
+  @media (max-width: 768px) {
+    body {
+      overflow-x: hidden;
+    }
+
+    main,
+    .container,
+    .view,
+    section,
+    .section,
+    .catalogo-ia-card,
+    .catalogo-ia-grid,
+    .catalogo-ia-summary,
+    .catalogo-ia-dropzone,
+    .catalogo-ia-form-grid,
+    .catalogo-ia-section-grid {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      box-sizing: border-box !important;
+    }
+
+    #view-catalogo-ia {
+      overflow-x: hidden !important;
+      padding-inline: 12px !important;
+    }
+
+    .catalogo-ia-card {
+      padding: 14px !important;
+      overflow: hidden !important;
+    }
+
+    .catalogo-ia-grid,
+    .catalogo-ia-summary,
+    .catalogo-ia-form-grid,
+    .catalogo-ia-section-grid {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .catalogo-ia-dropzone {
+      padding: 12px !important;
+    }
+
+    .catalogo-ia-preview {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      height: auto !important;
+      max-height: 260px !important;
+      object-fit: contain !important;
+    }
+
+    .catalogo-ia-dropzone > div {
+      display: grid !important;
+      grid-template-columns: 1fr !important;
+      gap: 8px !important;
+      width: 100% !important;
+    }
+
+    .catalogo-ia-dropzone button,
+    .catalogo-ia-actions button {
+      width: 100% !important;
+      max-width: 100% !important;
+      white-space: normal !important;
+    }
+
+    .catalogo-ia-gallery {
+      grid-template-columns: 1fr !important;
+    }
+
+    .catalogo-ia-photo-card {
+      min-width: 0 !important;
+    }
+
+    .catalogo-ia-photo-card img {
+      height: auto !important;
+      max-height: 220px !important;
+      object-fit: contain !important;
+    }
+
+    input,
+    select,
+    textarea {
+      max-width: 100% !important;
+      min-width: 0 !important;
+      box-sizing: border-box !important;
+    }
+
+    .catalogo-ia-table-wrap {
+      width: 100% !important;
+      max-width: 100% !important;
+      overflow-x: auto !important;
+    }
+
+    .catalogo-ia-table-wrap table {
+      min-width: 760px !important;
+    }
+  }
+
 </style>
 </head>
   <body>
