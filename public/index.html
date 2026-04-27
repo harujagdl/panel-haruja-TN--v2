@@ -6,6 +6,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧷</text></svg>">
     <title>Panel Haruja – TD | Panel</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <style>
       :root {
         color-scheme: light;
@@ -2894,6 +2895,7 @@ body.haruja-col-resizing{
                     <div>
                       <button type="button" class="btn btn-primary" id="catalogoIASelectImageBtn">Seleccionar imagen</button>
                       <button type="button" class="btn secondary" id="catalogoIADownloadRenamedBtn">Descargar fotos renombradas</button>
+                      <button type="button" class="btn secondary" id="catalogoIADownloadZipBtn">Descargar ZIP</button>
                       <input id="catalogoIAImageInput" type="file" multiple accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" style="display:none;" />
                     </div>
                     <div id="catalogoIAGallery" class="catalogo-ia-gallery"><p class="muted">Aún no hay fotos seleccionadas.</p></div>
@@ -2965,6 +2967,7 @@ body.haruja-col-resizing{
                         <label>Estado <select id="catalogoIAEstado"><option>Pendiente imagen</option><option>Pendiente IA</option><option>En revisión</option><option>Listo para CSV</option><option>Archivado</option></select></label>
                         <label>Estado IA <select id="catalogoIAEstadoIA"><option>Sin generar</option><option>Generado</option><option>Requiere revisión</option></select></label>
                         <label>Estado CSV <select id="catalogoIAEstadoCSV"><option>No listo</option><option>Listo</option><option>Exportado</option></select></label>
+                        <label class="full">Ruta local / carpeta de referencia <input type="text" id="catalogoIARutaLocal" placeholder="Ej. Fotos Tiendanube / Abril / HA4B026BGML" /></label>
                         <label class="full">Notas internas <textarea id="catalogoIANotasInternas" rows="2"></textarea></label>
                       </div>
                     </section>
@@ -3932,13 +3935,15 @@ Errores: 0</pre>
       ];
       const CATALOGO_IA_INTERNAL_COLUMNS = [
         "ID interno", "SKU base", "Foto principal URL", "Foto principal ID", "Estado", "Estado IA", "Estado CSV", "Fuente",
-        "Fecha creación", "Última edición", "Creado por", "Editado por", "Notas internas", "Archivado"
+        "Fecha creación", "Última edición", "Creado por", "Editado por", "Notas internas", "Ruta local fotos",
+        "Nombre ZIP sugerido", "Archivado"
       ];
       const CATALOGO_IA_COLUMNS = [...CATALOGO_IA_INTERNAL_COLUMNS, ...TIENDANUBE_CSV_COLUMNS];
       const DEFAULT_CATALOGO_IA_ROW = Object.freeze({
         "ID interno": "", "SKU base": "", "Foto principal URL": "", "Foto principal ID": "", "Estado": "Pendiente imagen",
         "Estado IA": "Sin generar", "Estado CSV": "No listo", "Fuente": "Base Panel Haruja TN v2", "Fecha creación": "",
         "Última edición": "", "Creado por": "", "Editado por": "", "Notas internas": "", "Archivado": "NO",
+        "Ruta local fotos": "", "Nombre ZIP sugerido": "",
         "Identificador de URL": "", "Nombre": "", "Categorías": "", "Nombre de propiedad 1": "Talla", "Valor de propiedad 1": "",
         "Nombre de propiedad 2": "Color", "Valor de propiedad 2": "", "Nombre de propiedad 3": "", "Valor de propiedad 3": "",
         "Precio": "", "Precio promocional": "", "Stock": "", "SKU": "", "Código de barras": "", "Mostrar en tienda": "SÍ",
@@ -3954,7 +3959,8 @@ Errores: 0</pre>
         "Mostrar en tienda": "catalogoIAMostrarTienda", "Envío sin cargo": "catalogoIAEnvioSinCargo", "Descripción": "catalogoIADescripcion",
         "Tags": "catalogoIATags", "Título para SEO": "catalogoIASeoTitulo", "Descripción para SEO": "catalogoIASeoDescripcion",
         "Marca": "catalogoIAMarca", "Producto Físico": "catalogoIAProductoFisico", "Costo": "catalogoIACosto",
-        "Estado": "catalogoIAEstado", "Estado IA": "catalogoIAEstadoIA", "Estado CSV": "catalogoIAEstadoCSV", "Notas internas": "catalogoIANotasInternas"
+        "Estado": "catalogoIAEstado", "Estado IA": "catalogoIAEstadoIA", "Estado CSV": "catalogoIAEstadoCSV",
+        "Notas internas": "catalogoIANotasInternas", "Ruta local fotos": "catalogoIARutaLocal"
       };
 
       const normalizeCatalogoIAText = (value) => String(value ?? "").trim();
@@ -4267,6 +4273,39 @@ Errores: 0</pre>
         );
       }
 
+      async function downloadCatalogoIAZip() {
+        const sku = document.getElementById("catalogoIASKU")?.value || "";
+        const cleanSku = cleanSkuForFileName(sku);
+        if (!cleanSku) {
+          showCatalogoIAMessage("Primero captura o selecciona un SKU para nombrar el ZIP.", "error");
+          return;
+        }
+        if (!catalogoIASelectedImageFiles.length) {
+          showCatalogoIAMessage("Primero selecciona una o varias fotos.", "warning");
+          return;
+        }
+        if (!window.JSZip) {
+          showCatalogoIAMessage("No se pudo cargar JSZip para generar el archivo.", "error");
+          return;
+        }
+
+        const zip = new JSZip();
+        catalogoIASelectedImageFiles.forEach((file, index) => {
+          const filename = buildCatalogoIAImageName(sku, index, file);
+          zip.file(filename, file);
+        });
+
+        const blob = await zip.generateAsync({ type: "blob" });
+        const zipName = `${cleanSku}-fotos.zip`;
+        downloadBlobWithName(blob, zipName);
+
+        const rutaInput = document.getElementById("catalogoIARutaLocal");
+        if (rutaInput && !rutaInput.value) {
+          rutaInput.value = `Pendiente confirmar / ${zipName}`;
+        }
+        showCatalogoIAMessage("ZIP descargado. Confirma o ajusta la ruta local antes de guardar.", "success");
+      }
+
       async function initCatalogoIA() {
         if (catalogoIAInited) return;
         if (catalogoIAInitPromise) return catalogoIAInitPromise;
@@ -4283,6 +4322,7 @@ Errores: 0</pre>
         const generateBtn = document.getElementById("catalogoIAGenerateBtn");
         const saveBtn = document.getElementById("catalogoIASaveDraftBtn");
         const downloadBtn = document.getElementById("catalogoIADownloadRenamedBtn");
+        const zipBtn = document.getElementById("catalogoIADownloadZipBtn");
         const reviewBtn = document.getElementById("catalogoIAReviewBtn");
         const exportBtn = document.getElementById("catalogoIAExportBtn");
         const resetBtn = document.getElementById("catalogoIAResetBtn");
@@ -4300,6 +4340,7 @@ Errores: 0</pre>
         if (selectBtn && imageInput) selectBtn.addEventListener("click", () => imageInput.click());
         if (imageInput) imageInput.addEventListener("change", handleCatalogoIAImagePreview);
         if (downloadBtn) downloadBtn.addEventListener("click", downloadCatalogoIARenamedImages);
+        if (zipBtn) zipBtn.addEventListener("click", downloadCatalogoIAZip);
         const skuInput = document.getElementById("catalogoIASKU");
         if (skuInput) skuInput.addEventListener("input", renderCatalogoIAGallery);
         if (searchBtn) {
@@ -4381,6 +4422,7 @@ Errores: 0</pre>
             await withCatalogoIAButtonLock(saveBtn, async () => {
               try {
                 const payload = collectCatalogoIAForm();
+                payload["Nombre ZIP sugerido"] = `${cleanSkuForFileName(payload.SKU)}-fotos.zip`;
                 if (catalogoIASelectedImageFiles.length) {
                   payload["Notas internas"] = [
                     payload["Notas internas"],
@@ -4407,6 +4449,7 @@ Errores: 0</pre>
           reviewBtn.addEventListener("click", async () => {
             await withCatalogoIAButtonLock(reviewBtn, async () => {
               const payload = collectCatalogoIAForm();
+              payload["Nombre ZIP sugerido"] = `${cleanSkuForFileName(payload.SKU)}-fotos.zip`;
               const basicReady = Boolean(payload.Nombre && payload.SKU && payload.Precio && payload.Stock);
               payload["Estado"] = basicReady ? "Listo para CSV" : "En revisión";
               payload["Estado IA"] = basicReady ? "Generado" : "Requiere revisión";
