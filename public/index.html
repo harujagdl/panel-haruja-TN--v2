@@ -2008,6 +2008,108 @@ body.admin-on .admin-only{ display:table-cell; }
   justify-content:center;
   background:#f1f5f9;
 }
+.catalogo-ia-preficha-modal.hidden {
+  display: none;
+}
+.catalogo-ia-preficha-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+.catalogo-ia-preficha-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, .45);
+}
+.catalogo-ia-preficha-panel {
+  position: relative;
+  z-index: 1;
+  width: min(1120px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  margin: 16px auto;
+  overflow: auto;
+  background: #fff;
+  border-radius: 24px;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, .24);
+  padding: 20px;
+}
+.catalogo-ia-preficha-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+}
+.catalogo-ia-preficha-header small {
+  color: #2563eb;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.catalogo-ia-preficha-body {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) 1fr;
+  gap: 18px;
+}
+.catalogo-ia-preficha-media img {
+  width: 100%;
+  max-height: 520px;
+  object-fit: cover;
+  border-radius: 18px;
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+.catalogo-ia-preficha-thumbs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.catalogo-ia-preficha-thumbs img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+.catalogo-ia-preficha-content {
+  display: grid;
+  gap: 14px;
+}
+.catalogo-ia-preficha-content section {
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  border-radius: 18px;
+  padding: 14px;
+}
+.catalogo-ia-preficha-content dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.catalogo-ia-preficha-content dt {
+  color: #64748b;
+  font-size: 12px;
+}
+.catalogo-ia-preficha-content dd {
+  margin: 0;
+  font-weight: 800;
+}
+.catalogo-ia-preficha-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 14px;
+  margin-top: 16px;
+}
+@media (max-width: 860px) {
+  .catalogo-ia-preficha-body {
+    grid-template-columns: 1fr;
+  }
+}
 .launcher .btn{
   display:inline-flex;
   align-items:center;
@@ -3216,6 +3318,67 @@ body.haruja-col-resizing{
 
 </main>
 
+<div id="catalogoIAPreFichaModal" class="catalogo-ia-preficha-modal hidden">
+  <div class="catalogo-ia-preficha-overlay" data-preficha-close="1"></div>
+  <section class="catalogo-ia-preficha-panel">
+    <header class="catalogo-ia-preficha-header">
+      <div>
+        <small>PRE-FICHA</small>
+        <h3 id="catalogoIAPreFichaTitle">Vista previa de ficha</h3>
+        <p id="catalogoIAPreFichaSubtitle">Revisa antes de guardar o exportar.</p>
+      </div>
+      <button type="button" class="secondary small" id="catalogoIAPreFichaCloseBtn">Cerrar</button>
+    </header>
+
+    <div class="catalogo-ia-preficha-body">
+      <div class="catalogo-ia-preficha-media">
+        <img id="catalogoIAPreFichaImage" alt="Foto principal pre-ficha" />
+        <div id="catalogoIAPreFichaThumbs" class="catalogo-ia-preficha-thumbs"></div>
+      </div>
+
+      <div class="catalogo-ia-preficha-content">
+        <section>
+          <h4>Producto</h4>
+          <dl>
+            <div><dt>SKU</dt><dd id="catalogoIAPreFichaSku"></dd></div>
+            <div><dt>Categoría</dt><dd id="catalogoIAPreFichaCategoria"></dd></div>
+            <div><dt>Talla</dt><dd id="catalogoIAPreFichaTalla"></dd></div>
+            <div><dt>Color</dt><dd id="catalogoIAPreFichaColor"></dd></div>
+            <div><dt>Precio</dt><dd id="catalogoIAPreFichaPrecio"></dd></div>
+            <div><dt>Stock</dt><dd id="catalogoIAPreFichaStock"></dd></div>
+          </dl>
+        </section>
+
+        <section>
+          <h4>Contenido generado</h4>
+          <p><strong>Nombre:</strong> <span id="catalogoIAPreFichaNombre"></span></p>
+          <p><strong>Descripción:</strong></p>
+          <p id="catalogoIAPreFichaDescripcion"></p>
+          <p><strong>Tags:</strong> <span id="catalogoIAPreFichaTags"></span></p>
+          <p><strong>Título SEO:</strong> <span id="catalogoIAPreFichaSeoTitulo"></span></p>
+          <p><strong>Descripción SEO:</strong></p>
+          <p id="catalogoIAPreFichaSeoDescripcion"></p>
+          <p><strong>Identificador URL:</strong> <span id="catalogoIAPreFichaUrl"></span></p>
+        </section>
+
+        <section>
+          <h4>Fotos y ZIP</h4>
+          <p id="catalogoIAPreFichaFotosResumen"></p>
+          <ul id="catalogoIAPreFichaFileNames"></ul>
+        </section>
+      </div>
+    </div>
+
+    <footer class="catalogo-ia-preficha-actions">
+      <button type="button" class="btn secondary" id="catalogoIAPreFichaEditBtn">Editar</button>
+      <button type="button" class="btn secondary" id="catalogoIAPreFichaRegenerateBtn">Regenerar IA</button>
+      <button type="button" class="btn secondary" id="catalogoIAPreFichaZipBtn">Descargar ZIP</button>
+      <button type="button" class="btn btn-primary" id="catalogoIAPreFichaApproveBtn">Aprobar ficha final</button>
+      <button type="button" class="btn secondary" id="catalogoIAPreFichaSaveBtn">Guardar borrador</button>
+    </footer>
+  </section>
+</div>
+
 <div id="editModal" class="edit-modal hidden" aria-hidden="true">
   <div id="editModalOverlay" class="edit-modal-overlay"></div>
   <div class="edit-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
@@ -3928,6 +4091,8 @@ Errores: 0</pre>
       let catalogoIADraftsLastFetch = 0;
       let catalogoIADraftsRefreshPromise = null;
       let catalogoIASelectedImageFiles = [];
+      let catalogoIAPreFichaPayload = null;
+      let catalogoIAPreFichaApproved = false;
       let catalogoIAInitPromise = null;
       const CATALOGO_IA_DRAFTS_CACHE_MS = 20000;
       const CATALOGO_IA_SPREADSHEET_ID = "16pqujWAAsrlmivy2YzsMizQOjms8MuqDWJVNUGESNv0";
@@ -4067,6 +4232,101 @@ Errores: 0</pre>
         if (type === "error") node.classList.add("is-error");
       }
 
+      function setCatalogoIAText(id, value) {
+        const node = document.getElementById(id);
+        if (node) node.textContent = value || "—";
+      }
+
+      function openCatalogoIAPreFicha() {
+        const modal = document.getElementById("catalogoIAPreFichaModal");
+        if (!modal) return;
+        modal.classList.remove("hidden");
+        document.body.classList.add("modal-open");
+      }
+
+      function closeCatalogoIAPreFicha() {
+        const modal = document.getElementById("catalogoIAPreFichaModal");
+        if (!modal) return;
+        modal.classList.add("hidden");
+        document.body.classList.remove("modal-open");
+      }
+
+      function buildCatalogoIAPreFichaPayload() {
+        const payload = collectCatalogoIAForm();
+        const cleanSku = cleanSkuForFileName(payload.SKU);
+        payload["Nombre ZIP sugerido"] = cleanSku ? `${cleanSku}-fotos.zip` : "";
+
+        return {
+          payload,
+          photos: catalogoIASelectedImageFiles.map((file, index) => ({
+            file,
+            objectUrl: catalogoIAObjectUrls[index] || "",
+            suggestedName: cleanSku
+              ? buildCatalogoIAImageName(payload.SKU, index, file)
+              : "Captura SKU para generar nombre"
+          }))
+        };
+      }
+
+      function renderCatalogoIAPreFicha(preficha = {}) {
+        const payload = preficha.payload || {};
+        const photos = preficha.photos || [];
+
+        setCatalogoIAText("catalogoIAPreFichaTitle", payload.Nombre || "Vista previa de ficha");
+        setCatalogoIAText("catalogoIAPreFichaSku", payload.SKU);
+        setCatalogoIAText("catalogoIAPreFichaCategoria", payload["Categorías"]);
+        setCatalogoIAText("catalogoIAPreFichaTalla", payload["Valor de propiedad 1"]);
+        setCatalogoIAText("catalogoIAPreFichaColor", payload["Valor de propiedad 2"]);
+        setCatalogoIAText("catalogoIAPreFichaPrecio", payload.Precio ? `$${payload.Precio}` : "");
+        setCatalogoIAText("catalogoIAPreFichaStock", payload.Stock);
+
+        setCatalogoIAText("catalogoIAPreFichaNombre", payload.Nombre);
+        setCatalogoIAText("catalogoIAPreFichaDescripcion", payload.Descripción);
+        setCatalogoIAText("catalogoIAPreFichaTags", payload.Tags);
+        setCatalogoIAText("catalogoIAPreFichaSeoTitulo", payload["Título para SEO"]);
+        setCatalogoIAText("catalogoIAPreFichaSeoDescripcion", payload["Descripción para SEO"]);
+        setCatalogoIAText("catalogoIAPreFichaUrl", payload["Identificador de URL"]);
+
+        const mainImage = document.getElementById("catalogoIAPreFichaImage");
+        if (mainImage) {
+          if (photos[0]?.objectUrl) {
+            mainImage.src = photos[0].objectUrl;
+            mainImage.classList.remove("hidden");
+          } else {
+            mainImage.removeAttribute("src");
+            mainImage.classList.add("hidden");
+          }
+        }
+
+        const thumbs = document.getElementById("catalogoIAPreFichaThumbs");
+        if (thumbs) {
+          thumbs.innerHTML = photos.map((photo, index) => `
+            <img src="${photo.objectUrl}" alt="Foto ${index + 1}" title="${photo.suggestedName}" />
+          `).join("");
+        }
+
+        setCatalogoIAText(
+          "catalogoIAPreFichaFotosResumen",
+          photos.length
+            ? `${photos.length} foto(s) listas para renombrar. ZIP sugerido: ${payload["Nombre ZIP sugerido"] || "pendiente"}`
+            : "Sin fotos cargadas."
+        );
+
+        const fileNames = document.getElementById("catalogoIAPreFichaFileNames");
+        if (fileNames) {
+          fileNames.innerHTML = photos.length
+            ? photos.map((photo) => `<li>${photo.suggestedName}</li>`).join("")
+            : "<li>Sin fotos seleccionadas</li>";
+        }
+      }
+
+      function showCatalogoIAPreFicha() {
+        catalogoIAPreFichaPayload = buildCatalogoIAPreFichaPayload();
+        catalogoIAPreFichaApproved = false;
+        renderCatalogoIAPreFicha(catalogoIAPreFichaPayload);
+        openCatalogoIAPreFicha();
+      }
+
       function resetCatalogoIAForm() {
         const preview = document.getElementById("catalogoIAPreview");
         const imageInput = document.getElementById("catalogoIAImageInput");
@@ -4076,6 +4336,9 @@ Errores: 0</pre>
         catalogoIAObjectUrls = [];
         catalogoIACurrentDraftId = "";
         catalogoIASelectedImageFiles = [];
+        catalogoIAPreFichaPayload = null;
+        catalogoIAPreFichaApproved = false;
+        closeCatalogoIAPreFicha();
         fillCatalogoIAForm(DEFAULT_CATALOGO_IA_ROW);
         renderCatalogoIAGallery();
       }
@@ -4333,6 +4596,12 @@ Errores: 0</pre>
         const resetBtn = document.getElementById("catalogoIAResetBtn");
         const searchBtn = document.getElementById("catalogoIABaseSearchBtn");
         const tableBody = document.getElementById("catalogoIATableBody");
+        const preFichaCloseBtn = document.getElementById("catalogoIAPreFichaCloseBtn");
+        const preFichaEditBtn = document.getElementById("catalogoIAPreFichaEditBtn");
+        const preFichaRegenerateBtn = document.getElementById("catalogoIAPreFichaRegenerateBtn");
+        const preFichaApproveBtn = document.getElementById("catalogoIAPreFichaApproveBtn");
+        const preFichaSaveBtn = document.getElementById("catalogoIAPreFichaSaveBtn");
+        const preFichaZipBtn = document.getElementById("catalogoIAPreFichaZipBtn");
         const costoInput = document.getElementById("catalogoIACosto");
         const activeAdminSession = typeof adminSession !== "undefined" ? adminSession : null;
         const canSeeCost = Boolean(activeAdminSession?.isAdmin) && isAdminUser(activeAdminSession);
@@ -4363,6 +4632,46 @@ Errores: 0</pre>
           hydrateCatalogoIAFormDefaults();
           showCatalogoIAMessage("Formulario limpiado con valores por defecto.", "info");
         });
+        if (preFichaCloseBtn) preFichaCloseBtn.addEventListener("click", closeCatalogoIAPreFicha);
+        document.addEventListener("click", (event) => {
+          if (event.target?.matches?.("[data-preficha-close='1']")) {
+            closeCatalogoIAPreFicha();
+          }
+        });
+        if (preFichaEditBtn) {
+          preFichaEditBtn.addEventListener("click", () => {
+            closeCatalogoIAPreFicha();
+            showCatalogoIAMessage("Puedes editar la ficha y volver a generar la pre-ficha.", "info");
+          });
+        }
+        if (preFichaRegenerateBtn) {
+          preFichaRegenerateBtn.addEventListener("click", () => {
+            showCatalogoIAMessage("Regenerar IA se conectará en la siguiente fase.", "info");
+          });
+        }
+        if (preFichaZipBtn) preFichaZipBtn.addEventListener("click", downloadCatalogoIAZip);
+        if (preFichaApproveBtn) {
+          preFichaApproveBtn.addEventListener("click", () => {
+            catalogoIAPreFichaApproved = true;
+            const payload = catalogoIAPreFichaPayload?.payload || collectCatalogoIAForm();
+            payload.Estado = "Listo para CSV";
+            payload["Estado CSV"] = "Listo";
+            fillCatalogoIAForm(payload);
+            closeCatalogoIAPreFicha();
+            showCatalogoIAMessage("Pre-ficha aprobada. Ya puedes guardar borrador o exportar CSV.", "success");
+          });
+        }
+        if (preFichaSaveBtn) {
+          preFichaSaveBtn.addEventListener("click", async () => {
+            catalogoIAPreFichaApproved = true;
+            const payload = catalogoIAPreFichaPayload?.payload || collectCatalogoIAForm();
+            payload.Estado = "Listo para CSV";
+            payload["Estado CSV"] = "Listo";
+            fillCatalogoIAForm(payload);
+            closeCatalogoIAPreFicha();
+            if (saveBtn) saveBtn.click();
+          });
+        }
 
         if (tableBody) {
           tableBody.addEventListener("click", async (event) => {
@@ -4416,9 +4725,16 @@ Errores: 0</pre>
 
         if (generateBtn) {
           generateBtn.addEventListener("click", () => {
-            const hasImage = Boolean(catalogoIASelectedImageFiles.length);
-            if (!hasImage) return showCatalogoIAMessage("Primero sube una foto editada del producto.", "warning");
-            showCatalogoIAMessage("Vista lista. La conexión con IA se agregará en la siguiente fase.", "info");
+            const payload = collectCatalogoIAForm();
+            if (!payload.SKU) {
+              showCatalogoIAMessage("Primero selecciona o captura un SKU.", "warning");
+              return;
+            }
+            if (!catalogoIASelectedImageFiles.length) {
+              showCatalogoIAMessage("Primero sube una o varias fotos para la pre-ficha.", "warning");
+              return;
+            }
+            showCatalogoIAPreFicha();
           });
         }
 
@@ -4428,6 +4744,12 @@ Errores: 0</pre>
               try {
                 const payload = collectCatalogoIAForm();
                 payload["Nombre ZIP sugerido"] = `${cleanSkuForFileName(payload.SKU)}-fotos.zip`;
+                if (!catalogoIAPreFichaApproved && catalogoIASelectedImageFiles.length) {
+                  showCatalogoIAMessage(
+                    "Tip: puedes revisar la pre-ficha antes de guardar versión final.",
+                    "info"
+                  );
+                }
                 if (catalogoIASelectedImageFiles.length) {
                   payload["Notas internas"] = [
                     payload["Notas internas"],
