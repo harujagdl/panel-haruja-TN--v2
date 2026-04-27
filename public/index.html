@@ -10437,7 +10437,7 @@ document.addEventListener("keydown", (event) => {
         } finally {
           // ADMIN DB MODE START
           setAdminPanelVisible(false);
-          applyAdminUI();
+          applyAdminUI({ refresh: initialView === "codigos" });
           handleTabChange(window.location.hash);
           // ADMIN DB MODE END
           setSkuSearchMode(false);
