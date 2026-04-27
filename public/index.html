@@ -10197,8 +10197,7 @@ const createPrendaRow = (item) => {
       };
 
       async function initDbView() {
-        const activeView = getViewFromUrl();
-        if (activeView !== "codigos") return;
+        if (getViewFromUrl() !== "codigos") return;
         if (!dbInited) {
           dbInited = true;
           if (zplForm) zplForm.addEventListener("submit", handlePrintLabel);
@@ -10206,7 +10205,9 @@ const createPrendaRow = (item) => {
         if (dbInitialRowsLoaded) return;
         dbInitialRowsLoaded = true;
         try {
-          await loadPrendasPage({ reset: true, reason: "view-codigos-init" });
+          if (getViewFromUrl() === "codigos") {
+            await loadPrendasPage({ reset: true, reason: "view-codigos-init" });
+          }
         } catch (error) {
           dbInitialRowsLoaded = false;
           console.error("[Prendas] No se pudo cargar al abrir Base de datos", error);
