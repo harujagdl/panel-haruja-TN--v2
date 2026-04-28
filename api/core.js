@@ -92,6 +92,7 @@ const PUBLIC_ACTIONS = new Set([
   'catalogo-ia-draft-create',
   'catalogo-ia-draft-update',
   'catalogo-ia-draft-archive',
+  'catalogo-ia-generate',
 ]);
 const ADMIN_ACTIONS = new Set([
   'prendas-update',
@@ -111,7 +112,6 @@ const ADMIN_ACTIONS = new Set([
   'ventas-rebuild',
   'ventas-repair-month-keys',
   'catalogo-ia-repair-alignment',
-  'catalogo-ia-generate',
   'tiendanube-webhooks-register',
 ]);
 const APARTADOS_PUBLIC_OPS = new Set(['list', 'next', 'search', 'detail', 'historial', 'create', 'abono', 'pdf-webapp-proxy']);
@@ -134,7 +134,6 @@ const ADMIN_ALLOWED_METHODS_BY_ACTION = new Map([
   ['ventas-rebuild', new Set(['POST'])],
   ['ventas-repair-month-keys', new Set(['POST'])],
   ['catalogo-ia-repair-alignment', new Set(['GET', 'POST'])],
-  ['catalogo-ia-generate', new Set(['POST'])],
   ['tiendanube-webhooks-register', new Set(['POST'])],
 ]);
 const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
@@ -153,6 +152,7 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['catalogo-ia-draft-create', new Set(['POST'])],
   ['catalogo-ia-draft-update', new Set(['POST'])],
   ['catalogo-ia-draft-archive', new Set(['POST'])],
+  ['catalogo-ia-generate', new Set(['POST'])],
 ]);
 const PUBLIC_PRENDA_FIELDS = [
   'Orden',
