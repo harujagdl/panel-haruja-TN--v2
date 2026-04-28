@@ -4408,10 +4408,12 @@ Errores: 0</pre>
       let catalogoIADraftsLastFetch = 0;
       let catalogoIADraftsRefreshPromise = null;
       let catalogoIASelectedImageFiles = [];
+      let catalogoIASelectedImageIndexesForAI = [];
       let catalogoIAPreFichaPayload = null;
       let catalogoIAPreFichaApproved = false;
       let catalogoIAInitPromise = null;
-      const CATALOGO_IA_MAX_FOTOS = 3;
+      const CATALOGO_IA_MAX_FOTOS_ZIP = 30;
+      const CATALOGO_IA_MAX_FOTOS_IA = 3;
       const CATALOGO_IA_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
       const CATALOGO_IA_MAX_COMPRESSED_IMAGE_BYTES = 900 * 1024;
       const CATALOGO_IA_MAX_IMAGE_DIMENSION = 1200;
@@ -4737,6 +4739,7 @@ Errores: 0</pre>
         catalogoIAObjectUrls = [];
         catalogoIACurrentDraftId = "";
         catalogoIASelectedImageFiles = [];
+        catalogoIASelectedImageIndexesForAI = [];
         catalogoIAPreFichaPayload = null;
         catalogoIAPreFichaApproved = false;
         closeCatalogoIAPreFicha();
@@ -4885,18 +4888,20 @@ Errores: 0</pre>
           showCatalogoIAMessage("Primero sube una o varias fotos para la pre-ficha.", "warning");
           return null;
         }
-        if (catalogoIASelectedImageFiles.length > CATALOGO_IA_MAX_FOTOS) {
-          showCatalogoIAMessage("Usa máximo 3 fotos para generar la ficha IA.", "error");
-          return null;
+        const filesForAI = catalogoIASelectedImageIndexesForAI.length
+          ? catalogoIASelectedImageIndexesForAI.map((index) => catalogoIASelectedImageFiles[index]).filter(Boolean)
+          : catalogoIASelectedImageFiles.slice(0, CATALOGO_IA_MAX_FOTOS_IA);
+        if (!catalogoIASelectedImageIndexesForAI.length && catalogoIASelectedImageFiles.length) {
+          showCatalogoIAMessage("No seleccionaste fotos para IA; se usarán las primeras 3.", "warning");
         }
-        const oversized = catalogoIASelectedImageFiles.find((file) => Number(file?.size || 0) > CATALOGO_IA_MAX_IMAGE_BYTES);
+        const oversized = filesForAI.find((file) => Number(file?.size || 0) > CATALOGO_IA_MAX_IMAGE_BYTES);
         if (oversized) {
           showCatalogoIAMessage(`La foto "${oversized.name}" excede 5 MB. Reduce tamaño e intenta de nuevo.`, "error");
           return null;
         }
 
         showCatalogoIAMessage("Generando ficha IA...", "info");
-        const fotos = await Promise.all(catalogoIASelectedImageFiles.map((file) => buildCatalogoIAFotoForAI(file)));
+        const fotos = await Promise.all(filesForAI.map((file) => buildCatalogoIAFotoForAI(file)));
 
         const result = await callCatalogoIAApi({
           action: "catalogo-ia-generate",
@@ -4929,13 +4934,8 @@ Errores: 0</pre>
         const validFiles = files.filter((file) =>
           ["image/jpeg", "image/png", "image/webp"].includes(file.type)
         );
-        if (validFiles.length > CATALOGO_IA_MAX_FOTOS) {
-          showCatalogoIAMessage("Usa máximo 3 fotos para generar la ficha IA.", "error");
-          return;
-        }
-        const oversized = validFiles.find((file) => Number(file?.size || 0) > CATALOGO_IA_MAX_IMAGE_BYTES);
-        if (oversized) {
-          showCatalogoIAMessage(`La foto "${oversized.name}" excede 5 MB.`, "error");
+        if (validFiles.length > CATALOGO_IA_MAX_FOTOS_ZIP) {
+          showCatalogoIAMessage("Puedes subir máximo 30 fotos para el ZIP.", "error");
           return;
         }
         if (!validFiles.length) {
@@ -4947,6 +4947,7 @@ Errores: 0</pre>
         catalogoIAObjectUrls.forEach((url) => URL.revokeObjectURL(url));
         catalogoIAObjectUrls = [];
         catalogoIASelectedImageFiles = validFiles;
+        catalogoIASelectedImageIndexesForAI = [];
         validFiles.forEach((file) => {
           catalogoIAObjectUrls.push(URL.createObjectURL(file));
         });
@@ -4977,6 +4978,10 @@ Errores: 0</pre>
               <img src="${url}" alt="Foto referencia ${index + 1}" />
               <small class="muted">Original: ${file.name || ""}</small>
               <strong>${suggestedName}</strong>
+              <label class="muted" style="display:flex;gap:6px;align-items:center;margin-top:8px;">
+                <input type="checkbox" data-cia-ai-index="${index}" ${catalogoIASelectedImageIndexesForAI.includes(index) ? "checked" : ""} />
+                Usar para IA
+              </label>
             </article>
           `;
         }).join("");
@@ -5092,6 +5097,27 @@ Errores: 0</pre>
         if (imageInput) imageInput.addEventListener("change", handleCatalogoIAImagePreview);
         if (downloadBtn) downloadBtn.addEventListener("click", downloadCatalogoIARenamedImages);
         if (zipBtn) zipBtn.addEventListener("click", downloadCatalogoIAZip);
+        const gallery = document.getElementById("catalogoIAGallery");
+        if (gallery) {
+          gallery.addEventListener("change", (event) => {
+            const checkbox = event.target?.closest?.("input[type='checkbox'][data-cia-ai-index]");
+            if (!checkbox) return;
+            const index = Number(checkbox.dataset.ciaAiIndex);
+            if (!Number.isInteger(index) || index < 0) return;
+            if (checkbox.checked) {
+              if (catalogoIASelectedImageIndexesForAI.length >= CATALOGO_IA_MAX_FOTOS_IA) {
+                checkbox.checked = false;
+                showCatalogoIAMessage("La IA solo puede usar máximo 3 fotos.", "warning");
+                return;
+              }
+              if (!catalogoIASelectedImageIndexesForAI.includes(index)) {
+                catalogoIASelectedImageIndexesForAI.push(index);
+              }
+            } else {
+              catalogoIASelectedImageIndexesForAI = catalogoIASelectedImageIndexesForAI.filter((item) => item !== index);
+            }
+          });
+        }
         const skuInput = document.getElementById("catalogoIASKU");
         if (skuInput) skuInput.addEventListener("input", renderCatalogoIAGallery);
         if (searchBtn) {
