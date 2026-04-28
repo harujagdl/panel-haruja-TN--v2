@@ -83,6 +83,7 @@ export default async function handler(req, res) {
   const signature = String(req.headers?.['x-linkedstore-hmac-sha256'] || '').trim();
   const receivedAt = new Date().toISOString();
   let lockAcquired = false;
+  let lockOwnerId = '';
   let traceMeta = null;
   console.log('[ventas-webhook] received');
 
@@ -168,6 +169,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, skipped: true, reason: 'sync_running' });
     }
     lockAcquired = true;
+    lockOwnerId = String(lock.ownerId || '').trim();
 
     const enrichedPayload = { ...payload };
     if (!enrichedPayload.order && resolvedStoreId && connection?.accessToken) {
@@ -205,7 +207,7 @@ export default async function handler(req, res) {
       reason: result?.action || 'upsert_ok',
     });
     console.log(`[ventas-webhook] processed_order_${orderId} result=${webhookResult}`);
-    await releaseVentasSyncLock();
+    await releaseVentasSyncLock(lockOwnerId);
     lockAcquired = false;
 
     return res.status(200).json({ ok: true, result: webhookResult, ...result });
@@ -222,7 +224,7 @@ export default async function handler(req, res) {
       result: isFetchFailed ? 'fetch_failed' : 'error',
       reason: message,
     });
-    if (lockAcquired) await releaseVentasSyncLock();
+    if (lockAcquired) await releaseVentasSyncLock(lockOwnerId);
     return res.status(500).json({ ok: false, result: isFetchFailed ? 'fetch_failed' : 'error', message });
   }
 }

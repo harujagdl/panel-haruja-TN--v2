@@ -178,6 +178,7 @@ const PUBLIC_PRENDA_FIELDS = [
 ];
 const PUBLIC_CREATE_ALLOWED_FIELDS = new Set([
   'codigo',
+  'idempotencyKey',
   'descripcion',
   'detalles',
   'tipo',
