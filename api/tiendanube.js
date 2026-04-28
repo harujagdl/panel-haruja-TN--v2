@@ -5,6 +5,7 @@ import {
   saveTiendanubeOAuthConfig,
   syncVentasFromTiendanube,
 } from '../lib/api/core.js';
+import { ADMIN_SESSION_REQUIRED_MESSAGE, requireAdminSession } from './core.js';
 import { buildTiendanubeAuthUrl, clearStateCookie, exchangeCodeForToken, parseCookies } from '../lib/tiendanube/oauth.js';
 
 function json(res, status, payload) {
@@ -64,9 +65,22 @@ async function connectCallback(req, res) {
 
 export default async function handler(req, res) {
   const action = String(req.query?.action || '').trim();
+  const adminOnlyActions = new Set(['status', 'sync', 'import-order', 'variant', 'connect']);
 
   if (!action && String(req.query?.code || '').trim()) {
     return connectCallback(req, res);
+  }
+
+  if (adminOnlyActions.has(action) && !requireAdminSession(req, res, {
+    logDenied: `[admin-session] /api/tiendanube denied action=${action}`,
+    touchActivity: true,
+    reason: `tiendanube-${action}`,
+  })) {
+    return json(res, 401, {
+      ok: false,
+      code: 'ADMIN_SESSION_REQUIRED',
+      message: ADMIN_SESSION_REQUIRED_MESSAGE,
+    });
   }
 
   try {

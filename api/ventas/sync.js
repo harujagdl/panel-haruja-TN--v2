@@ -16,6 +16,7 @@ export default async function handler(req, res) {
   if (!lock.acquired) {
     return res.status(200).json({ ok: true, skipped: true, reason: 'sync_running' });
   }
+  const lockOwnerId = String(lock.ownerId || '').trim();
 
   try {
     const data = await syncVentasFromTiendanube();
@@ -43,6 +44,6 @@ export default async function handler(req, res) {
     });
     return res.status(500).json({ ok: false, message: String(error?.message || error) });
   } finally {
-    await releaseVentasSyncLock();
+    await releaseVentasSyncLock(lockOwnerId);
   }
 }

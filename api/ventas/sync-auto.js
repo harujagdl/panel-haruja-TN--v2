@@ -25,6 +25,7 @@ export default async function handler(req, res) {
   if (!lock.acquired) {
     return res.status(200).json({ ok: true, skipped: true, reason: 'sync_running' });
   }
+  const lockOwnerId = String(lock.ownerId || '').trim();
 
   try {
     const previous = await readVentasSyncState();
@@ -128,6 +129,6 @@ export default async function handler(req, res) {
       },
     });
   } finally {
-    await releaseVentasSyncLock();
+    await releaseVentasSyncLock(lockOwnerId);
   }
 }
