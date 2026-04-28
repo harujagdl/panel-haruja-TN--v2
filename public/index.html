@@ -3408,11 +3408,11 @@ body.haruja-col-resizing{
                   <table class="table">
                     <thead>
                       <tr>
-                        <th>Foto</th><th>SKU</th><th>Nombre</th><th>Categoría</th><th>Talla</th><th>Color</th><th>Precio</th><th>Stock</th><th>Estado</th><th>SEO</th><th>CSV</th><th>Última edición</th><th>Acciones</th>
+                        <th>Foto</th><th>Seleccionar</th><th>SKU</th><th>Nombre</th><th>Categoría</th><th>Talla</th><th>Color</th><th>Precio</th><th>Stock</th><th>Estado</th><th>SEO</th><th>CSV</th><th>Última edición</th><th>Acciones</th>
                       </tr>
                     </thead>
                     <tbody id="catalogoIATableBody">
-                      <tr><td colspan="13" class="muted">Sin borradores guardados.</td></tr>
+                      <tr><td colspan="14" class="muted">Sin borradores guardados.</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -4411,6 +4411,7 @@ Errores: 0</pre>
       let catalogoIASelectedImageIndexesForAI = [];
       let catalogoIAPreFichaPayload = null;
       let catalogoIAPreFichaApproved = false;
+      let catalogoIASelectedDraftIdsForCSV = [];
       let catalogoIAInitPromise = null;
       const CATALOGO_IA_MAX_FOTOS_ZIP = 30;
       const CATALOGO_IA_MAX_FOTOS_IA = 3;
@@ -4753,13 +4754,19 @@ Errores: 0</pre>
 
       function renderCatalogoIADrafts() {
         const tbody = document.getElementById("catalogoIATableBody");
+        const availableIds = new Set(catalogoIADrafts.map((item) => normalizeCatalogoIAText(item?.["ID interno"])).filter(Boolean));
+        catalogoIASelectedDraftIdsForCSV = catalogoIASelectedDraftIdsForCSV.filter((id) => availableIds.has(id));
         if (tbody) {
           if (!catalogoIADrafts.length) {
-            tbody.innerHTML = '<tr><td colspan="13" class="muted">Sin borradores guardados.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="14" class="muted">Sin borradores guardados.</td></tr>';
           } else {
-            tbody.innerHTML = catalogoIADrafts.map((item) => `
+            tbody.innerHTML = catalogoIADrafts.map((item) => {
+              const draftId = normalizeCatalogoIAText(item?.["ID interno"]);
+              const checked = catalogoIASelectedDraftIdsForCSV.includes(draftId);
+              return `
               <tr>
                 <td><span class="catalogo-ia-thumb">${item["Foto principal URL"] ? "🖼️" : "🛍️"}</span></td>
+                <td><input type="checkbox" data-cia-export-id="${draftId}" ${checked ? "checked" : ""} /></td>
                 <td>${item.SKU || ""}</td>
                 <td>${item.Nombre || ""}</td>
                 <td>${item["Categorías"] || ""}</td>
@@ -4772,11 +4779,12 @@ Errores: 0</pre>
                 <td>${item["Estado CSV"] || ""}</td>
                 <td>${item["Última edición"] || ""}</td>
                 <td>
-                  <button type="button" class="secondary small" data-cia-action="edit" data-cia-id="${item["ID interno"]}">Ver / Editar</button>
-                  <button type="button" class="secondary small" data-cia-action="archive" data-cia-id="${item["ID interno"]}">Archivar</button>
+                  <button type="button" class="secondary small" data-cia-action="edit" data-cia-id="${draftId}">Ver / Editar</button>
+                  <button type="button" class="secondary small" data-cia-action="archive" data-cia-id="${draftId}">Archivar</button>
                 </td>
               </tr>
-            `).join("");
+            `;
+            }).join("");
           }
         }
         const byEstado = (name) => catalogoIADrafts.filter((item) => normalizeCatalogoIALower(item.Estado) === normalizeCatalogoIALower(name)).length;
@@ -5052,6 +5060,27 @@ Errores: 0</pre>
         showCatalogoIAMessage("ZIP descargado. Confirma o ajusta la ruta local antes de guardar.", "success");
       }
 
+      async function exportCatalogoIASelectedDraftsCSV() {
+        const selectedIds = catalogoIASelectedDraftIdsForCSV.filter(Boolean);
+        if (!selectedIds.length) {
+          showCatalogoIAMessage("Selecciona al menos un borrador para exportar.", "warning");
+          return;
+        }
+        const result = await callCatalogoIAApi({
+          action: "catalogo-ia-export-csv",
+          method: "POST",
+          payload: { ids: selectedIds }
+        });
+        const csvContent = String(result?.csvContent || "");
+        if (!csvContent) throw new Error("No fue posible generar el CSV.");
+        const filename = normalizeCatalogoIAText(result?.filename) || `catalogo-tiendanube-haruja-${new Date().toISOString().slice(0, 10)}.csv`;
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        downloadBlobWithName(blob, filename);
+        showCatalogoIAMessage(`CSV exportado (${result?.count || selectedIds.length} borrador(es)).`, "success");
+        catalogoIASelectedDraftIdsForCSV = [];
+        await refreshCatalogoIADrafts({ force: true });
+      }
+
       async function initCatalogoIA() {
         if (catalogoIAInited) return;
         if (catalogoIAInitPromise) return catalogoIAInitPromise;
@@ -5179,6 +5208,17 @@ Errores: 0</pre>
         }
 
         if (tableBody) {
+          tableBody.addEventListener("change", (event) => {
+            const checkbox = event.target?.closest?.("input[type='checkbox'][data-cia-export-id]");
+            if (!checkbox) return;
+            const draftId = normalizeCatalogoIAText(checkbox.dataset.ciaExportId);
+            if (!draftId) return;
+            if (checkbox.checked) {
+              if (!catalogoIASelectedDraftIdsForCSV.includes(draftId)) catalogoIASelectedDraftIdsForCSV.push(draftId);
+            } else {
+              catalogoIASelectedDraftIdsForCSV = catalogoIASelectedDraftIdsForCSV.filter((id) => id !== draftId);
+            }
+          });
           tableBody.addEventListener("click", async (event) => {
             const button = event.target?.closest?.("button[data-cia-action]");
             if (!button) return;
@@ -5289,7 +5329,13 @@ Errores: 0</pre>
           });
         }
 
-        if (exportBtn) exportBtn.addEventListener("click", () => showCatalogoIAMessage("Exportación CSV preparada. Se conectará en la siguiente fase.", "info"));
+        if (exportBtn) {
+          exportBtn.addEventListener("click", async () => {
+            await withCatalogoIAButtonLock(exportBtn, async () => {
+              await exportCatalogoIASelectedDraftsCSV();
+            });
+          });
+        }
 
         await refreshCatalogoIADrafts();
         })();
