@@ -636,6 +636,18 @@
       return 'status-pending';
     }
 
+    async function generateOfficialPdfPublic(folio){
+      const cleanFolio = String(folio || '').trim();
+      if (!cleanFolio) throw new Error('folio es obligatorio.');
+      return apiFetch('/api/core?action=apartados&op=pdf-webapp-proxy', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'generar_pdf_apartado',
+          folio: cleanFolio
+        })
+      });
+    }
+
     function renderPublicApartado(apartado, folioConsulta){
       const app = $('public-apartado-app');
       const historialAbonos = Array.isArray(apartado.historialAbonos) ? apartado.historialAbonos : [];
@@ -678,9 +690,9 @@ Si tienes dudas o quieres liquidarlo, escríbenos por aquí 💛`);
             </div>
             <div class="public-actions">
               <a class="public-btn" href="/ticket/${encodeURIComponent(folio)}" target="_blank" rel="noopener">Ver ticket</a>
-              <a class="public-btn primary" href="/api/pdf-apartado?folio=${encodeURIComponent(folio)}" target="_blank" rel="noopener">Generar PDF oficial</a>
+              <a class="public-btn primary" href="#" data-public-action="pdf-generate" data-folio="${encodeURIComponent(folio)}">Generar PDF oficial</a>
               <a class="public-btn" href="${waHref}" target="_blank" rel="noopener">WhatsApp</a>
-              ${pdfPersistido ? `<a class="public-btn" href="${pdfPersistido}" target="_blank" rel="noopener">Ver PDF</a>` : `<a class="public-btn" href="/api/pdf-apartado?folio=${encodeURIComponent(folio)}" target="_blank" rel="noopener">Actualizar PDF</a>`}
+              ${pdfPersistido ? `<a class="public-btn" href="${pdfPersistido}" target="_blank" rel="noopener">Ver PDF</a>` : `<a class="public-btn" href="#" data-public-action="pdf-refresh" data-folio="${encodeURIComponent(folio)}">Actualizar PDF</a>`}
               ${pdfPersistido ? `<a class="public-btn" href="${pdfPersistido}" target="_blank" rel="noopener" download>Descargar PDF</a>` : ''}
             </div>
           </div>
@@ -711,6 +723,33 @@ Si tienes dudas o quieres liquidarlo, escríbenos por aquí 💛`);
           </div>
         </section>
       `;
+
+      app.querySelectorAll('[data-public-action="pdf-generate"], [data-public-action="pdf-refresh"]').forEach((btn) => {
+        btn.addEventListener('click', async (event) => {
+          event.preventDefault();
+          const trigger = event.currentTarget;
+          const targetFolio = decodeURIComponent(String(trigger?.dataset?.folio || '').trim());
+          if (!targetFolio) return;
+          const previousText = trigger.textContent;
+          trigger.textContent = 'Generando...';
+          trigger.style.pointerEvents = 'none';
+          trigger.setAttribute('aria-disabled', 'true');
+          try {
+            const result = await generateOfficialPdfPublic(targetFolio);
+            const pdfUrl = String(result?.pdfUrl || '').trim();
+            if (pdfUrl) {
+              window.open(pdfUrl, '_blank', 'noopener');
+            }
+            await initPublicApartadoView();
+          } catch (error) {
+            alert(error?.message || 'No se pudo generar el PDF oficial.');
+          } finally {
+            trigger.textContent = previousText;
+            trigger.style.pointerEvents = '';
+            trigger.removeAttribute('aria-disabled');
+          }
+        });
+      });
     }
 
     async function initPublicApartadoView(){
