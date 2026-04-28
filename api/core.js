@@ -39,6 +39,7 @@ import {
   archiveCatalogoIADraft,
   createCatalogoIADraft,
   ensureCatalogoIASheets,
+  generateCatalogoIAFicha,
   getCatalogoIABaseProducts,
   getCatalogoIADraft,
   listCatalogoIADrafts,
@@ -110,6 +111,7 @@ const ADMIN_ACTIONS = new Set([
   'ventas-rebuild',
   'ventas-repair-month-keys',
   'catalogo-ia-repair-alignment',
+  'catalogo-ia-generate',
   'tiendanube-webhooks-register',
 ]);
 const APARTADOS_PUBLIC_OPS = new Set(['list', 'next', 'search', 'detail', 'historial', 'create', 'abono', 'pdf-webapp-proxy']);
@@ -132,6 +134,7 @@ const ADMIN_ALLOWED_METHODS_BY_ACTION = new Map([
   ['ventas-rebuild', new Set(['POST'])],
   ['ventas-repair-month-keys', new Set(['POST'])],
   ['catalogo-ia-repair-alignment', new Set(['GET', 'POST'])],
+  ['catalogo-ia-generate', new Set(['POST'])],
   ['tiendanube-webhooks-register', new Set(['POST'])],
 ]);
 const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
@@ -937,6 +940,7 @@ export default async function handler(req, res) {
     if (action === 'catalogo-ia-draft-create') return sendOk(res, await createCatalogoIADraft(req.body || {}, readAdminSession(req) || {}));
     if (action === 'catalogo-ia-draft-update') return sendOk(res, await updateCatalogoIADraft(req.body?.id || req.query?.id || '', req.body?.payload || req.body || {}, readAdminSession(req) || {}));
     if (action === 'catalogo-ia-draft-archive') return sendOk(res, await archiveCatalogoIADraft(req.body?.id || req.query?.id || '', readAdminSession(req) || {}));
+    if (action === 'catalogo-ia-generate') return sendOk(res, await generateCatalogoIAFicha(req.body || {}, readAdminSession(req) || {}));
     if (action === 'catalogo-ia-repair-alignment') {
       const dryRun = String(req.body?.dryRun ?? req.query?.dryRun ?? 'true').toLowerCase() !== 'false';
       return sendOk(res, await repairCatalogoIARowsAlignment({ dryRun }, readAdminSession(req) || {}));
