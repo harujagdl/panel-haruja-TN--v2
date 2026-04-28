@@ -4411,6 +4411,8 @@ Errores: 0</pre>
       let catalogoIAPreFichaPayload = null;
       let catalogoIAPreFichaApproved = false;
       let catalogoIAInitPromise = null;
+      const CATALOGO_IA_MAX_FOTOS = 6;
+      const CATALOGO_IA_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
       const CATALOGO_IA_DRAFTS_CACHE_MS = 20000;
       const CATALOGO_IA_SPREADSHEET_ID = "16pqujWAAsrlmivy2YzsMizQOjms8MuqDWJVNUGESNv0";
       const BASE_PANEL_SPREADSHEET_ID = "1sGWRwLiyZD4gznruHvhgZ92KLZcaEjWww3zvypn7iA0";
@@ -4511,6 +4513,23 @@ Errores: 0</pre>
         const ext = getExtensionFromFile(file);
         const num = String(index + 1).padStart(2, "0");
         return `${cleanSku}-${num}${ext}`;
+      }
+
+      function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = String(reader.result || "");
+            const base64 = result.includes(",") ? result.split(",")[1] : "";
+            if (!base64) {
+              reject(new Error("No se pudo convertir la imagen a base64."));
+              return;
+            }
+            resolve(base64);
+          };
+          reader.onerror = () => reject(new Error("No se pudo leer la imagen seleccionada."));
+          reader.readAsDataURL(file);
+        });
       }
 
       const collectCatalogoIAForm = () => {
@@ -4777,11 +4796,92 @@ Errores: 0</pre>
         fillCatalogoIAForm(mapped);
       }
 
+      function applyCatalogoIAResultToForm(result = {}) {
+        const payload = collectCatalogoIAForm();
+        payload.Nombre = normalizeCatalogoIAText(result?.nombre) || payload.Nombre;
+        payload.Descripción = normalizeCatalogoIAText(result?.descripcion) || payload.Descripción;
+        payload.Tags = normalizeCatalogoIAText(result?.tags) || payload.Tags;
+        payload["Título para SEO"] = normalizeCatalogoIAText(result?.tituloSeo) || payload["Título para SEO"];
+        payload["Descripción para SEO"] = normalizeCatalogoIAText(result?.descripcionSeo) || payload["Descripción para SEO"];
+        payload["Identificador de URL"] = normalizeCatalogoIAText(result?.identificadorUrl) || payload["Identificador de URL"];
+        if (!normalizeCatalogoIAText(payload["Categorías"]) && normalizeCatalogoIAText(result?.categoriaSugerida)) {
+          payload["Categorías"] = normalizeCatalogoIAText(result?.categoriaSugerida);
+        }
+        if (!normalizeCatalogoIAText(payload["Valor de propiedad 2"]) && normalizeCatalogoIAText(result?.colorDetectado)) {
+          payload["Valor de propiedad 2"] = normalizeCatalogoIAText(result?.colorDetectado);
+        }
+        payload["Estado IA"] = "Generado";
+        payload["Estado"] = "En revisión";
+        payload["Estado CSV"] = "No listo";
+        fillCatalogoIAForm(payload);
+      }
+
+      async function generateCatalogoIAFichaVisual() {
+        const payload = collectCatalogoIAForm();
+        if (!payload.SKU) {
+          showCatalogoIAMessage("Primero selecciona o captura un SKU.", "warning");
+          return null;
+        }
+        if (!catalogoIASelectedImageFiles.length) {
+          showCatalogoIAMessage("Primero sube una o varias fotos para la pre-ficha.", "warning");
+          return null;
+        }
+        if (catalogoIASelectedImageFiles.length > CATALOGO_IA_MAX_FOTOS) {
+          showCatalogoIAMessage("Usa máximo 6 fotos para generar la ficha IA.", "error");
+          return null;
+        }
+        const oversized = catalogoIASelectedImageFiles.find((file) => Number(file?.size || 0) > CATALOGO_IA_MAX_IMAGE_BYTES);
+        if (oversized) {
+          showCatalogoIAMessage(`La foto "${oversized.name}" excede 5 MB. Reduce tamaño e intenta de nuevo.`, "error");
+          return null;
+        }
+
+        showCatalogoIAMessage("Generando ficha IA...", "info");
+        const fotos = await Promise.all(catalogoIASelectedImageFiles.map(async (file) => ({
+          mimeType: String(file?.type || "").toLowerCase(),
+          base64: await fileToBase64(file)
+        })));
+
+        const result = await callCatalogoIAApi({
+          action: "catalogo-ia-generate",
+          method: "POST",
+          payload: {
+            sku: payload.SKU,
+            categoria: payload["Categorías"],
+            talla: payload["Valor de propiedad 1"],
+            color: payload["Valor de propiedad 2"],
+            precio: payload.Precio,
+            stock: payload.Stock,
+            nombreActual: payload.Nombre,
+            descripcionActual: payload.Descripción,
+            fotos
+          }
+        });
+        applyCatalogoIAResultToForm(result || {});
+        const warnings = Array.isArray(result?.advertencias) ? result.advertencias.filter(Boolean) : [];
+        if (warnings.length) {
+          showCatalogoIAMessage(`Revisa: ${warnings.join(" / ")}`, "warning");
+        } else {
+          showCatalogoIAMessage("Ficha IA generada. Revisa y aprueba la pre-ficha.", "success");
+        }
+        showCatalogoIAPreFicha();
+        return result;
+      }
+
       function handleCatalogoIAImagePreview(event) {
         const files = Array.from(event?.target?.files || event?.dataTransfer?.files || []);
         const validFiles = files.filter((file) =>
           ["image/jpeg", "image/png", "image/webp"].includes(file.type)
         );
+        if (validFiles.length > CATALOGO_IA_MAX_FOTOS) {
+          showCatalogoIAMessage("Usa máximo 6 fotos para generar la ficha IA.", "error");
+          return;
+        }
+        const oversized = validFiles.find((file) => Number(file?.size || 0) > CATALOGO_IA_MAX_IMAGE_BYTES);
+        if (oversized) {
+          showCatalogoIAMessage(`La foto "${oversized.name}" excede 5 MB.`, "error");
+          return;
+        }
         if (!validFiles.length) {
           showCatalogoIAMessage("Formato no compatible. Usa JPG, JPEG, PNG o WEBP.", "error");
           return;
@@ -4966,8 +5066,10 @@ Errores: 0</pre>
           });
         }
         if (preFichaRegenerateBtn) {
-          preFichaRegenerateBtn.addEventListener("click", () => {
-            showCatalogoIAMessage("Regenerar IA se conectará en la siguiente fase.", "info");
+          preFichaRegenerateBtn.addEventListener("click", async () => {
+            await withCatalogoIAButtonLock(preFichaRegenerateBtn, async () => {
+              await generateCatalogoIAFichaVisual();
+            });
           });
         }
         if (preFichaZipBtn) preFichaZipBtn.addEventListener("click", downloadCatalogoIAZip);
@@ -5045,17 +5147,10 @@ Errores: 0</pre>
         }
 
         if (generateBtn) {
-          generateBtn.addEventListener("click", () => {
-            const payload = collectCatalogoIAForm();
-            if (!payload.SKU) {
-              showCatalogoIAMessage("Primero selecciona o captura un SKU.", "warning");
-              return;
-            }
-            if (!catalogoIASelectedImageFiles.length) {
-              showCatalogoIAMessage("Primero sube una o varias fotos para la pre-ficha.", "warning");
-              return;
-            }
-            showCatalogoIAPreFicha();
+          generateBtn.addEventListener("click", async () => {
+            await withCatalogoIAButtonLock(generateBtn, async () => {
+              await generateCatalogoIAFichaVisual();
+            });
           });
         }
 
