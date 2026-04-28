@@ -4863,18 +4863,12 @@ Errores: 0</pre>
 
       function applyCatalogoIAResultToForm(result = {}) {
         const payload = collectCatalogoIAForm();
+        payload["Identificador de URL"] = normalizeCatalogoIAText(result?.identificadorUrl) || payload["Identificador de URL"];
         payload.Nombre = normalizeCatalogoIAText(result?.nombre) || payload.Nombre;
         payload.Descripción = normalizeCatalogoIAText(result?.descripcion) || payload.Descripción;
         payload.Tags = normalizeCatalogoIAText(result?.tags) || payload.Tags;
         payload["Título para SEO"] = normalizeCatalogoIAText(result?.tituloSeo) || payload["Título para SEO"];
         payload["Descripción para SEO"] = normalizeCatalogoIAText(result?.descripcionSeo) || payload["Descripción para SEO"];
-        payload["Identificador de URL"] = normalizeCatalogoIAText(result?.identificadorUrl) || payload["Identificador de URL"];
-        if (!normalizeCatalogoIAText(payload["Categorías"]) && normalizeCatalogoIAText(result?.categoriaSugerida)) {
-          payload["Categorías"] = normalizeCatalogoIAText(result?.categoriaSugerida);
-        }
-        if (!normalizeCatalogoIAText(payload["Valor de propiedad 2"]) && normalizeCatalogoIAText(result?.colorDetectado)) {
-          payload["Valor de propiedad 2"] = normalizeCatalogoIAText(result?.colorDetectado);
-        }
         payload["Estado IA"] = "Generado";
         payload["Estado"] = "En revisión";
         payload["Estado CSV"] = "No listo";
