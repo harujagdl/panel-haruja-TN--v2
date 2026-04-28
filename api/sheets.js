@@ -13,6 +13,7 @@ import {
 } from '../lib/api/apartados.js';
 import { getPdfStatus, getPreviewData, getPrintData, getTicketByFolio, refreshPdf } from '../lib/api/documentos.js';
 import { runApartadoPdfDriveWriteTest } from '../lib/apartados/pdf-sync.js';
+import { ADMIN_SESSION_REQUIRED_MESSAGE, requireAdminSession } from './core.js';
 
 const jsonOk = (res, data) => res.status(200).json({ ok: true, data });
 const jsonErr = (res, status, message) => res.status(status).json({ ok: false, message });
@@ -20,8 +21,27 @@ const jsonErr = (res, status, message) => res.status(status).json({ ok: false, m
 export default async function handler(req, res) {
   const action = String(req.query?.action || '').trim();
   const folio = String(req.query?.folio || req.body?.folio || '').trim();
+  const requiresAdmin = new Set([
+    'apartados-missing-pdf',
+    'apartados-update-status',
+    'apartados-pdf-refresh',
+    'apartados-cancel',
+    'apartados-pdf-drive-test',
+    'ticket-pdf-refresh',
+  ]);
 
   if (!action) return jsonErr(res, 400, 'action es obligatorio.');
+  if (requiresAdmin.has(action) && !requireAdminSession(req, res, {
+    logDenied: `[admin-session] legacy /api/sheets denied action=${action}`,
+    touchActivity: true,
+    reason: `legacy-sheets-${action}`,
+  })) {
+    return res.status(401).json({
+      ok: false,
+      code: 'ADMIN_SESSION_REQUIRED',
+      message: ADMIN_SESSION_REQUIRED_MESSAGE,
+    });
+  }
 
   try {
     if (action === 'apartados-next') return jsonOk(res, await getNextFolio(req.query?.fecha || req.body?.fecha || ''));
