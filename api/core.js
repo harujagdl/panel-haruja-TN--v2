@@ -39,6 +39,7 @@ import {
   archiveCatalogoIADraft,
   createCatalogoIADraft,
   ensureCatalogoIASheets,
+  exportCatalogoIADraftsToTiendanubeCSV,
   generateCatalogoIAFicha,
   getCatalogoIABaseProducts,
   getCatalogoIADraft,
@@ -93,6 +94,7 @@ const PUBLIC_ACTIONS = new Set([
   'catalogo-ia-draft-update',
   'catalogo-ia-draft-archive',
   'catalogo-ia-generate',
+  'catalogo-ia-export-csv',
 ]);
 const ADMIN_ACTIONS = new Set([
   'prendas-update',
@@ -153,6 +155,7 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['catalogo-ia-draft-update', new Set(['POST'])],
   ['catalogo-ia-draft-archive', new Set(['POST'])],
   ['catalogo-ia-generate', new Set(['POST'])],
+  ['catalogo-ia-export-csv', new Set(['POST'])],
 ]);
 const PUBLIC_PRENDA_FIELDS = [
   'Orden',
@@ -941,6 +944,7 @@ export default async function handler(req, res) {
     if (action === 'catalogo-ia-draft-update') return sendOk(res, await updateCatalogoIADraft(req.body?.id || req.query?.id || '', req.body?.payload || req.body || {}, readAdminSession(req) || {}));
     if (action === 'catalogo-ia-draft-archive') return sendOk(res, await archiveCatalogoIADraft(req.body?.id || req.query?.id || '', readAdminSession(req) || {}));
     if (action === 'catalogo-ia-generate') return sendOk(res, await generateCatalogoIAFicha(req.body || {}, readAdminSession(req) || {}));
+    if (action === 'catalogo-ia-export-csv') return sendOk(res, await exportCatalogoIADraftsToTiendanubeCSV(req.body || {}, readAdminSession(req) || {}));
     if (action === 'catalogo-ia-repair-alignment') {
       const dryRun = String(req.body?.dryRun ?? req.query?.dryRun ?? 'true').toLowerCase() !== 'false';
       return sendOk(res, await repairCatalogoIARowsAlignment({ dryRun }, readAdminSession(req) || {}));
