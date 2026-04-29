@@ -19,7 +19,7 @@ function isoOrEmpty(value) {
 export default async function handler(req, res) {
   const traceId = createTraceId(req?.headers?.['x-trace-id'] || req?.headers?.['x-request-id'] || req?.body?.traceId || req?.query?.traceId);
   if (req.method !== 'POST') {
-    return res.status(405).json({ ok: false, message: 'Method not allowed.', traceId });
+    return res.status(405).json({ ok: false, code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed.', traceId });
   }
 
   console.log('[ventas-sync-auto] start trace_id=%s', traceId);

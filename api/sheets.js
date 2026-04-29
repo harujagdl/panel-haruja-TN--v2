@@ -17,7 +17,8 @@ import { ADMIN_SESSION_REQUIRED_MESSAGE, requireAdminSession } from './core.js';
 import { createTraceId } from '../lib/observability/logger.js';
 
 const jsonOk = (res, data, traceId = '') => res.status(200).json({ ok: true, data, ...(traceId ? { traceId } : {}) });
-const jsonErr = (res, status, message, traceId = '') => res.status(status).json({ ok: false, message, ...(traceId ? { traceId } : {}) });
+const jsonErr = (res, status, code, message, traceId = '') =>
+  res.status(status).json({ ok: false, code, message, ...(traceId ? { traceId } : {}) });
 const readTraceFromRequest = (req = {}) =>
   createTraceId(req?.headers?.['x-trace-id'] || req?.headers?.['x-request-id'] || req?.body?.traceId || req?.query?.traceId);
 
@@ -34,7 +35,7 @@ export default async function handler(req, res) {
     'ticket-pdf-refresh',
   ]);
 
-  if (!action) return jsonErr(res, 400, 'action es obligatorio.', traceId);
+  if (!action) return jsonErr(res, 400, 'INVALID_ACTION', 'action es obligatorio.', traceId);
   if (requiresAdmin.has(action) && !requireAdminSession(req, res, {
     logDenied: `[admin-session] legacy /api/sheets denied action=${action}`,
     touchActivity: true,
@@ -61,14 +62,14 @@ export default async function handler(req, res) {
     if (action === 'apartados-abono') return jsonOk(res, await addAbono(req.body || {}), traceId);
 
     if (action === 'apartados-detail') {
-      if (!folio) return jsonErr(res, 400, 'folio es obligatorio.', traceId);
+      if (!folio) return jsonErr(res, 400, 'MISSING_FOLIO', 'folio es obligatorio.', traceId);
       const result = await getApartadoDetail(folio);
       if (result?.status) return res.status(result.status).json({ ...(result.body || {}), traceId });
       return jsonOk(res, result, traceId);
     }
 
     if (action === 'apartados-historial') {
-      if (!folio) return jsonErr(res, 400, 'folio es obligatorio.', traceId);
+      if (!folio) return jsonErr(res, 400, 'MISSING_FOLIO', 'folio es obligatorio.', traceId);
       const result = await getHistorialApartado(folio);
       if (result?.status) return res.status(result.status).json({ ...(result.body || {}), traceId });
       return jsonOk(res, result, traceId);
@@ -81,7 +82,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'apartados-pdf-refresh') {
-      if (!folio) return jsonErr(res, 400, 'folio es obligatorio.', traceId);
+      if (!folio) return jsonErr(res, 400, 'MISSING_FOLIO', 'folio es obligatorio.', traceId);
       const result = await regenerateApartadoPdf(folio, req.body || {});
       if (result?.status) return res.status(result.status).json({ ...(result.body || {}), traceId });
       return jsonOk(res, result, traceId);
@@ -93,7 +94,7 @@ export default async function handler(req, res) {
       return jsonOk(res, result, traceId);
     }
 
-    if (!folio && action.startsWith('ticket-')) return jsonErr(res, 400, 'folio es obligatorio.', traceId);
+    if (!folio && action.startsWith('ticket-')) return jsonErr(res, 400, 'MISSING_FOLIO', 'folio es obligatorio.', traceId);
 
     if (action === 'ticket') {
       const result = await getTicketByFolio(folio);
@@ -117,7 +118,7 @@ export default async function handler(req, res) {
     }
     if (action === 'apartados-pdf-drive-test') {
       const result = await runApartadoPdfDriveWriteTest();
-      if (!result?.ok) return jsonErr(res, 502, result?.error || 'No se pudo guardar el PDF en Drive.', traceId);
+      if (!result?.ok) return jsonErr(res, 502, 'PDF_ERROR', result?.error || 'No se pudo guardar el PDF en Drive.', traceId);
       return jsonOk(res, result, traceId);
     }
     if (action === 'ticket-pdf-refresh') {
@@ -126,8 +127,8 @@ export default async function handler(req, res) {
       return jsonOk(res, result, traceId);
     }
 
-    return jsonErr(res, 400, 'action inválida para /api/sheets.', traceId);
+    return jsonErr(res, 400, 'INVALID_ACTION', 'action inválida para /api/sheets.', traceId);
   } catch (error) {
-    return jsonErr(res, 500, error?.message || 'Error en /api/sheets.', traceId);
+    return jsonErr(res, 500, 'SHEETS_LEGACY_ERROR', error?.message || 'Error en /api/sheets.', traceId);
   }
 }

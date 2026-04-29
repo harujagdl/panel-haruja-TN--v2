@@ -12,6 +12,7 @@ import { createTraceId } from '../lib/observability/logger.js';
 function json(res, status, payload) {
   return res.status(status).json(payload);
 }
+const errorPayload = (code, message, traceId = '') => ({ ok: false, code, message, ...(traceId ? { traceId } : {}) });
 const readTraceFromRequest = (req = {}) =>
   createTraceId(req?.headers?.['x-trace-id'] || req?.headers?.['x-request-id'] || req?.body?.traceId || req?.query?.traceId);
 
@@ -90,48 +91,55 @@ export default async function handler(req, res) {
 
   try {
     if (action === 'sync') {
-      if (req.method !== 'POST') return json(res, 405, { ok: false, message: 'Method not allowed.', traceId });
+      if (req.method !== 'POST') return json(res, 405, errorPayload('METHOD_NOT_ALLOWED', 'Method not allowed.', traceId));
       const data = await syncVentasFromTiendanube();
       return json(res, 200, { ok: true, data, traceId });
     }
 
     if (action === 'status') {
-      if (req.method !== 'GET') return json(res, 405, { ok: false, message: 'Method not allowed.', traceId });
+      if (req.method !== 'GET') return json(res, 405, errorPayload('METHOD_NOT_ALLOWED', 'Method not allowed.', traceId));
       const config = await getVentasConfig();
       return json(res, 200, { ok: true, data: config, traceId });
     }
 
     if (action === 'connect') {
-      if (req.method !== 'GET') return json(res, 405, { ok: false, message: 'Method not allowed.', traceId });
+      if (req.method !== 'GET') return json(res, 405, errorPayload('METHOD_NOT_ALLOWED', 'Method not allowed.', traceId));
       return connectStart(req, res);
     }
 
     if (action === 'import-order') {
-      if (req.method !== 'POST') return json(res, 405, { ok: false, message: 'Method not allowed.', traceId });
+      if (req.method !== 'POST') return json(res, 405, errorPayload('METHOD_NOT_ALLOWED', 'Method not allowed.', traceId));
       const orderId = String(req.body?.orderId || req.query?.orderId || '').trim();
-      if (!orderId) return json(res, 400, { ok: false, message: 'orderId es obligatorio.', traceId });
+      if (!orderId) return json(res, 400, errorPayload('INVALID_PAYLOAD', 'orderId es obligatorio.', traceId));
       const config = await getVentasConfig();
       if (!config?.store_id || !config?.access_token) {
-        return json(res, 400, { ok: false, message: 'Tiendanube no está configurado.', traceId });
+        return json(res, 400, errorPayload('TIENDANUBE_NOT_CONFIGURED', 'Tiendanube no está configurado.', traceId));
       }
       const data = await fetchTiendanubeOrderById(config.store_id, config.access_token, orderId);
       return json(res, 200, { ok: true, data, traceId });
     }
 
     if (action === 'variant') {
-      if (req.method !== 'GET') return json(res, 405, { ok: false, message: 'Method not allowed.', traceId });
+      if (req.method !== 'GET') return json(res, 405, errorPayload('METHOD_NOT_ALLOWED', 'Method not allowed.', traceId));
       const variantId = String(req.query?.variantId || req.query?.variant_id || '').trim();
-      if (!variantId) return json(res, 400, { ok: false, message: 'variantId es obligatorio.', traceId });
+      if (!variantId) return json(res, 400, errorPayload('INVALID_PAYLOAD', 'variantId es obligatorio.', traceId));
       const config = await getVentasConfig();
       if (!config?.store_id || !config?.access_token) {
-        return json(res, 400, { ok: false, message: 'Tiendanube no está configurado.', traceId });
+        return json(res, 400, errorPayload('TIENDANUBE_NOT_CONFIGURED', 'Tiendanube no está configurado.', traceId));
       }
       const data = await fetchTiendanubeVariantById(config.store_id, config.access_token, variantId);
       return json(res, 200, { ok: true, data, traceId });
     }
 
-    return json(res, 400, { ok: false, message: 'action inválida para /api/tiendanube.', traceId });
+    return json(res, 400, errorPayload('INVALID_ACTION', 'action inválida para /api/tiendanube.', traceId));
   } catch (error) {
-    return json(res, 400, { ok: false, message: String(error?.message || error), traceId });
+    const actionErrorCode = {
+      sync: 'TIENDANUBE_SYNC_ERROR',
+      'import-order': 'TIENDANUBE_IMPORT_ERROR',
+      variant: 'TIENDANUBE_VARIANT_ERROR',
+      status: 'TIENDANUBE_STATUS_ERROR',
+      connect: 'TIENDANUBE_CONNECT_ERROR',
+    };
+    return json(res, 400, errorPayload(actionErrorCode[action] || 'TIENDANUBE_ERROR', String(error?.message || error), traceId));
   }
 }
