@@ -51,6 +51,7 @@ import { AdminSessionConfigError, getAdminSessionSecret } from '../lib/security/
 import { createTraceId, getErrorMessage, logError, logInfo, logWarn } from '../lib/observability/logger.js';
 import { createSheetsClient, getSpreadsheetId, getSpreadsheetMetadata } from '../lib/google/sheetsClient.js';
 import { readVentasSyncState } from '../lib/ventas/syncState.js';
+import { getOrSetMemoryCache, invalidateMemoryCache } from '../lib/api/memoryCache.js';
 
 export const sendOk = (res, data, traceId = '') => res.status(200).json({ ok: true, data, ...(traceId ? { traceId } : {}) });
 export const sendErr = (res, status, message, _error, code, traceId = '') => {
@@ -168,6 +169,42 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['catalogo-ia-generate', new Set(['POST'])],
   ['catalogo-ia-export-csv', new Set(['POST'])],
 ]);
+
+const API_READ_CACHE_TTL_MS = {
+  prendasList: 20_000,
+  ventasMiniPublic: 30_000,
+  ventasResumen: 30_000,
+  ventasDetalle: 20_000,
+  ventasWebhookStatus: 15_000,
+};
+
+const readCacheKey = {
+  prendasList: () => 'api:prendas-list',
+  ventasMiniPublic: (month = '') => `api:ventas-mini-public:${String(month || '').trim()}`,
+  ventasResumen: (month = '') => `api:ventas-resumen:${String(month || '').trim()}`,
+  ventasDetalle: (month = '', search = '') => `api:ventas-detalle:${String(month || '').trim()}:${String(search || '').trim()}`,
+  ventasWebhookStatus: () => 'api:ventas-webhook-status',
+};
+
+
+const invalidatePrendasReadCaches = () => {
+  invalidateMemoryCache(readCacheKey.prendasList());
+};
+
+const invalidateVentasReadCaches = () => {
+  invalidateMemoryCache(readCacheKey.ventasMiniPublic(''));
+  invalidateMemoryCache(readCacheKey.ventasResumen(''));
+  invalidateMemoryCache(readCacheKey.ventasDetalle('', ''));
+  invalidateMemoryCache(readCacheKey.ventasWebhookStatus());
+  const store = globalThis.__apiMemoryCacheStore;
+  if (!store) return;
+  [...store.keys()].forEach((key) => {
+    if (String(key || '').startsWith('api:ventas-mini-public:')) invalidateMemoryCache(key);
+    if (String(key || '').startsWith('api:ventas-resumen:')) invalidateMemoryCache(key);
+    if (String(key || '').startsWith('api:ventas-detalle:')) invalidateMemoryCache(key);
+  });
+};
+
 const PUBLIC_PRENDA_FIELDS = [
   'Orden',
   'Código',
@@ -1044,10 +1081,10 @@ export default async function handler(req, res) {
       console.log(`[permissions] public action allowed: ${action}`);
     }
 
-    if (action === 'ventas-resumen' || action === 'resumen') return sendOk(res, await getVentasResumen(req.query?.month));
-    if (action === 'ventas-mini-public') return sendOk(res, await getVentasMiniPublic(req.query?.month));
-    if (action === 'ventas-detalle' || action === 'detalle') return sendOk(res, await getVentasDetalle(req.query?.month, req.query?.q || req.query?.search));
-    if (action === 'ventas-webhook-status') return sendOk(res, await getLatestWebhookEvent());
+    if (action === 'ventas-resumen' || action === 'resumen') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasResumen(req.query?.month), API_READ_CACHE_TTL_MS.ventasResumen, () => getVentasResumen(req.query?.month)));
+    if (action === 'ventas-mini-public') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasMiniPublic(req.query?.month), API_READ_CACHE_TTL_MS.ventasMiniPublic, () => getVentasMiniPublic(req.query?.month)));
+    if (action === 'ventas-detalle' || action === 'detalle') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasDetalle(req.query?.month, req.query?.q || req.query?.search), API_READ_CACHE_TTL_MS.ventasDetalle, () => getVentasDetalle(req.query?.month, req.query?.q || req.query?.search)));
+    if (action === 'ventas-webhook-status') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasWebhookStatus(), API_READ_CACHE_TTL_MS.ventasWebhookStatus, () => getLatestWebhookEvent()));
     if (action === 'catalogos') return sendOk(res, await getCatalogosCached());
     if (action === 'health') {
       logInfo('health.start', { traceId });
@@ -1062,7 +1099,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'prendas-list') {
-      const rows = await listPrendas();
+      const rows = await getOrSetMemoryCache(readCacheKey.prendasList(), API_READ_CACHE_TTL_MS.prendasList, () => listPrendas());
       console.info('[prendas-list] spreadsheetId', getSpreadsheetId?.() || process.env.GOOGLE_SHEETS_SPREADSHEET_ID);
       console.info('[prendas-list] rows count', rows.length);
       console.info('[prendas-list] first raw row', rows[0]);
@@ -1081,11 +1118,14 @@ export default async function handler(req, res) {
       if (!payload?.codigo) {
         return sendErr(res, 400, 'Datos incompletos');
       }
-      return sendOk(res, await createPrenda(payload));
+      const out = await createPrenda(payload);
+      invalidatePrendasReadCaches();
+      return sendOk(res, out);
     }
     if (action === 'prendas-update') {
       const result = await updatePrenda({ ...(req.body || {}), traceId });
       if (result?.status) return res.status(result.status).json(result.body);
+      invalidatePrendasReadCaches();
       return sendOk(res, result);
     }
 
@@ -1120,11 +1160,11 @@ export default async function handler(req, res) {
     }
 
     if (action === 'ventas-config') return sendOk(res, await getVentasConfig());
-    if (action === 'ventas-config-save') return sendOk(res, await saveVentasConfig({ ...(req.body || {}), traceId }));
+    if (action === 'ventas-config-save') { const out = await saveVentasConfig({ ...(req.body || {}), traceId }); invalidateVentasReadCaches(); return sendOk(res, out); }
     if (action === 'ventas-sin-asignar') return sendOk(res, await getVentasSinAsignar(req.query?.month));
-    if (action === 'assign-seller' || action === 'venta-asignar-vendedora') return sendOk(res, await assignVentaSeller({ ...(req.body || {}), traceId }));
-    if (action === 'ventas-rebuild') return sendOk(res, await rebuildVentasResumen(req.body?.month || req.query?.month));
-    if (action === 'ventas-repair-month-keys') return sendOk(res, await repairVentasMonthKeys({ dryRun: String(req.body?.dryRun ?? req.query?.dryRun ?? 'true').toLowerCase() !== 'false' }));
+    if (action === 'assign-seller' || action === 'venta-asignar-vendedora') { const out = await assignVentaSeller({ ...(req.body || {}), traceId }); invalidateVentasReadCaches(); return sendOk(res, out); }
+    if (action === 'ventas-rebuild') { const out = await rebuildVentasResumen(req.body?.month || req.query?.month); invalidateVentasReadCaches(); return sendOk(res, out); }
+    if (action === 'ventas-repair-month-keys') { const out = await repairVentasMonthKeys({ dryRun: String(req.body?.dryRun ?? req.query?.dryRun ?? 'true').toLowerCase() !== 'false' }); invalidateVentasReadCaches(); return sendOk(res, out); }
     if (action === 'tiendanube-webhooks-register') return sendOk(res, await registerTiendanubeWebhooks(getBaseUrl(req)));
 
     return sendErr(res, 400, 'Acción inválida para /api/core.');
