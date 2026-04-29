@@ -1,4 +1,5 @@
 import { fetchTiendanubeOrderById, processTiendanubeWebhook, resolveTiendanubeConnection } from '../../lib/api/core.js';
+import crypto from 'crypto';
 import { verifyTiendanubeWebhook } from '../../lib/tiendanube/verifyWebhook.js';
 import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
 import { registerWebhookEventAttempt, trackWebhookEventResult } from '../../lib/ventas/dedupeWebhookEvent.js';
@@ -65,10 +66,22 @@ function getEventTimestamp(payload = {}, req = {}) {
 }
 
 async function logWebhookTrace(meta = {}) {
-  const { eventKey, orderId, result, reason } = meta;
-  console.log('[ventas-webhook] trace event_key=%s order_id=%s result=%s reason=%s', eventKey || '-', orderId || '-', result || '-', reason || '-');
+  const { eventKey, orderId, result, reason, errorCode, traceId } = meta;
+  console.log('[ventas-webhook] trace event_key=%s order_id=%s result=%s reason=%s error_code=%s trace_id=%s', eventKey || '-', orderId || '-', result || '-', reason || '-', errorCode || '-', traceId || '-');
   try {
-    await trackWebhookEventResult(meta);
+    await trackWebhookEventResult({
+      eventKey: meta.eventKey,
+      eventId: meta.eventId,
+      event: meta.event,
+      orderId: meta.orderId,
+      storeId: meta.storeId,
+      bodyHash: meta.bodyHash,
+      eventTimestamp: meta.eventTimestamp,
+      result: meta.result,
+      reason: meta.reason,
+      errorCode: meta.errorCode,
+      traceId: meta.traceId,
+    });
   } catch (error) {
     console.warn('[ventas-webhook] trace_write_failed', String(error?.message || error));
   }
@@ -89,11 +102,15 @@ export default async function handler(req, res) {
 
   try {
     const rawBody = await readRawBody(req);
+    const bodyHash = crypto.createHash('sha256').update(String(rawBody || ''), 'utf8').digest('hex');
+    const traceId = `tnwh-${bodyHash.slice(0, 12)}`;
     if (!verifyTiendanubeWebhook(rawBody, signature, secret)) {
       await logWebhookTrace({
-        rawBody,
+        bodyHash,
+        traceId,
         result: 'invalid_signature',
         reason: 'signature_validation_failed',
+        errorCode: 'INVALID_SIGNATURE',
       });
       return res.status(401).json({ ok: false, message: 'Firma inválida.' });
     }
@@ -117,7 +134,7 @@ export default async function handler(req, res) {
       orderId,
       storeId: resolvedStoreId || storeId,
       eventId,
-      rawBody,
+      bodyHash,
       eventTimestamp,
     });
     traceMeta = {
@@ -126,8 +143,9 @@ export default async function handler(req, res) {
       event,
       orderId,
       storeId: resolvedStoreId || storeId,
-      rawBody,
+      bodyHash: dedupe.bodyHash || bodyHash,
       eventTimestamp,
+      traceId,
     };
 
     if (dedupe.duplicated) {
