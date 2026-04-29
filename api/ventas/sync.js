@@ -1,6 +1,7 @@
 import { syncVentasFromTiendanube } from '../../lib/api/core.js';
 import { createTraceId, logError, logInfo, logWarn } from '../../lib/observability/logger.js';
 import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
+import { invalidateMemoryCache } from '../../lib/api/memoryCache.js';
 import {
   acquireVentasSyncLock,
   releaseVentasSyncLock,
@@ -41,6 +42,12 @@ export default async function handler(req, res) {
       const touched = Array.isArray(data.months_rebuilt) ? data.months_rebuilt : [];
       if (touched.length) touched.forEach((month) => invalidateVentasFullCache(month));
       else invalidateVentasFullCache();
+      const store = globalThis.__apiMemoryCacheStore;
+      if (store) {
+        [...store.keys()].forEach((key) => {
+          if (String(key || '').startsWith('api:ventas-')) invalidateMemoryCache(key);
+        });
+      }
     }
     logInfo('ventas.sync.success', { traceId, result: 'success', processed, inserted, updated, monthsRebuilt, durationMs: Date.now() - startedAt });
     return res.status(200).json({ ok: true, ...data, traceId });
