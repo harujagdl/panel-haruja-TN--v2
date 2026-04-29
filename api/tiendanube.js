@@ -7,10 +7,13 @@ import {
 } from '../lib/api/core.js';
 import { ADMIN_SESSION_REQUIRED_MESSAGE, requireAdminSession } from './core.js';
 import { buildTiendanubeAuthUrl, clearStateCookie, exchangeCodeForToken, parseCookies } from '../lib/tiendanube/oauth.js';
+import { createTraceId } from '../lib/observability/logger.js';
 
 function json(res, status, payload) {
   return res.status(status).json(payload);
 }
+const readTraceFromRequest = (req = {}) =>
+  createTraceId(req?.headers?.['x-trace-id'] || req?.headers?.['x-request-id'] || req?.body?.traceId || req?.query?.traceId);
 
 function buildRedirect(query = {}) {
   const url = new URL('/ventas', 'http://local');
@@ -64,6 +67,7 @@ async function connectCallback(req, res) {
 }
 
 export default async function handler(req, res) {
+  const traceId = readTraceFromRequest(req);
   const action = String(req.query?.action || '').trim();
   const adminOnlyActions = new Set(['status', 'sync', 'import-order', 'variant', 'connect']);
 
@@ -80,53 +84,54 @@ export default async function handler(req, res) {
       ok: false,
       code: 'ADMIN_SESSION_REQUIRED',
       message: ADMIN_SESSION_REQUIRED_MESSAGE,
+      traceId,
     });
   }
 
   try {
     if (action === 'sync') {
-      if (req.method !== 'POST') return json(res, 405, { ok: false, message: 'Method not allowed.' });
+      if (req.method !== 'POST') return json(res, 405, { ok: false, message: 'Method not allowed.', traceId });
       const data = await syncVentasFromTiendanube();
-      return json(res, 200, { ok: true, data });
+      return json(res, 200, { ok: true, data, traceId });
     }
 
     if (action === 'status') {
-      if (req.method !== 'GET') return json(res, 405, { ok: false, message: 'Method not allowed.' });
+      if (req.method !== 'GET') return json(res, 405, { ok: false, message: 'Method not allowed.', traceId });
       const config = await getVentasConfig();
-      return json(res, 200, { ok: true, data: config });
+      return json(res, 200, { ok: true, data: config, traceId });
     }
 
     if (action === 'connect') {
-      if (req.method !== 'GET') return json(res, 405, { ok: false, message: 'Method not allowed.' });
+      if (req.method !== 'GET') return json(res, 405, { ok: false, message: 'Method not allowed.', traceId });
       return connectStart(req, res);
     }
 
     if (action === 'import-order') {
-      if (req.method !== 'POST') return json(res, 405, { ok: false, message: 'Method not allowed.' });
+      if (req.method !== 'POST') return json(res, 405, { ok: false, message: 'Method not allowed.', traceId });
       const orderId = String(req.body?.orderId || req.query?.orderId || '').trim();
-      if (!orderId) return json(res, 400, { ok: false, message: 'orderId es obligatorio.' });
+      if (!orderId) return json(res, 400, { ok: false, message: 'orderId es obligatorio.', traceId });
       const config = await getVentasConfig();
       if (!config?.store_id || !config?.access_token) {
-        return json(res, 400, { ok: false, message: 'Tiendanube no está configurado.' });
+        return json(res, 400, { ok: false, message: 'Tiendanube no está configurado.', traceId });
       }
       const data = await fetchTiendanubeOrderById(config.store_id, config.access_token, orderId);
-      return json(res, 200, { ok: true, data });
+      return json(res, 200, { ok: true, data, traceId });
     }
 
     if (action === 'variant') {
-      if (req.method !== 'GET') return json(res, 405, { ok: false, message: 'Method not allowed.' });
+      if (req.method !== 'GET') return json(res, 405, { ok: false, message: 'Method not allowed.', traceId });
       const variantId = String(req.query?.variantId || req.query?.variant_id || '').trim();
-      if (!variantId) return json(res, 400, { ok: false, message: 'variantId es obligatorio.' });
+      if (!variantId) return json(res, 400, { ok: false, message: 'variantId es obligatorio.', traceId });
       const config = await getVentasConfig();
       if (!config?.store_id || !config?.access_token) {
-        return json(res, 400, { ok: false, message: 'Tiendanube no está configurado.' });
+        return json(res, 400, { ok: false, message: 'Tiendanube no está configurado.', traceId });
       }
       const data = await fetchTiendanubeVariantById(config.store_id, config.access_token, variantId);
-      return json(res, 200, { ok: true, data });
+      return json(res, 200, { ok: true, data, traceId });
     }
 
-    return json(res, 400, { ok: false, message: 'action inválida para /api/tiendanube.' });
+    return json(res, 400, { ok: false, message: 'action inválida para /api/tiendanube.', traceId });
   } catch (error) {
-    return json(res, 400, { ok: false, message: String(error?.message || error) });
+    return json(res, 400, { ok: false, message: String(error?.message || error), traceId });
   }
 }
