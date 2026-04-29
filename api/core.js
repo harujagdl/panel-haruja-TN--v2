@@ -79,9 +79,13 @@ export const ADMIN_SESSION_REQUIRED_MESSAGE =
   'La sesión admin expiró. Vuelve a autenticarte con Google.';
 const ADMIN_TEMP_UNAVAILABLE_MESSAGE = 'Admin temporalmente no disponible.';
 const CATALOGOS_CACHE_TTL_MS = 120 * 1000;
+const HEALTH_CACHE_TTL_MS = 60 * 1000;
 let cacheCatalogosData = null;
 let cacheCatalogosAt = 0;
 let cacheCatalogosPromise = null;
+let healthCacheData = null;
+let healthCacheAt = 0;
+let healthCachePromise = null;
 const PUBLIC_ACTIONS = new Set([
   'catalogos',
   'diccionario',
@@ -982,6 +986,29 @@ const runHealthChecks = async (traceId = '') => {
   };
 };
 
+const getHealthCached = async (traceId = '') => {
+  const now = Date.now();
+  const cacheAlive = healthCacheData && (now - healthCacheAt) < HEALTH_CACHE_TTL_MS;
+  if (cacheAlive) {
+    return { ...(healthCacheData || {}), traceId, cached: true };
+  }
+  if (healthCachePromise) {
+    const payload = await healthCachePromise;
+    return { ...(payload || {}), traceId, cached: true };
+  }
+  healthCachePromise = (async () => {
+    const payload = await runHealthChecks(traceId);
+    healthCacheData = payload;
+    healthCacheAt = Date.now();
+    return payload;
+  })();
+  try {
+    return await healthCachePromise;
+  } finally {
+    healthCachePromise = null;
+  }
+};
+
 export default async function handler(req, res) {
   const action = toAction(req.query?.action || '');
   const traceId = readTraceFromRequest(req);
@@ -1024,8 +1051,8 @@ export default async function handler(req, res) {
     if (action === 'catalogos') return sendOk(res, await getCatalogosCached());
     if (action === 'health') {
       logInfo('health.start', { traceId });
-      const payload = await runHealthChecks(traceId);
-      logInfo('health.done', { traceId, status: payload.status });
+      const payload = await getHealthCached(traceId);
+      logInfo('health.done', { traceId, status: payload.status, cached: Boolean(payload?.cached) });
       return res.status(200).json(payload);
     }
 

@@ -4485,6 +4485,7 @@ Errores: 0</pre>
       const healthRefreshBtn = document.getElementById("healthRefreshBtn");
       const healthMetaLine = document.getElementById("healthMetaLine");
       const healthChecksGrid = document.getElementById("healthChecksGrid");
+      let healthLoading = false;
 
       const HEALTH_LABELS = {
         sheets: "Sheets",
@@ -4512,7 +4513,8 @@ Errores: 0</pre>
         const overall = safeString(payload?.status || "error");
         healthOverallChip.className = `health-chip ${overall}`;
         healthOverallChip.textContent = `Estado general: ${overall}`;
-        healthMetaLine.textContent = `generatedAt: ${safeString(payload?.generatedAt) || "—"} · traceId: ${safeString(payload?.traceId) || "—"}`;
+        const cachedLabel = payload?.cached ? " · cacheado" : "";
+        healthMetaLine.textContent = `generatedAt: ${safeString(payload?.generatedAt) || "—"} · traceId: ${safeString(payload?.traceId) || "—"}${cachedLabel}`;
         const checks = payload?.checks || {};
         healthChecksGrid.innerHTML = Object.entries(HEALTH_LABELS)
           .map(([key, label]) => renderHealthCard(label, checks?.[key] || {}))
@@ -4524,6 +4526,8 @@ Errores: 0</pre>
         if (healthAuthMessage) healthAuthMessage.classList.toggle("hidden", isAdmin);
         if (healthDashboard) healthDashboard.classList.toggle("hidden", !isAdmin);
         if (!isAdmin) return;
+        if (healthLoading) return;
+        healthLoading = true;
         if (healthRefreshBtn) healthRefreshBtn.disabled = true;
         try {
           const response = await fetch("/api/core?action=health", { credentials: "same-origin" });
@@ -4536,6 +4540,7 @@ Errores: 0</pre>
           healthMetaLine.textContent = safeString(error?.message) || "Error al cargar health.";
           healthChecksGrid.innerHTML = "";
         } finally {
+          healthLoading = false;
           if (healthRefreshBtn) healthRefreshBtn.disabled = false;
         }
       };
