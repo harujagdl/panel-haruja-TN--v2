@@ -1863,6 +1863,49 @@ body.admin-on .admin-only{ display:table-cell; }
   line-height: 1.35;
 }
 .toolcard-actions{ margin-top: 10px; }
+.health-overview{
+  margin-top: 12px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.health-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  border-radius:999px;
+  padding:6px 12px;
+  font-size:13px;
+  font-weight:600;
+  border:1px solid #d1d5db;
+  background:#f9fafb;
+}
+.health-chip.ok{ color:#166534; border-color:#86efac; background:#f0fdf4; }
+.health-chip.warning{ color:#92400e; border-color:#fcd34d; background:#fffbeb; }
+.health-chip.error{ color:#991b1b; border-color:#fca5a5; background:#fef2f2; }
+.health-grid{
+  margin-top:12px;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:12px;
+}
+.health-card{
+  border:1px solid #e5e7eb;
+  border-radius:12px;
+  padding:12px;
+  background:#fff;
+}
+.health-card h4{
+  margin:0 0 8px;
+  font-size:14px;
+}
+.health-row{
+  margin:4px 0;
+  font-size:13px;
+  color:#475467;
+}
+.health-row strong{ color:#111827; }
 
 /* ===== Catálogo IA (visual-only module) ===== */
 .catalogo-ia-wrap{
@@ -3168,8 +3211,36 @@ body.haruja-col-resizing{
                   </div>
                 </div>
               </div>
+
+              <div class="toolcard" aria-label="Abrir Salud del sistema">
+                <div class="toolcard-icon" aria-hidden="true">🩺</div>
+                <div class="toolcard-body">
+                  <div class="toolcard-title">Salud del sistema</div>
+                  <div class="toolcard-desc">Vista interna de observabilidad para validar checks operativos.</div>
+                  <div class="toolcard-actions">
+                    <button type="button" class="btn btn-primary tool-open" id="btnOpenHealth">Abrir</button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
+        </section>
+
+        <section id="view-health" class="view">
+          <section class="section" id="healthView">
+            <button type="button" class="secondary js-go-panel" data-go-panel="1">← Volver al panel</button>
+            <h2>Salud del sistema</h2>
+            <p>Monitoreo operativo interno del backend integrado en <code>/api/core?action=health</code>.</p>
+            <p id="healthAuthMessage" class="status warning hidden">Inicia sesión como admin para ver salud del sistema.</p>
+            <div id="healthDashboard" class="hidden">
+              <div class="health-overview">
+                <span id="healthOverallChip" class="health-chip">Estado general: —</span>
+                <button type="button" id="healthRefreshBtn" class="secondary small">Actualizar</button>
+              </div>
+              <p id="healthMetaLine" class="health-row">—</p>
+              <div id="healthChecksGrid" class="health-grid"></div>
+            </div>
+          </section>
         </section>
 
         <section id="view-meta-vs-venta" class="view">
@@ -4185,7 +4256,7 @@ Errores: 0</pre>
       const adminSessionExpiredModal = document.getElementById("adminSessionExpiredModal");
       const adminSessionReauthBtn = document.getElementById("adminSessionReauthBtn");
       const adminSessionExpiredMessage = document.getElementById("adminSessionExpiredMessage");
-      const VIEWS = ["panel", "registro", "codigos", "meta-vs-venta", "catalogo-ia"];
+      const VIEWS = ["panel", "registro", "codigos", "meta-vs-venta", "catalogo-ia", "health"];
 
       const ENABLE_DESC_BETTER_UI = true;
 
@@ -4217,6 +4288,9 @@ Errores: 0</pre>
         }
         if (nextView === "catalogo-ia") {
           initCatalogoIA();
+        }
+        if (nextView === "health") {
+          loadHealthDashboard();
         }
 
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -4281,7 +4355,7 @@ Errores: 0</pre>
           return "meta-vs-venta";
         }
         const hash = location.hash || "#/panel";
-        const match = hash.match(/^#\/(panel|registro|codigos|meta-vs-venta|catalogo-ia)$/);
+        const match = hash.match(/^#\/(panel|registro|codigos|meta-vs-venta|catalogo-ia|health)$/);
         return match ? match[1] : "panel";
       }
 
@@ -4400,6 +4474,72 @@ Errores: 0</pre>
       if (btnOpenCatalogoIA) {
         btnOpenCatalogoIA.addEventListener("click", () => navigateTo("catalogo-ia"));
       }
+      const btnOpenHealth = document.getElementById("btnOpenHealth");
+      if (btnOpenHealth) {
+        btnOpenHealth.addEventListener("click", () => navigateTo("health"));
+      }
+
+      const healthAuthMessage = document.getElementById("healthAuthMessage");
+      const healthDashboard = document.getElementById("healthDashboard");
+      const healthOverallChip = document.getElementById("healthOverallChip");
+      const healthRefreshBtn = document.getElementById("healthRefreshBtn");
+      const healthMetaLine = document.getElementById("healthMetaLine");
+      const healthChecksGrid = document.getElementById("healthChecksGrid");
+
+      const HEALTH_LABELS = {
+        sheets: "Sheets",
+        tiendanube: "Tiendanube",
+        pdf: "PDF",
+        ventasSync: "Ventas Sync",
+        webhook: "Webhook",
+        admin: "Admin",
+      };
+
+      const renderHealthCard = (title, check = {}) => {
+        const rows = [];
+        rows.push(`<div class="health-row"><strong>status:</strong> ${safeString(check?.status) || "—"}</div>`);
+        if (check?.message) rows.push(`<div class="health-row"><strong>message:</strong> ${safeString(check.message)}</div>`);
+        if (check?.durationMs != null) rows.push(`<div class="health-row"><strong>durationMs:</strong> ${safeString(check.durationMs)}</div>`);
+        if (check?.last_sync_at) rows.push(`<div class="health-row"><strong>last_sync_at:</strong> ${safeString(check.last_sync_at)}</div>`);
+        if (check?.last_sync_result) rows.push(`<div class="health-row"><strong>last_sync_result:</strong> ${safeString(check.last_sync_result)}</div>`);
+        if (check?.processedAt) rows.push(`<div class="health-row"><strong>processedAt:</strong> ${safeString(check.processedAt)}</div>`);
+        if (check?.event) rows.push(`<div class="health-row"><strong>event:</strong> ${safeString(check.event)}</div>`);
+        if (check?.orderId) rows.push(`<div class="health-row"><strong>orderId:</strong> ${safeString(check.orderId)}</div>`);
+        return `<article class="health-card"><h4>${title}</h4>${rows.join("")}</article>`;
+      };
+
+      const renderHealthDashboard = (payload = {}) => {
+        const overall = safeString(payload?.status || "error");
+        healthOverallChip.className = `health-chip ${overall}`;
+        healthOverallChip.textContent = `Estado general: ${overall}`;
+        healthMetaLine.textContent = `generatedAt: ${safeString(payload?.generatedAt) || "—"} · traceId: ${safeString(payload?.traceId) || "—"}`;
+        const checks = payload?.checks || {};
+        healthChecksGrid.innerHTML = Object.entries(HEALTH_LABELS)
+          .map(([key, label]) => renderHealthCard(label, checks?.[key] || {}))
+          .join("");
+      };
+
+      const loadHealthDashboard = async () => {
+        const isAdmin = isAdminAuthenticated();
+        if (healthAuthMessage) healthAuthMessage.classList.toggle("hidden", isAdmin);
+        if (healthDashboard) healthDashboard.classList.toggle("hidden", !isAdmin);
+        if (!isAdmin) return;
+        if (healthRefreshBtn) healthRefreshBtn.disabled = true;
+        try {
+          const response = await fetch("/api/core?action=health", { credentials: "same-origin" });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload?.ok === false) throw new Error(payload?.message || "No se pudo cargar health.");
+          renderHealthDashboard(payload || {});
+        } catch (error) {
+          healthOverallChip.className = "health-chip error";
+          healthOverallChip.textContent = "Estado general: error";
+          healthMetaLine.textContent = safeString(error?.message) || "Error al cargar health.";
+          healthChecksGrid.innerHTML = "";
+        } finally {
+          if (healthRefreshBtn) healthRefreshBtn.disabled = false;
+        }
+      };
+      if (healthRefreshBtn) healthRefreshBtn.addEventListener("click", loadHealthDashboard);
 
       let catalogoIAInited = false;
       let catalogoIAObjectUrls = [];
