@@ -1,5 +1,5 @@
 import { resolveTiendanubeConnection, syncVentasFromTiendanubeIncremental } from '../../lib/api/core.js';
-import { createTraceId } from '../../lib/observability/logger.js';
+import { createTraceId, logError, logInfo, logWarn } from '../../lib/observability/logger.js';
 import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
 import {
   acquireVentasSyncLock,
@@ -17,14 +17,16 @@ function isoOrEmpty(value) {
 }
 
 export default async function handler(req, res) {
+  const startedAt = Date.now();
   const traceId = createTraceId(req?.headers?.['x-trace-id'] || req?.headers?.['x-request-id'] || req?.body?.traceId || req?.query?.traceId);
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed.', traceId });
   }
 
-  console.log('[ventas-sync-auto] start trace_id=%s', traceId);
+  logInfo('ventas.sync_auto.start', { traceId, result: 'started' });
   const lock = await acquireVentasSyncLock();
   if (!lock.acquired) {
+    logWarn('ventas.sync_auto.skipped', { traceId, result: 'skipped', changed: false, processed: 0, durationMs: Date.now() - startedAt, errorCode: 'SYNC_RUNNING' });
     return res.status(200).json({ ok: true, skipped: true, reason: 'sync_running', traceId });
   }
   const lockOwnerId = String(lock.ownerId || '').trim();
@@ -35,17 +37,15 @@ export default async function handler(req, res) {
     const lastCreatedAtMax = isoOrEmpty(previous.last_created_at_max);
     const connection = await resolveTiendanubeConnection();
     const storeId = connection.storeId;
-    const baseUrl = 'https://api.tiendanube.com/v1';
     const endpoint = '/orders';
-    const requestUrl = `${baseUrl}/${encodeURIComponent(storeId)}${endpoint}`;
-    console.log('[ventas-sync-auto] store_id=%s', storeId);
-    console.log('[ventas-sync-auto] store_source=%s', connection.storeSource || 'unknown');
-    console.log('[ventas-sync-auto] token_source=%s', connection.tokenSource || 'unknown');
-    console.log('[ventas-sync-auto] base_url=%s', baseUrl);
-    console.log('[ventas-sync-auto] endpoint=%s', endpoint);
-    console.log('[ventas-sync-auto] request_url=%s', requestUrl);
-    console.log('[ventas-sync-auto] since_updated_at=%s', lastUpdatedAtMax || 'EMPTY');
-    console.log('[ventas-sync-auto] since_created_at=%s', lastCreatedAtMax || 'EMPTY');
+    logInfo('ventas.sync_auto.start', {
+      traceId,
+      result: 'running',
+      lastUpdatedAtMax: lastUpdatedAtMax || 'EMPTY',
+      lastCreatedAtMax: lastCreatedAtMax || 'EMPTY',
+      storeId,
+      endpoint,
+    });
 
     const data = await syncVentasFromTiendanubeIncremental({
       updatedAtMin: lastUpdatedAtMax || undefined,
@@ -68,11 +68,16 @@ export default async function handler(req, res) {
       const touched = Array.isArray(data.months_rebuilt) ? data.months_rebuilt : [];
       if (touched.length) touched.forEach((month) => invalidateVentasFullCache(month));
       else invalidateVentasFullCache();
-      console.log('[ventas-sync-auto] cache_invalidated');
-      console.log(`[ventas-sync-auto] processed_${processed}`);
-    } else {
-      console.log('[ventas-sync-auto] no_changes');
     }
+    logInfo('ventas.sync_auto.success', {
+      traceId,
+      result: 'success',
+      changed,
+      processed,
+      lastUpdatedAtMax: data.last_updated_at_max || lastUpdatedAtMax || previous.last_updated_at_max || now,
+      lastCreatedAtMax: data.last_created_at_max || lastCreatedAtMax || previous.last_created_at_max || now,
+      durationMs: Date.now() - startedAt,
+    });
 
     const status = await readVentasSyncState();
     return res.status(200).json({
@@ -91,16 +96,24 @@ export default async function handler(req, res) {
     const detailStatus = Number(error?.details?.status || error?.http_status || 500) || 500;
     const detailEndpoint = String(error?.details?.endpoint || '/orders');
     const detailStoreId = String(error?.details?.store_id || process.env.TIENDANUBE_STORE_ID || '').trim();
-    if (code) {
-      console.log('[ventas-sync-auto] tn_status=%s', detailStatus);
-      console.log('[ventas-sync-auto] tn_error=%s', String(error?.message || error));
-      console.log('[ventas-sync-auto] tn_store_id=%s', detailStoreId);
-      console.log('[ventas-sync-auto] tn_endpoint=%s', detailEndpoint);
-    }
+    const errorCode = code || 'SYNC_AUTO_ERROR';
     await writeVentasSyncState({
       last_sync_at: new Date().toISOString(),
       last_sync_result: 'error',
       last_sync_message: String(error?.message || error),
+    });
+    logError('ventas.sync_auto.failed', {
+      traceId,
+      result: 'failed',
+      changed: false,
+      processed: 0,
+      lastUpdatedAtMax: '',
+      lastCreatedAtMax: '',
+      durationMs: Date.now() - startedAt,
+      errorCode,
+      tnStatus: detailStatus,
+      storeId: detailStoreId,
+      endpoint: detailEndpoint,
     });
     const status = await readVentasSyncState();
     if (code === 'TIENDANUBE_NOT_FOUND') {
