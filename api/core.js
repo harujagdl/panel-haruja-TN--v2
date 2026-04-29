@@ -52,13 +52,16 @@ import { createTraceId, getErrorMessage, logError, logInfo, logWarn } from '../l
 import { getSpreadsheetId } from '../lib/google/sheetsClient.js';
 
 export const sendOk = (res, data, traceId = '') => res.status(200).json({ ok: true, data, ...(traceId ? { traceId } : {}) });
-export const sendErr = (res, status, message, _error, code, traceId = '') =>
-  res.status(status).json({
+export const sendErr = (res, status, message, _error, code, traceId = '') => {
+  const effectiveCode = String(code || '').trim() || 'CORE_ERROR';
+  const effectiveTraceId = String(traceId || '').trim() || createTraceId();
+  return res.status(status).json({
     ok: false,
-    ...(code ? { code } : {}),
+    code: effectiveCode,
     message,
-    ...(traceId ? { traceId } : {}),
+    traceId: effectiveTraceId,
   });
+};
 
 const HARUJA_ADMIN_COOKIE = 'HARUJA_ADMIN_SESSION';
 const ADMIN_ALLOWLIST = [

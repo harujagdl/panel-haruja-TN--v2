@@ -91,7 +91,7 @@ async function logWebhookTrace(meta = {}) {
 export default async function handler(req, res) {
   let effectiveTraceId = createTraceId(req?.headers?.['x-trace-id'] || req?.headers?.['x-request-id'] || req?.query?.traceId || req?.body?.traceId);
   if (req.method !== 'POST') {
-    return res.status(405).json({ ok: false, message: 'Method not allowed.', traceId: effectiveTraceId });
+    return res.status(405).json({ ok: false, code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed.', traceId: effectiveTraceId });
   }
 
   const secret = String(process.env.TIENDANUBE_APP_SECRET || '').trim();
@@ -114,7 +114,12 @@ export default async function handler(req, res) {
         reason: 'signature_validation_failed',
         errorCode: 'INVALID_SIGNATURE',
       });
-      return res.status(401).json({ ok: false, message: 'Firma inválida.', traceId: effectiveTraceId });
+      return res.status(401).json({
+        ok: false,
+        code: 'WEBHOOK_INVALID_SIGNATURE',
+        message: 'Firma inválida.',
+        traceId: effectiveTraceId,
+      });
     }
 
     const payload = JSON.parse(rawBody || '{}');
@@ -245,6 +250,12 @@ export default async function handler(req, res) {
       reason: message,
     });
     if (lockAcquired) await releaseVentasSyncLock(lockOwnerId);
-    return res.status(500).json({ ok: false, result: isFetchFailed ? 'fetch_failed' : 'error', message, traceId: effectiveTraceId });
+    return res.status(500).json({
+      ok: false,
+      code: 'WEBHOOK_ERROR',
+      result: isFetchFailed ? 'fetch_failed' : 'error',
+      message,
+      traceId: effectiveTraceId,
+    });
   }
 }
