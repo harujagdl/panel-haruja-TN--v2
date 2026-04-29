@@ -51,12 +51,13 @@ import { AdminSessionConfigError, getAdminSessionSecret } from '../lib/security/
 import { createTraceId, getErrorMessage, logError, logInfo, logWarn } from '../lib/observability/logger.js';
 import { getSpreadsheetId } from '../lib/google/sheetsClient.js';
 
-export const sendOk = (res, data) => res.status(200).json({ ok: true, data });
-export const sendErr = (res, status, message, _error, code) =>
+export const sendOk = (res, data, traceId = '') => res.status(200).json({ ok: true, data, ...(traceId ? { traceId } : {}) });
+export const sendErr = (res, status, message, _error, code, traceId = '') =>
   res.status(status).json({
     ok: false,
     ...(code ? { code } : {}),
     message,
+    ...(traceId ? { traceId } : {}),
   });
 
 const HARUJA_ADMIN_COOKIE = 'HARUJA_ADMIN_SESSION';
@@ -209,11 +210,12 @@ const isPublicAction = (action) => PUBLIC_ACTIONS.has(String(action || '').trim(
 const isAdminAction = (action) => ADMIN_ACTIONS.has(String(action || '').trim());
 const toAction = (value) => String(value || '').trim();
 const toOp = (value) => String(value || '').trim();
-const sendMethodNotAllowed = (res, allowedMethods = []) =>
+const sendMethodNotAllowed = (res, allowedMethods = [], traceId = '') =>
   res.status(405).json({
     ok: false,
     code: 'METHOD_NOT_ALLOWED',
     message: `Método no permitido. Usa: ${allowedMethods.join(', ') || 'N/A'}.`,
+    ...(traceId ? { traceId } : {}),
   });
 
 const readTraceFromRequest = (req = {}) =>
@@ -294,8 +296,8 @@ const isSheetsQuotaExceededError = (error) => {
     || message.includes('resource_exhausted');
 };
 
-const sendAdminUnavailable = (res) =>
-  sendErr(res, 503, ADMIN_TEMP_UNAVAILABLE_MESSAGE, null, 'ADMIN_TEMP_UNAVAILABLE');
+const sendAdminUnavailable = (res, traceId = '') =>
+  sendErr(res, 503, ADMIN_TEMP_UNAVAILABLE_MESSAGE, null, 'ADMIN_TEMP_UNAVAILABLE', traceId);
 
 const buildSessionToken = (payload = {}) => {
   const now = Date.now();

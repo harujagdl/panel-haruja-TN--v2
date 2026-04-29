@@ -1,4 +1,5 @@
 import { syncVentasFromTiendanube } from '../../lib/api/core.js';
+import { createTraceId } from '../../lib/observability/logger.js';
 import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
 import {
   acquireVentasSyncLock,
@@ -7,14 +8,15 @@ import {
 } from '../../lib/ventas/syncState.js';
 
 export default async function handler(req, res) {
+  const traceId = createTraceId(req?.headers?.['x-trace-id'] || req?.headers?.['x-request-id'] || req?.body?.traceId || req?.query?.traceId);
   if (req.method !== 'POST') {
-    return res.status(405).json({ ok: false, message: 'Method not allowed.' });
+    return res.status(405).json({ ok: false, message: 'Method not allowed.', traceId });
   }
 
-  console.log('[ventas-sync-manual] start');
+  console.log('[ventas-sync-manual] start trace_id=%s', traceId);
   const lock = await acquireVentasSyncLock();
   if (!lock.acquired) {
-    return res.status(200).json({ ok: true, skipped: true, reason: 'sync_running' });
+    return res.status(200).json({ ok: true, skipped: true, reason: 'sync_running', traceId });
   }
   const lockOwnerId = String(lock.ownerId || '').trim();
 
@@ -35,14 +37,14 @@ export default async function handler(req, res) {
       if (touched.length) touched.forEach((month) => invalidateVentasFullCache(month));
       else invalidateVentasFullCache();
     }
-    return res.status(200).json({ ok: true, ...data });
+    return res.status(200).json({ ok: true, ...data, traceId });
   } catch (error) {
     await writeVentasSyncState({
       last_sync_at: new Date().toISOString(),
       last_sync_result: 'error',
       last_sync_message: String(error?.message || error),
     });
-    return res.status(500).json({ ok: false, message: String(error?.message || error) });
+    return res.status(500).json({ ok: false, message: String(error?.message || error), traceId });
   } finally {
     await releaseVentasSyncLock(lockOwnerId);
   }

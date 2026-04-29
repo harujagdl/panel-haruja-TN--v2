@@ -1,4 +1,5 @@
 import { fetchTiendanubeOrderById, processTiendanubeWebhook, resolveTiendanubeConnection } from '../../lib/api/core.js';
+import { createTraceId } from '../../lib/observability/logger.js';
 import crypto from 'crypto';
 import { verifyTiendanubeWebhook } from '../../lib/tiendanube/verifyWebhook.js';
 import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
@@ -88,8 +89,9 @@ async function logWebhookTrace(meta = {}) {
 }
 
 export default async function handler(req, res) {
+  let effectiveTraceId = createTraceId(req?.headers?.['x-trace-id'] || req?.headers?.['x-request-id'] || req?.query?.traceId || req?.body?.traceId);
   if (req.method !== 'POST') {
-    return res.status(405).json({ ok: false, message: 'Method not allowed.' });
+    return res.status(405).json({ ok: false, message: 'Method not allowed.', traceId: effectiveTraceId });
   }
 
   const secret = String(process.env.TIENDANUBE_APP_SECRET || '').trim();
@@ -103,16 +105,16 @@ export default async function handler(req, res) {
   try {
     const rawBody = await readRawBody(req);
     const bodyHash = crypto.createHash('sha256').update(String(rawBody || ''), 'utf8').digest('hex');
-    const traceId = `tnwh-${bodyHash.slice(0, 12)}`;
+    effectiveTraceId = createTraceId(effectiveTraceId || `tnwh-${bodyHash.slice(0, 12)}`);
     if (!verifyTiendanubeWebhook(rawBody, signature, secret)) {
       await logWebhookTrace({
         bodyHash,
-        traceId,
+        traceId: effectiveTraceId,
         result: 'invalid_signature',
         reason: 'signature_validation_failed',
         errorCode: 'INVALID_SIGNATURE',
       });
-      return res.status(401).json({ ok: false, message: 'Firma inválida.' });
+      return res.status(401).json({ ok: false, message: 'Firma inválida.', traceId: effectiveTraceId });
     }
 
     const payload = JSON.parse(rawBody || '{}');
@@ -121,7 +123,7 @@ export default async function handler(req, res) {
     const storeId = getStoreId(payload, req);
     if (storeId && resolvedStoreId && storeId !== resolvedStoreId) {
       console.log('[ventas-webhook] ignored_store_mismatch incoming=%s configured=%s', storeId, resolvedStoreId);
-      return res.status(200).json({ ok: true, ignored: 'store_mismatch' });
+      return res.status(200).json({ ok: true, ignored: 'store_mismatch', traceId: effectiveTraceId });
     }
 
     const event = String(req.headers?.['x-tiendanube-event'] || req.headers?.['x-linkedstore-topic'] || payload?.event || payload?.topic || '').trim().toLowerCase();
@@ -145,7 +147,7 @@ export default async function handler(req, res) {
       storeId: resolvedStoreId || storeId,
       bodyHash: dedupe.bodyHash || bodyHash,
       eventTimestamp,
-      traceId,
+      traceId: effectiveTraceId,
     };
 
     if (dedupe.duplicated) {
@@ -154,7 +156,7 @@ export default async function handler(req, res) {
         result: 'duplicate_ignored',
         reason: 'duplicate_event_key_recent',
       });
-      return res.status(200).json({ ok: true, result: 'duplicate_ignored' });
+      return res.status(200).json({ ok: true, result: 'duplicate_ignored', traceId: effectiveTraceId });
     }
 
     await writeVentasSyncState({
@@ -174,7 +176,7 @@ export default async function handler(req, res) {
         result: 'no_relevant_change',
         reason: 'missing_order_id',
       });
-      return res.status(200).json({ ok: true, result: 'no_relevant_change' });
+      return res.status(200).json({ ok: true, result: 'no_relevant_change', traceId: effectiveTraceId });
     }
 
     const lock = await acquireVentasSyncLock();
@@ -184,7 +186,7 @@ export default async function handler(req, res) {
         result: 'duplicate_ignored',
         reason: 'sync_running_lock_active',
       });
-      return res.status(200).json({ ok: true, skipped: true, reason: 'sync_running' });
+      return res.status(200).json({ ok: true, skipped: true, reason: 'sync_running', traceId: effectiveTraceId });
     }
     lockAcquired = true;
     lockOwnerId = String(lock.ownerId || '').trim();
@@ -228,7 +230,7 @@ export default async function handler(req, res) {
     await releaseVentasSyncLock(lockOwnerId);
     lockAcquired = false;
 
-    return res.status(200).json({ ok: true, result: webhookResult, ...result });
+    return res.status(200).json({ ok: true, result: webhookResult, ...result, traceId: effectiveTraceId });
   } catch (error) {
     const message = String(error?.message || error);
     const isFetchFailed = message.startsWith('fetch_failed:');
@@ -243,6 +245,6 @@ export default async function handler(req, res) {
       reason: message,
     });
     if (lockAcquired) await releaseVentasSyncLock(lockOwnerId);
-    return res.status(500).json({ ok: false, result: isFetchFailed ? 'fetch_failed' : 'error', message });
+    return res.status(500).json({ ok: false, result: isFetchFailed ? 'fetch_failed' : 'error', message, traceId: effectiveTraceId });
   }
 }
