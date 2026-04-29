@@ -3232,6 +3232,7 @@ body.haruja-col-resizing{
             <h2>Salud del sistema</h2>
             <p>Monitoreo operativo interno del backend integrado en <code>/api/core?action=health</code>.</p>
             <p id="healthAuthMessage" class="status warning hidden">Inicia sesión como admin para ver salud del sistema.</p>
+            <button type="button" id="healthLoginBtn" class="secondary small hidden">Entrar como admin</button>
             <div id="healthDashboard" class="hidden">
               <div class="health-overview">
                 <span id="healthOverallChip" class="health-chip">Estado general: —</span>
@@ -4480,6 +4481,7 @@ Errores: 0</pre>
       }
 
       const healthAuthMessage = document.getElementById("healthAuthMessage");
+      const healthLoginBtn = document.getElementById("healthLoginBtn");
       const healthDashboard = document.getElementById("healthDashboard");
       const healthOverallChip = document.getElementById("healthOverallChip");
       const healthRefreshBtn = document.getElementById("healthRefreshBtn");
@@ -4524,6 +4526,7 @@ Errores: 0</pre>
       const loadHealthDashboard = async () => {
         const isAdmin = isAdminAuthenticated();
         if (healthAuthMessage) healthAuthMessage.classList.toggle("hidden", isAdmin);
+        if (healthLoginBtn) healthLoginBtn.classList.toggle("hidden", isAdmin);
         if (healthDashboard) healthDashboard.classList.toggle("hidden", !isAdmin);
         if (!isAdmin) return;
         if (healthLoading) return;
@@ -4545,6 +4548,13 @@ Errores: 0</pre>
         }
       };
       if (healthRefreshBtn) healthRefreshBtn.addEventListener("click", loadHealthDashboard);
+      if (healthLoginBtn) {
+        healthLoginBtn.addEventListener("click", async () => {
+          await handleAdminLogin();
+          applyAdminUI({ refresh: false });
+          await loadHealthDashboard();
+        });
+      }
 
       let catalogoIAInited = false;
       let catalogoIAObjectUrls = [];
