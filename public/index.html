@@ -4537,6 +4537,9 @@ Errores: 0</pre>
       let healthLoading = false;
       let healthCurrentTraceId = "";
       let systemAlertsLoading = false;
+      let healthAutoRecoveryRunning = false;
+      const HEALTH_AUTO_RECOVERY_COOLDOWN_MS = 10 * 60 * 1000;
+      const HEALTH_AUTO_RECOVERY_LAST_RUN_KEY = "haruja:health:autoRecovery:lastRun";
 
       const HEALTH_LABELS = {
         sheets: "Sheets",
@@ -4752,6 +4755,86 @@ const copyHealthTraceId = async () => {
         return payload || {};
       };
 
+      const shouldRunHealthAutoRecovery = (payload = {}) => {
+        if (!isAdminAuthenticated()) {
+          console.info("[health:auto-recovery] skipped reason=not-admin");
+          return false;
+        }
+        if (healthAutoRecoveryRunning) {
+          console.info("[health:auto-recovery] skipped reason=already-running");
+          return false;
+        }
+
+        const lastRunRaw = window.localStorage.getItem(HEALTH_AUTO_RECOVERY_LAST_RUN_KEY);
+        const lastRunAt = Number(lastRunRaw || 0);
+        if (Number.isFinite(lastRunAt) && lastRunAt > 0 && (Date.now() - lastRunAt) < HEALTH_AUTO_RECOVERY_COOLDOWN_MS) {
+          console.info("[health:auto-recovery] skipped reason=cooldown-active");
+          return false;
+        }
+
+        const checks = payload?.checks;
+        if (!checks || typeof checks !== "object") {
+          console.info("[health:auto-recovery] skipped reason=no-checks");
+          return false;
+        }
+
+        const webhookStatus = safeString(checks?.webhook?.status);
+        const webhookMessage = safeString(checks?.webhook?.message || "");
+        const ventasStatus = safeString(checks?.ventasSync?.status);
+        const canFixWebhook = webhookStatus === "warning" && webhookMessage.includes("Sin eventos webhook");
+        const canFixVentas = ventasStatus === "error";
+
+        if (!canFixWebhook && !canFixVentas) {
+          console.info("[health:auto-recovery] skipped reason=no-auto-fixable-condition");
+          return false;
+        }
+        return true;
+      };
+
+      const runHealthAutoRecovery = async (payload = {}) => {
+        if (!shouldRunHealthAutoRecovery(payload)) return;
+
+        console.info("[health:auto-recovery] started");
+        healthAutoRecoveryRunning = true;
+        window.localStorage.setItem(HEALTH_AUTO_RECOVERY_LAST_RUN_KEY, String(Date.now()));
+
+        if (currentView === "health" && healthActionResult) {
+          healthActionResult.textContent = "Auto-recovery ligero en ejecución...";
+        }
+
+        const checks = payload?.checks || {};
+        const webhookStatus = safeString(checks?.webhook?.status);
+        const webhookMessage = safeString(checks?.webhook?.message || "");
+        const ventasStatus = safeString(checks?.ventasSync?.status);
+
+        try {
+          if (webhookStatus === "warning" && webhookMessage.includes("Sin eventos webhook")) {
+            try {
+              await runHealthRegisterWebhooks();
+            } catch (error) {
+              console.warn("[health:auto-recovery] register-webhooks failed", error);
+            }
+          }
+
+          if (ventasStatus === "error") {
+            try {
+              await runHealthSyncVentas();
+            } catch (error) {
+              console.warn("[health:auto-recovery] sync-ventas failed", error);
+            }
+          }
+        } finally {
+          healthAutoRecoveryRunning = false;
+          console.info("[health:auto-recovery] finished");
+          if (currentView === "health") {
+            await loadHealthDashboard({ skipAutoRecovery: true });
+          }
+          if (currentView === "panel") {
+            await loadSystemAlertsBar({ skipAutoRecovery: true });
+          }
+        }
+      };
+
       const buildSystemAlerts = (payload = {}) => {
         const checks = payload?.checks || {};
         const alerts = [];
@@ -4807,7 +4890,7 @@ const copyHealthTraceId = async () => {
         });
       };
 
-      const loadSystemAlertsBar = async () => {
+      const loadSystemAlertsBar = async ({ skipAutoRecovery = false } = {}) => {
         if (!systemAlertsBar) return;
         if (!isAdminAuthenticated()) {
           systemAlertsBar.innerHTML = "";
@@ -4818,6 +4901,7 @@ const copyHealthTraceId = async () => {
         systemAlertsLoading = true;
         try {
           const payload = await fetchHealthPayload();
+          if (!skipAutoRecovery) await runHealthAutoRecovery(payload || {});
           renderSystemAlerts(buildSystemAlerts(payload));
         } catch (_) {
           systemAlertsBar.innerHTML = "";
@@ -4827,7 +4911,7 @@ const copyHealthTraceId = async () => {
         }
       };
 
-      const loadHealthDashboard = async () => {
+      const loadHealthDashboard = async ({ skipAutoRecovery = false } = {}) => {
         const isAdmin = isAdminAuthenticated();
         if (healthAuthMessage) healthAuthMessage.classList.toggle("hidden", isAdmin);
         if (healthLoginBtn) healthLoginBtn.classList.toggle("hidden", isAdmin);
@@ -4839,6 +4923,7 @@ const copyHealthTraceId = async () => {
         if (healthRefreshBtn) healthRefreshBtn.disabled = true;
         try {
           const payload = await fetchHealthPayload();
+          if (!skipAutoRecovery) await runHealthAutoRecovery(payload || {});
           renderHealthDashboard(payload || {});
           renderSystemAlerts(buildSystemAlerts(payload || {}));
         } catch (error) {
