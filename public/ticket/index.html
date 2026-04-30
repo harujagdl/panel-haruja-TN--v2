@@ -609,10 +609,15 @@ function renderTicket(payload){
 
   <div class="totals">
     <div class="totals-row"><b>Subtotal:</b><span>${money(subtotal)}</span></div>
-    <div class="totals-row"><b>Anticipo:</b><span>${money(anticipo)}</span></div>
+    <div class="totals-row"><b>Total abonado:</b><span>${money(Number(a.totalAbonado ?? anticipo))}</span></div>
     <div class="totals-row"><b>Descuento:</b><span>${money(descuento)}</span></div>
-    <div class="totals-row totals-grand"><b>TOTAL</b><span>${money(saldoPendiente)}</span></div>
+    <div class="totals-row"><b>Saldo pendiente:</b><span>${money(Number(a.saldoPendiente ?? saldoPendiente))}</span></div>
+    ${Number(a.sobrepago||0)>0?`<div class="totals-row"><b>Saldo a favor:</b><span>${money(a.sobrepago)}</span></div>`:""}
+    <div class="totals-row totals-grand"><b>TOTAL DEL APARTADO</b><span>${money(Number(a.total||0))}</span></div>
   </div>
+
+  <div class="section-title">Historial de pagos</div>
+  <ul>${Array.isArray(a.historialAbonos)&&a.historialAbonos.length?[...a.historialAbonos].sort((x,y)=>Date.parse(String(x?.fecha||""))-Date.parse(String(y?.fecha||""))).map((h)=>`<li>${esc(h.fecha||"Sin fecha")} — ${money(h.monto)} — ${esc(h.tipo||h.comentario||"Abono")}</li>`).join(""):"<li>Sin pagos registrados</li>"}</ul>
 
   <div class="legal">
     <p><strong>Gracias por tu compra en HarujaGdl</strong></p>

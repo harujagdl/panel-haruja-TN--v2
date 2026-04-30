@@ -191,10 +191,14 @@ async function renderTicket(payload) {
 
       <div class="totals-box avoid-break">
         <div class="totals-row"><b>Subtotal:</b><span>${money(a.subtotal)}</span></div>
-        <div class="totals-row"><b>Anticipo:</b><span>${money(a.anticipo)}</span></div>
+        <div class="totals-row"><b>Total abonado:</b><span>${money(a.totalAbonado ?? a.anticipo)}</span></div>
         <div class="totals-row"><b>Descuento:</b><span>${money(a.descuento)}</span></div>
-        <div class="totals-row totals-grand"><b>TOTAL</b><span>${money(a.total)}</span></div>
+        <div class="totals-row"><b>Saldo pendiente:</b><span>${money(a.saldoPendiente ?? a.saldo ?? 0)}</span></div>
+        ${(Number(a.sobrepago||0)>0)?`<div class="totals-row"><b>Saldo a favor:</b><span>${money(a.sobrepago)}</span></div>`:""}
+        <div class="totals-row totals-grand"><b>TOTAL DEL APARTADO</b><span>${money(a.total)}</span></div>
       </div>
+      <div class="section-title">Historial de pagos</div>
+      <ul>${Array.isArray(a.historialAbonos)&&a.historialAbonos.length?[...a.historialAbonos].sort((x,y)=>Date.parse(String(x?.fecha||""))-Date.parse(String(y?.fecha||""))).map((h)=>`<li>${esc(h.fecha||"Sin fecha")} — ${money(h.monto)} — ${esc(h.tipo||h.comentario||"Abono")}</li>`).join(""):"<li>Sin pagos registrados</li>"}</ul>
 
       <div class="bottom-grid avoid-break">
         <div class="legal-box avoid-break">
