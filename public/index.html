@@ -3191,7 +3191,7 @@ body.haruja-col-resizing{
                   <div class="toolcard-title">Ventas &amp; Comisiones</div>
                   <div class="toolcard-desc">Resumen mensual sincronizado con Tiendanube.</div>
                   <div class="sales-mini-grid" id="salesMiniDashboard">
-                    <div class="sales-mini-item"><small>Total del mes</small><strong id="salesMiniTotal">—</strong></div>
+                    <div class="sales-mini-item"><small id="salesMiniMonthLabel">Total del mes</small><strong id="salesMiniTotal">—</strong></div>
                     <div class="sales-mini-item"><small>Total por vendedora</small><strong id="salesMiniTopSeller">—</strong></div>
                     <div class="sales-mini-item"><small>Sin asignar</small><strong id="salesMiniUnassigned">—</strong></div>
                   </div>
@@ -6237,6 +6237,7 @@ const copyHealthTraceId = async () => {
       const salesMiniTotal = document.getElementById("salesMiniTotal");
       const salesMiniTopSeller = document.getElementById("salesMiniTopSeller");
       const salesMiniUnassigned = document.getElementById("salesMiniUnassigned");
+      const salesMiniMonthLabel = document.getElementById("salesMiniMonthLabel");
 
       const resolveSalesContext = () => {
         const query = new URLSearchParams(window.location.search);
@@ -6256,7 +6257,52 @@ const copyHealthTraceId = async () => {
         salesMiniTotal.textContent = message;
         salesMiniTopSeller.textContent = "—";
         salesMiniUnassigned.textContent = "—";
+        if (salesMiniMonthLabel) salesMiniMonthLabel.textContent = "Total del mes";
       };
+
+      const parseSalesAmount = (value, fallback = 0) => {
+        const out = Number(value);
+        return Number.isFinite(out) ? out : fallback;
+      };
+
+      const getByAliases = (row, aliases = [], fallback = 0) => {
+        for (const key of aliases) {
+          if (row && Object.prototype.hasOwnProperty.call(row, key) && row[key] !== undefined && row[key] !== null && row[key] !== "") {
+            return parseSalesAmount(row[key], fallback);
+          }
+        }
+        return fallback;
+      };
+
+      const normalizeSalesSummary = (source = {}) => ({
+        monthKey: String(source.month_key || source.monthKey || source.month || "").trim(),
+        totalMes: getByAliases(source, ["total_mes", "totalMes", "total"], 0),
+        totalHaru: getByAliases(source, ["haru", "Haru", "total_haru"], 0),
+        totalVendedora: getByAliases(source, ["vendedora", "Vendedora", "total_vendedora", "totalVendedora"], 0),
+        sinAsignar: getByAliases(source, ["sin_asignar", "sinAsignar"], 0),
+      });
+
+      const toMonthKeyWithOffset = (monthKey, offset) => {
+        const [yearRaw, monthRaw] = String(monthKey || "").split("-");
+        const year = Number(yearRaw);
+        const month = Number(monthRaw);
+        if (!Number.isFinite(year) || !Number.isFinite(month)) return "";
+        const date = new Date(Date.UTC(year, month - 1 + offset, 1));
+        return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+      };
+
+      const formatMonthLabelEs = (monthKey) => {
+        if (!isValidMonthKey(monthKey)) return "";
+        const [year, month] = monthKey.split("-");
+        const date = new Date(Date.UTC(Number(year), Number(month) - 1, 1));
+        return date.toLocaleDateString("es-MX", { month: "long", year: "numeric", timeZone: "UTC" });
+      };
+
+      const hasSalesSummaryData = (summary = {}) =>
+        (summary.totalMes > 0)
+        || (summary.totalHaru > 0)
+        || (summary.totalVendedora > 0)
+        || (summary.sinAsignar > 0);
 
       const loadSalesMiniDashboard = async () => {
         if (!salesMiniTotal || !salesMiniTopSeller || !salesMiniUnassigned) return;
@@ -6271,22 +6317,41 @@ const copyHealthTraceId = async () => {
         if (!isValidMonthKey(month)) month = new Date().toISOString().slice(0, 7);
 
         try {
-          const url = new URL("/api/core", window.location.origin);
-          url.searchParams.set("action", "ventas-mini-public");
-          url.searchParams.set("month", month);
-          const response = await fetch(url.toString());
-          if (!response.ok) throw new Error("No fue posible cargar resumen mini de ventas");
-          const payload = await safeJson(response);
-          const summary = payload?.data || {};
+          let pickedSummary = null;
+          let pickedMonth = month;
+          for (let i = 0; i < 12; i += 1) {
+            const lookupMonth = toMonthKeyWithOffset(month, -i);
+            if (!isValidMonthKey(lookupMonth)) continue;
+            const url = new URL("/api/ventas", window.location.origin);
+            url.searchParams.set("month", lookupMonth);
+            const response = await fetch(url.toString());
+            if (!response.ok) throw new Error("No fue posible cargar resumen mini de ventas");
+            const payload = await safeJson(response);
+            const summary = normalizeSalesSummary(payload?.resumen || payload?.data || {});
+            if (hasSalesSummaryData(summary)) {
+              pickedSummary = summary;
+              pickedMonth = summary.monthKey || lookupMonth;
+              break;
+            }
+            if (i === 0 && !pickedSummary) {
+              pickedSummary = summary;
+              pickedMonth = summary.monthKey || lookupMonth;
+            }
+          }
 
-          salesMiniTotal.textContent = moneyMx.format(Number(summary.total_mes) || 0);
-          salesMiniTopSeller.textContent = salesSummaryBySeller(summary.total_haru, summary.total_vendedora);
-          salesMiniUnassigned.textContent = String(Number(summary.sin_asignar) || 0);
+          const summary = pickedSummary || normalizeSalesSummary({});
+          salesMiniTotal.textContent = moneyMx.format(summary.totalMes);
+          salesMiniTopSeller.textContent = salesSummaryBySeller(summary.totalHaru, summary.totalVendedora);
+          salesMiniUnassigned.textContent = String(summary.sinAsignar || 0);
+          if (salesMiniMonthLabel) {
+            salesMiniMonthLabel.textContent = pickedMonth === month
+              ? "Total del mes"
+              : `Último resumen: ${formatMonthLabelEs(pickedMonth)}`;
+          }
         } catch (error) {
-          console.error("sales mini dashboard error", error);
-          salesMiniTotal.textContent = moneyMx.format(0);
-          salesMiniTopSeller.textContent = salesSummaryBySeller(0, 0);
-          salesMiniUnassigned.textContent = "0";
+          const traceId = error?.traceId || error?.cause?.traceId || null;
+          console.error("sales mini dashboard error", { error, traceId });
+          setSalesMiniNeutralCard("No se pudo cargar el resumen");
         }
       };
 
