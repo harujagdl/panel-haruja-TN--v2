@@ -3245,6 +3245,7 @@ body.haruja-col-resizing{
               </div>
               <p id="healthMetaLine" class="health-row">—</p>
               <p id="healthActionResult" class="health-row">—</p>
+              <div id="healthSuggestions" class="health-grid"></div>
               <div id="healthChecksGrid" class="health-grid"></div>
             </div>
           </section>
@@ -4497,6 +4498,7 @@ Errores: 0</pre>
       const healthMetaLine = document.getElementById("healthMetaLine");
       const healthActionResult = document.getElementById("healthActionResult");
       const healthChecksGrid = document.getElementById("healthChecksGrid");
+      const healthSuggestions = document.getElementById("healthSuggestions");
       let healthLoading = false;
       let healthCurrentTraceId = "";
 
@@ -4522,6 +4524,112 @@ Errores: 0</pre>
         return `<article class="health-card"><h4>${title}</h4>${rows.join("")}</article>`;
       };
 
+
+      const runHealthRegisterWebhooks = async () => {
+        if (!healthRegisterWebhooksBtn) return;
+        healthRegisterWebhooksBtn.disabled = true;
+        if (healthActionResult) healthActionResult.textContent = "Registrando webhooks...";
+        try {
+          const response = await fetch("/api/core?action=tiendanube-webhooks-register", { method: "POST", credentials: "same-origin" });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload?.ok === false) throw new Error(payload?.message || "No se pudieron registrar webhooks.");
+          const details = [
+            `created=${safeString(payload?.created) || "0"}`,
+            `skipped=${safeString(payload?.skipped) || "0"}`,
+            payload?.webhook_url ? `webhook_url=${safeString(payload.webhook_url)}` : "",
+          ].filter(Boolean).join(" · ");
+          if (healthActionResult) healthActionResult.textContent = `Webhooks OK. ${details}`;
+        } catch (error) {
+          if (healthActionResult) healthActionResult.textContent = safeString(error?.message) || "Error al registrar webhooks.";
+        } finally {
+          healthRegisterWebhooksBtn.disabled = false;
+          await loadHealthDashboard();
+        }
+      };
+
+      const runHealthSyncVentas = async () => {
+        if (!healthSyncVentasBtn) return;
+        healthSyncVentasBtn.disabled = true;
+        if (healthActionResult) healthActionResult.textContent = "Sincronizando ventas...";
+        try {
+          const response = await fetch("/api/ventas/sync", { method: "POST", credentials: "same-origin" });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload?.ok === false) throw new Error(payload?.message || "No se pudo ejecutar sync de ventas.");
+          const details = [
+            `processed=${safeString(payload?.processed) || "0"}`,
+            `inserted=${safeString(payload?.inserted) || "0"}`,
+            `updated=${safeString(payload?.updated) || "0"}`,
+            `skipped=${safeString(payload?.skipped) || "0"}`,
+          ].join(" · ");
+          if (healthActionResult) healthActionResult.textContent = `Sync ventas OK. ${details}`;
+        } catch (error) {
+          if (healthActionResult) healthActionResult.textContent = safeString(error?.message) || "Error al sincronizar ventas.";
+        } finally {
+          healthSyncVentasBtn.disabled = false;
+          await loadHealthDashboard();
+        }
+      };
+
+      const copyHealthTraceId = async () => {
+        if (!healthCurrentTraceId) {
+          if (healthActionResult) healthActionResult.textContent = "No hay traceId disponible.";
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(healthCurrentTraceId);
+          if (healthActionResult) healthActionResult.textContent = `traceId copiado: ${healthCurrentTraceId}`;
+        } catch (error) {
+          if (healthActionResult) healthActionResult.textContent = safeString(error?.message) || "No se pudo copiar traceId.";
+        }
+      };
+
+      const renderHealthSuggestions = (payload = {}) => {
+        if (!healthSuggestions) return;
+        const checks = payload?.checks || {};
+        const suggestions = [];
+        const addSuggestion = (title, description, actionLabel = "", action = null) => suggestions.push({ title, description, actionLabel, action });
+        const webhookMessage = safeString(checks?.webhook?.message || "");
+        if (checks?.webhook?.status === "warning" && webhookMessage.includes("Sin eventos webhook")) {
+          addSuggestion("Webhooks sin eventos", "No se han recibido webhooks. Registra webhooks y genera una orden de prueba.", "Registrar webhooks", runHealthRegisterWebhooks);
+        }
+        if (checks?.ventasSync?.status === "error") {
+          addSuggestion("Error en sync de ventas", "La sincronización de ventas reporta error. Ejecuta sync manual y revisa traceId.", "Sync ventas ahora", runHealthSyncVentas);
+        }
+        if (["warning", "error"].includes(safeString(checks?.tiendanube?.status))) {
+          addSuggestion("Revisar Tiendanube", "La configuración de Tiendanube está incompleta o fallando. Revisa variables y configuración.", "Actualizar", loadHealthDashboard);
+        }
+        const sheetsMessage = safeString(checks?.sheets?.message || "");
+        if (checks?.sheets?.status === "error" && sheetsMessage.includes("Quota")) {
+          addSuggestion("Límite de Google Sheets", "Google Sheets está limitando lecturas. Espera unos segundos y actualiza.", "Actualizar", loadHealthDashboard);
+        }
+        if (["warning", "error"].includes(safeString(checks?.pdf?.status))) {
+          addSuggestion("Revisar PDF/Drive", "La configuración PDF/Drive requiere revisión.");
+        }
+        if (checks?.admin?.status === "error") {
+          addSuggestion("Configurar admin", "La configuración admin no está lista. Revisa ADMIN_SESSION_SECRET.");
+        }
+
+        if (!suggestions.length) {
+          healthSuggestions.innerHTML = '<article class="health-card"><h4>Sin acciones sugeridas por ahora.</h4></article>';
+          return;
+        }
+
+        healthSuggestions.innerHTML = suggestions.map((item, index) => `
+          <article class="health-card">
+            <h4>${safeString(item.title)}</h4>
+            <div class="health-row">${safeString(item.description)}</div>
+            ${item.action ? `<div style="margin-top:8px;"><button type="button" class="secondary small" data-health-suggestion-action="${index}">${safeString(item.actionLabel)}</button></div>` : ""}
+          </article>
+        `).join("");
+
+        healthSuggestions.querySelectorAll("[data-health-suggestion-action]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const item = suggestions[Number(btn.getAttribute("data-health-suggestion-action"))];
+            if (item?.action) await item.action();
+          });
+        });
+      };
+
       const renderHealthDashboard = (payload = {}) => {
         const overall = safeString(payload?.status || "error");
         healthOverallChip.className = `health-chip ${overall}`;
@@ -4530,6 +4638,7 @@ Errores: 0</pre>
         healthCurrentTraceId = safeString(payload?.traceId).trim();
         healthMetaLine.textContent = `generatedAt: ${safeString(payload?.generatedAt) || "—"} · traceId: ${healthCurrentTraceId || "—"}${cachedLabel}`;
         const checks = payload?.checks || {};
+        renderHealthSuggestions(payload || {});
         healthChecksGrid.innerHTML = Object.entries(HEALTH_LABELS)
           .map(([key, label]) => renderHealthCard(label, checks?.[key] || {}))
           .join("");
@@ -4555,6 +4664,7 @@ Errores: 0</pre>
           healthOverallChip.textContent = "Estado general: error";
           healthCurrentTraceId = "";
           healthMetaLine.textContent = safeString(error?.message) || "Error al cargar health.";
+          if (healthSuggestions) healthSuggestions.innerHTML = "";
           healthChecksGrid.innerHTML = "";
         } finally {
           healthLoading = false;
@@ -4571,61 +4681,13 @@ Errores: 0</pre>
       }
 
       if (healthRegisterWebhooksBtn) {
-        healthRegisterWebhooksBtn.addEventListener("click", async () => {
-          healthRegisterWebhooksBtn.disabled = true;
-          if (healthActionResult) healthActionResult.textContent = "Registrando webhooks...";
-          try {
-            const response = await fetch("/api/core?action=tiendanube-webhooks-register", { method: "POST", credentials: "same-origin" });
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok || payload?.ok === false) throw new Error(payload?.message || "No se pudieron registrar webhooks.");
-            const details = [
-              `created=${safeString(payload?.created) || "0"}`,
-              `skipped=${safeString(payload?.skipped) || "0"}`,
-              payload?.webhook_url ? `webhook_url=${safeString(payload.webhook_url)}` : "",
-            ].filter(Boolean).join(" · ");
-            if (healthActionResult) healthActionResult.textContent = `Webhooks OK. ${details}`;
-          } catch (error) {
-            if (healthActionResult) healthActionResult.textContent = safeString(error?.message) || "Error al registrar webhooks.";
-          } finally {
-            healthRegisterWebhooksBtn.disabled = false;
-          }
-        });
+        healthRegisterWebhooksBtn.addEventListener("click", runHealthRegisterWebhooks);
       }
       if (healthSyncVentasBtn) {
-        healthSyncVentasBtn.addEventListener("click", async () => {
-          healthSyncVentasBtn.disabled = true;
-          if (healthActionResult) healthActionResult.textContent = "Sincronizando ventas...";
-          try {
-            const response = await fetch("/api/ventas/sync", { method: "POST", credentials: "same-origin" });
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok || payload?.ok === false) throw new Error(payload?.message || "No se pudo ejecutar sync de ventas.");
-            const details = [
-              `processed=${safeString(payload?.processed) || "0"}`,
-              `inserted=${safeString(payload?.inserted) || "0"}`,
-              `updated=${safeString(payload?.updated) || "0"}`,
-              `skipped=${safeString(payload?.skipped) || "0"}`,
-            ].join(" · ");
-            if (healthActionResult) healthActionResult.textContent = `Sync ventas OK. ${details}`;
-          } catch (error) {
-            if (healthActionResult) healthActionResult.textContent = safeString(error?.message) || "Error al sincronizar ventas.";
-          } finally {
-            healthSyncVentasBtn.disabled = false;
-          }
-        });
+        healthSyncVentasBtn.addEventListener("click", runHealthSyncVentas);
       }
       if (healthCopyTraceBtn) {
-        healthCopyTraceBtn.addEventListener("click", async () => {
-          if (!healthCurrentTraceId) {
-            if (healthActionResult) healthActionResult.textContent = "No hay traceId disponible.";
-            return;
-          }
-          try {
-            await navigator.clipboard.writeText(healthCurrentTraceId);
-            if (healthActionResult) healthActionResult.textContent = `traceId copiado: ${healthCurrentTraceId}`;
-          } catch (error) {
-            if (healthActionResult) healthActionResult.textContent = safeString(error?.message) || "No se pudo copiar traceId.";
-          }
-        });
+        healthCopyTraceBtn.addEventListener("click", copyHealthTraceId);
       }
 
       let catalogoIAInited = false;
