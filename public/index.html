@@ -3271,6 +3271,7 @@ body.haruja-col-resizing{
                   <button type="button" id="healthRegisterWebhooksBtn" class="secondary small">Registrar webhooks</button>
                   <button type="button" id="healthSyncVentasBtn" class="secondary small">Sync ventas ahora</button>
                   <button type="button" id="healthCopyTraceBtn" class="secondary small">Copiar traceId</button>
+                  <button type="button" id="healthRepairSystemBtn" class="secondary small">Reparar sistema</button>
                   <button type="button" id="healthRefreshBtn" class="secondary small">Actualizar</button>
                 </div>
               </div>
@@ -4527,6 +4528,7 @@ Errores: 0</pre>
       const healthRegisterWebhooksBtn = document.getElementById("healthRegisterWebhooksBtn");
       const healthSyncVentasBtn = document.getElementById("healthSyncVentasBtn");
       const healthCopyTraceBtn = document.getElementById("healthCopyTraceBtn");
+      const healthRepairSystemBtn = document.getElementById("healthRepairSystemBtn");
       const healthMetaLine = document.getElementById("healthMetaLine");
       const healthActionResult = document.getElementById("healthActionResult");
       const healthChecksGrid = document.getElementById("healthChecksGrid");
@@ -4604,7 +4606,71 @@ Errores: 0</pre>
         }
       };
 
-      const copyHealthTraceId = async () => {
+      
+      const setHealthSuggestionButtonsDisabled = (disabled = false) => {
+        if (!healthSuggestions) return;
+        healthSuggestions.querySelectorAll("[data-health-suggestion-action]").forEach((btn) => {
+          btn.disabled = Boolean(disabled);
+        });
+      };
+
+      const runHealthRepairSystem = async () => {
+        if (!healthRepairSystemBtn) return;
+        healthRepairSystemBtn.disabled = true;
+        setHealthSuggestionButtonsDisabled(true);
+        if (healthActionResult) healthActionResult.textContent = "Reparando sistema...";
+        try {
+          const payload = await fetchHealthPayload();
+          const checks = payload?.checks || {};
+          const summary = [];
+          const manualPending = [];
+
+          if (safeString(checks?.webhook?.status) === "warning") {
+            await runHealthRegisterWebhooks();
+            summary.push("Webhooks registrados OK");
+          } else {
+            summary.push("Webhooks: omitido");
+          }
+
+          if (safeString(checks?.ventasSync?.status) === "error") {
+            await runHealthSyncVentas();
+            summary.push("Sync ventas OK");
+          } else {
+            summary.push("Sync ventas: omitido");
+          }
+
+          if (["warning", "error"].includes(safeString(checks?.tiendanube?.status))) {
+            manualPending.push("Revisa configuración de Tiendanube.");
+          }
+          if (safeString(checks?.sheets?.status) === "error") {
+            manualPending.push("Google Sheets requiere espera/revisión.");
+          }
+          if (["warning", "error"].includes(safeString(checks?.pdf?.status))) {
+            manualPending.push("Revisa configuración PDF/Drive.");
+          }
+
+          const executedSafeAction = summary.some((line) => line.endsWith("OK"));
+          if (!executedSafeAction) {
+            summary.push("No hay reparaciones automáticas seguras por ejecutar.");
+          }
+
+          if (manualPending.length) {
+            summary.push(`Pendientes manuales: ${manualPending.join(" · ")}`);
+          } else {
+            summary.push("Pendientes manuales: sin pendientes.");
+          }
+
+          if (healthActionResult) healthActionResult.textContent = summary.join(" | ");
+        } catch (error) {
+          if (healthActionResult) healthActionResult.textContent = safeString(error?.message) || "No se pudo reparar el sistema.";
+        } finally {
+          healthRepairSystemBtn.disabled = false;
+          setHealthSuggestionButtonsDisabled(false);
+          await loadHealthDashboard();
+        }
+      };
+
+const copyHealthTraceId = async () => {
         if (!healthCurrentTraceId) {
           if (healthActionResult) healthActionResult.textContent = "No hay traceId disponible.";
           return;
@@ -4692,22 +4758,26 @@ Errores: 0</pre>
         const pushAlert = (severity, message, actions = []) => alerts.push({ severity, message, actions });
         const webhookMessage = safeString(checks?.webhook?.message || "");
         if (safeString(payload?.status) === "error") {
-          pushAlert("error", "Hay errores críticos en el sistema. Revisa Salud del sistema.", [{ label: "Ver salud", onClick: () => navigateTo("health") }]);
+          pushAlert("error", "Hay errores críticos en el sistema. Revisa Salud del sistema.", [{ label: "Reparar sistema", onClick: () => navigateTo("health") }, { label: "Ver salud", onClick: () => navigateTo("health") }]);
         }
         if (checks?.sheets?.status === "error") {
-          pushAlert("error", "Google Sheets presenta error o límite de cuota.", [{ label: "Ver salud", onClick: () => navigateTo("health") }]);
+          pushAlert("error", "Google Sheets presenta error o límite de cuota.", [{ label: "Reparar sistema", onClick: () => navigateTo("health") }, { label: "Ver salud", onClick: () => navigateTo("health") }]);
         }
         if (checks?.ventasSync?.status === "error") {
-          pushAlert("error", "La sincronización de ventas reporta error.", [{ label: "Sync ventas ahora", onClick: runHealthSyncVentas }, { label: "Ver salud", onClick: () => navigateTo("health") }]);
+          pushAlert("error", "La sincronización de ventas reporta error.", [{ label: "Sync ventas ahora", onClick: runHealthSyncVentas }, { label: "Reparar sistema", onClick: () => navigateTo("health") }, { label: "Ver salud", onClick: () => navigateTo("health") }]);
         }
         if (checks?.webhook?.status === "warning" && webhookMessage.includes("Sin eventos webhook")) {
-          pushAlert("warning", "No se han recibido webhooks todavía.", [{ label: "Registrar webhooks", onClick: runHealthRegisterWebhooks }, { label: "Ver salud", onClick: () => navigateTo("health") }]);
+          pushAlert("warning", "No se han recibido webhooks todavía.", [{ label: "Registrar webhooks", onClick: runHealthRegisterWebhooks }, { label: "Reparar sistema", onClick: () => navigateTo("health") }, { label: "Ver salud", onClick: () => navigateTo("health") }]);
         }
         if (["warning", "error"].includes(safeString(checks?.tiendanube?.status))) {
-          pushAlert(checks?.tiendanube?.status === "error" ? "error" : "warning", "Revisa configuración de Tiendanube.", [{ label: "Ver salud", onClick: () => navigateTo("health") }]);
+          pushAlert(checks?.tiendanube?.status === "error" ? "error" : "warning", "Revisa configuración de Tiendanube.", [{ label: "Reparar sistema", onClick: () => navigateTo("health") }, { label: "Ver salud", onClick: () => navigateTo("health") }]);
         }
         if (["warning", "error"].includes(safeString(checks?.pdf?.status))) {
-          pushAlert(checks?.pdf?.status === "error" ? "error" : "warning", "Revisa configuración PDF/Drive.", [{ label: "Ver salud", onClick: () => navigateTo("health") }]);
+          pushAlert(checks?.pdf?.status === "error" ? "error" : "warning", "Revisa configuración PDF/Drive.", [{ label: "Reparar sistema", onClick: () => navigateTo("health") }, { label: "Ver salud", onClick: () => navigateTo("health") }]);
+        }
+        const hasIssues = alerts.length > 0;
+        if (hasIssues) {
+          pushAlert("warning", "Puedes ejecutar una reparación segura desde Salud del sistema.", [{ label: "Reparar sistema", onClick: () => currentView === "health" ? runHealthRepairSystem() : navigateTo("health") }]);
         }
         return alerts.slice(0, 3);
       };
@@ -4800,6 +4870,9 @@ Errores: 0</pre>
       }
       if (healthCopyTraceBtn) {
         healthCopyTraceBtn.addEventListener("click", copyHealthTraceId);
+      }
+      if (healthRepairSystemBtn) {
+        healthRepairSystemBtn.addEventListener("click", runHealthRepairSystem);
       }
 
       let catalogoIAInited = false;
