@@ -1896,6 +1896,36 @@ body.admin-on .admin-only{ display:table-cell; }
   padding:12px;
   background:#fff;
 }
+.system-alerts-bar{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin:0 0 14px;
+}
+.system-alert{
+  border-radius:12px;
+  border:1px solid var(--border);
+  padding:12px 14px;
+  background:#f8fafc;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:center;
+  justify-content:space-between;
+}
+.system-alert.error{ border-color:#fca5a5; background:#fef2f2; }
+.system-alert.warning{ border-color:#fcd34d; background:#fffbeb; }
+.system-alert.info{ border-color:#bfdbfe; background:#eff6ff; }
+.system-alert-message{
+  margin:0;
+  font-size:14px;
+  color:#111827;
+}
+.system-alert-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
 .health-card h4{
   margin:0 0 8px;
   font-size:14px;
@@ -3091,6 +3121,7 @@ body.haruja-col-resizing{
           <div class="launcher-inner">
             <h1 class="launcher-title">Panel de Herramientas HarujaGdl</h1>
             <p class="launcher-subtitle">Selecciona una herramienta para empezar.</p>
+            <div id="systemAlertsBar" class="system-alerts-bar hidden" aria-live="polite"></div>
 
             <div class="launcher-grid panel-grid">
               <div class="toolcard" aria-label="Abrir Registro de nuevas prendas">
@@ -4288,6 +4319,7 @@ Errores: 0</pre>
 
         if (nextView === "panel") {
           loadSalesMiniDashboard();
+          loadSystemAlertsBar();
         }
         if (nextView === "registro") initRegistroView();
         if (nextView === "codigos") initDbView();
@@ -4499,8 +4531,10 @@ Errores: 0</pre>
       const healthActionResult = document.getElementById("healthActionResult");
       const healthChecksGrid = document.getElementById("healthChecksGrid");
       const healthSuggestions = document.getElementById("healthSuggestions");
+      const systemAlertsBar = document.getElementById("systemAlertsBar");
       let healthLoading = false;
       let healthCurrentTraceId = "";
+      let systemAlertsLoading = false;
 
       const HEALTH_LABELS = {
         sheets: "Sheets",
@@ -4644,6 +4678,85 @@ Errores: 0</pre>
           .join("");
       };
 
+
+      const fetchHealthPayload = async () => {
+        const response = await fetch("/api/core?action=health", { credentials: "same-origin" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) throw new Error(payload?.message || "No se pudo cargar health.");
+        return payload || {};
+      };
+
+      const buildSystemAlerts = (payload = {}) => {
+        const checks = payload?.checks || {};
+        const alerts = [];
+        const pushAlert = (severity, message, actions = []) => alerts.push({ severity, message, actions });
+        const webhookMessage = safeString(checks?.webhook?.message || "");
+        if (safeString(payload?.status) === "error") {
+          pushAlert("error", "Hay errores críticos en el sistema. Revisa Salud del sistema.", [{ label: "Ver salud", onClick: () => navigateTo("health") }]);
+        }
+        if (checks?.sheets?.status === "error") {
+          pushAlert("error", "Google Sheets presenta error o límite de cuota.", [{ label: "Ver salud", onClick: () => navigateTo("health") }]);
+        }
+        if (checks?.ventasSync?.status === "error") {
+          pushAlert("error", "La sincronización de ventas reporta error.", [{ label: "Sync ventas ahora", onClick: runHealthSyncVentas }, { label: "Ver salud", onClick: () => navigateTo("health") }]);
+        }
+        if (checks?.webhook?.status === "warning" && webhookMessage.includes("Sin eventos webhook")) {
+          pushAlert("warning", "No se han recibido webhooks todavía.", [{ label: "Registrar webhooks", onClick: runHealthRegisterWebhooks }, { label: "Ver salud", onClick: () => navigateTo("health") }]);
+        }
+        if (["warning", "error"].includes(safeString(checks?.tiendanube?.status))) {
+          pushAlert(checks?.tiendanube?.status === "error" ? "error" : "warning", "Revisa configuración de Tiendanube.", [{ label: "Ver salud", onClick: () => navigateTo("health") }]);
+        }
+        if (["warning", "error"].includes(safeString(checks?.pdf?.status))) {
+          pushAlert(checks?.pdf?.status === "error" ? "error" : "warning", "Revisa configuración PDF/Drive.", [{ label: "Ver salud", onClick: () => navigateTo("health") }]);
+        }
+        return alerts.slice(0, 3);
+      };
+
+      const renderSystemAlerts = (alerts = []) => {
+        if (!systemAlertsBar) return;
+        if (!alerts.length) {
+          systemAlertsBar.innerHTML = "";
+          systemAlertsBar.classList.add("hidden");
+          return;
+        }
+        systemAlertsBar.classList.remove("hidden");
+        systemAlertsBar.innerHTML = alerts.map((alert, index) => `
+          <article class="system-alert ${safeString(alert.severity)}">
+            <p class="system-alert-message">${safeString(alert.message)}</p>
+            <div class="system-alert-actions">
+              ${(alert.actions || []).map((action, actionIndex) => `<button type="button" class="secondary small" data-system-alert-action="${index}-${actionIndex}">${safeString(action.label)}</button>`).join("")}
+            </div>
+          </article>
+        `).join("");
+        systemAlertsBar.querySelectorAll("[data-system-alert-action]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const [alertIndex, actionIndex] = (btn.getAttribute("data-system-alert-action") || "").split("-").map(Number);
+            const action = alerts?.[alertIndex]?.actions?.[actionIndex];
+            if (action?.onClick) await action.onClick();
+          });
+        });
+      };
+
+      const loadSystemAlertsBar = async () => {
+        if (!systemAlertsBar) return;
+        if (!isAdminAuthenticated()) {
+          systemAlertsBar.innerHTML = "";
+          systemAlertsBar.classList.add("hidden");
+          return;
+        }
+        if (systemAlertsLoading) return;
+        systemAlertsLoading = true;
+        try {
+          const payload = await fetchHealthPayload();
+          renderSystemAlerts(buildSystemAlerts(payload));
+        } catch (_) {
+          systemAlertsBar.innerHTML = "";
+          systemAlertsBar.classList.add("hidden");
+        } finally {
+          systemAlertsLoading = false;
+        }
+      };
+
       const loadHealthDashboard = async () => {
         const isAdmin = isAdminAuthenticated();
         if (healthAuthMessage) healthAuthMessage.classList.toggle("hidden", isAdmin);
@@ -4655,10 +4768,9 @@ Errores: 0</pre>
         healthLoading = true;
         if (healthRefreshBtn) healthRefreshBtn.disabled = true;
         try {
-          const response = await fetch("/api/core?action=health", { credentials: "same-origin" });
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok || payload?.ok === false) throw new Error(payload?.message || "No se pudo cargar health.");
+          const payload = await fetchHealthPayload();
           renderHealthDashboard(payload || {});
+          renderSystemAlerts(buildSystemAlerts(payload || {}));
         } catch (error) {
           healthOverallChip.className = "health-chip error";
           healthOverallChip.textContent = "Estado general: error";
