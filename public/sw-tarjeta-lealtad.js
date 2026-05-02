@@ -1,4 +1,4 @@
-const RELEASE_TAG = '2026-03-27-b3.1';
+const RELEASE_TAG = '2026-05-02-b3.2';
 const CACHE_PREFIX = 'tarjeta-lealtad-shell';
 const CACHE_NAME = `${CACHE_PREFIX}-${RELEASE_TAG}`;
 const SW_LABEL = '[SW tarjeta]';
@@ -63,11 +63,14 @@ self.addEventListener('fetch', (event) => {
   const isApiRequest = requestUrl.pathname.startsWith('/api/');
   const isNavigationRequest = request.mode === 'navigate';
   const isLoyaltyPage = requestUrl.pathname === '/tarjeta-lealtad.html' || requestUrl.pathname === '/tarjeta-lealtad';
+  const isPanelNavigation = isNavigationRequest && (requestUrl.pathname === '/' || requestUrl.pathname === '/index.html');
 
   if (!isSameOrigin || isApiRequest) {
-    event.respondWith(fetch(request));
+    event.respondWith(fetch(request).catch(() => Response.error()));
     return;
   }
+
+  if (isPanelNavigation) return;
 
   if (isNavigationRequest && isLoyaltyPage) {
     event.respondWith(
@@ -85,7 +88,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (isNavigationRequest) {
-    event.respondWith(fetch(request));
+    event.respondWith(fetch(request).catch(() => Response.error()));
     return;
   }
 
@@ -105,7 +108,7 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => cached);
+      .catch(() => cached || fetch(request).catch(() => Response.error()));
 
     return cached || networkFetch || Response.error();
   })());

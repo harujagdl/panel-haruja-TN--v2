@@ -6304,6 +6304,9 @@ const copyHealthTraceId = async () => {
         || (summary.totalVendedora > 0)
         || (summary.sinAsignar > 0);
 
+      let salesMiniInflightMonth = "";
+      let salesMiniInflightPromise = null;
+
       const loadSalesMiniDashboard = async () => {
         if (!salesMiniTotal || !salesMiniTopSeller || !salesMiniUnassigned) return;
         if (isEmbeddedApp) {
@@ -6316,18 +6319,24 @@ const copyHealthTraceId = async () => {
 
         if (!isValidMonthKey(month)) month = new Date().toISOString().slice(0, 7);
 
-        try {
+        if (salesMiniInflightPromise && salesMiniInflightMonth === month) {
+          return salesMiniInflightPromise;
+        }
+
+        salesMiniInflightMonth = month;
+        salesMiniInflightPromise = (async () => {
           let pickedSummary = null;
           let pickedMonth = month;
           for (let i = 0; i < 12; i += 1) {
             const lookupMonth = toMonthKeyWithOffset(month, -i);
             if (!isValidMonthKey(lookupMonth)) continue;
-            const url = new URL("/api/ventas", window.location.origin);
+            const url = new URL("/api/core", window.location.origin);
+            url.searchParams.set("action", "ventas-mini-public");
             url.searchParams.set("month", lookupMonth);
             const response = await fetch(url.toString());
             if (!response.ok) throw new Error("No fue posible cargar resumen mini de ventas");
             const payload = await safeJson(response);
-            const summary = normalizeSalesSummary(payload?.resumen || payload?.data || {});
+            const summary = normalizeSalesSummary(payload?.data || payload || {});
             if (hasSalesSummaryData(summary)) {
               pickedSummary = summary;
               pickedMonth = summary.monthKey || lookupMonth;
@@ -6348,11 +6357,15 @@ const copyHealthTraceId = async () => {
               ? "Total del mes"
               : `Último resumen: ${formatMonthLabelEs(pickedMonth)}`;
           }
-        } catch (error) {
+        })().catch((error) => {
           const traceId = error?.traceId || error?.cause?.traceId || null;
           console.error("sales mini dashboard error", { error, traceId });
           setSalesMiniNeutralCard("No se pudo cargar el resumen");
-        }
+        }).finally(() => {
+          salesMiniInflightPromise = null;
+        });
+
+        return salesMiniInflightPromise;
       };
 
       console.assert(prendasTable, "No existe tabla de prendas");
@@ -11906,10 +11919,6 @@ document.addEventListener("keydown", (event) => {
         clearFiltersUi();
         const initialView = getViewFromUrl();
         try {
-          if (initialView === "panel") {
-            loadSalesMiniDashboard();
-          }
-
           if (initialView === "registro") {
             initRegistroView();
           }
