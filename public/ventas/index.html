@@ -58,6 +58,9 @@
     table { width:100%; border-collapse: collapse; font-size: 13px; background:#fff; margin-top: 14px; }
     th, td { padding: 10px; border-bottom: 1px solid #e5e7eb; text-align:left; vertical-align: middle; }
     .badge { font-size: 12px; border-radius: 999px; padding: 4px 8px; background: #fff3cd; color: #92400e; border: 1px solid #fde68a; }
+    .seller-save-status { margin-left: 8px; font-size: 13px; color: #6b7280; }
+    .seller-save-status.ok { color: #15803d; }
+    .seller-save-status.error { color: #b91c1c; }
     .ticket-tech { display:block; font-size: 11px; color:#6b7280; margin-top: 2px; }
     @media (max-width: 900px) { .stats { grid-template-columns: 1fr; } }
     @media (max-width: 640px) {
@@ -147,7 +150,9 @@
     const btnCsvResumen = document.getElementById("btnCsvResumen");
     const btnCsvDetalle = document.getElementById("btnCsvDetalle");
     let ventasActuales = [];
+    let resumenActual = {};
     let lastFullReloadAt = 0;
+    let assignmentInProgressCount = 0;
 
     const setStatus = (txt = "", type = "info") => {
       statusEl.textContent = txt;
@@ -273,6 +278,7 @@
     };
 
     const renderResumen = (resumen = {}) => {
+      resumenActual = { ...(resumen || {}) };
       totalMesEl.textContent = formatMoney(resumen.total_mes);
       const porVendedora = resumen?.por_vendedora || {};
       totalsBySellerEl.textContent = `Haru ${formatMoney(porVendedora.Haru)} · Vendedora ${formatMoney(porVendedora.Vendedora)}`;
@@ -302,15 +308,16 @@
             <td>${venta.customer_name || "—"}</td>
             <td>${formatMoney(venta.total)}</td>
             <td>${formatEstado(venta)}</td>
-            <td>${sellerSelectHtml(seller)} ${noAssigned ? '<span class="badge">Sin asignar</span>' : ''}</td>
+            <td>${sellerSelectHtml(seller)} ${noAssigned ? '<span class="badge">Sin asignar</span>' : ''}<span class="seller-save-status" data-save-status></span></td>
           </tr>`;
       }).join("");
     };
 
-    const loadVentasFull = async () => {
+    const loadVentasFull = async ({ force = false } = {}) => {
       const url = new URL('/api/ventas-full', location.origin);
       const mes = monthKey();
       if (mes) url.searchParams.set('mes', mes);
+      if (force) url.searchParams.set('_ts', String(Date.now()));
       const payload = await safeJson(await fetch(url.toString()), 'No se pudo cargar ventas');
       ventasActuales = Array.isArray(payload.ventas) ? payload.ventas : [];
       renderResumen(payload.resumen || {});
@@ -321,7 +328,45 @@
       lastFullReloadAt = Date.now();
     };
 
+    const beginAssignment = () => {
+      assignmentInProgressCount += 1;
+    };
+
+    const endAssignment = () => {
+      assignmentInProgressCount = Math.max(0, assignmentInProgressCount - 1);
+    };
+
+    const recalculateResumenFromVentas = (ventas = []) => {
+      const paidVentas = ventas.filter((item) => String(item.payment_status || '').toLowerCase() === 'paid');
+      const totalMes = paidVentas.reduce((acc, item) => acc + (Number(item.total) || 0), 0);
+      const totalHaru = paidVentas
+        .filter((item) => normalizeSeller(item.seller) === 'Haru')
+        .reduce((acc, item) => acc + (Number(item.total) || 0), 0);
+      const totalVendedora = paidVentas
+        .filter((item) => normalizeSeller(item.seller) === 'Vendedora')
+        .reduce((acc, item) => acc + (Number(item.total) || 0), 0);
+      const sinAsignar = paidVentas.filter((item) => !normalizeSeller(item.seller) || !item.seller_assigned).length;
+      return {
+        total_mes: totalMes,
+        ticket_promedio: paidVentas.length ? totalMes / paidVentas.length : 0,
+        sin_asignar: sinAsignar,
+        por_vendedora: { Haru: totalHaru, Vendedora: totalVendedora },
+      };
+    };
+
+    const applyLocalAssignment = ({ orderId, seller }) => {
+      const nextSeller = normalizeSeller(seller);
+      const nextVentas = ventasActuales.map((venta) => {
+        if (String(venta.order_id || '') !== String(orderId)) return venta;
+        return { ...venta, seller: nextSeller, seller_assigned: true };
+      });
+      ventasActuales = nextVentas;
+      renderTabla(ventasActuales);
+      renderResumen(recalculateResumenFromVentas(ventasActuales));
+    };
+
     const autoSyncVentas = async () => {
+      if (assignmentInProgressCount > 0) return;
       let payload;
       try {
         payload = await safeJson(await fetch('/api/ventas/sync-auto', { method: 'POST' }), 'No se pudo ejecutar sync automática');
@@ -371,7 +416,8 @@
         body: JSON.stringify(body),
       }), 'No se pudo asignar vendedora');
       if (DEBUG_ASSIGNMENTS) console.debug('[ventas:assign:response]', response);
-      await loadVentasFull();
+      if (response?.ok === false) throw new Error(response?.message || 'No se pudo asignar vendedora');
+      return response;
     };
 
     const escapeCsvValue = (value) => {
@@ -462,24 +508,53 @@
       if (!(ev.target instanceof HTMLSelectElement) || !ev.target.hasAttribute('data-seller')) return;
       const row = ev.target.closest('tr');
       const orderId = row?.getAttribute('data-order-id') || '';
+      const saveStatusEl = row?.querySelector('[data-save-status]');
       const seller = ev.target.value;
       const previousSeller = ev.target.getAttribute('data-current-seller') || '__unassigned__';
       if (!orderId || seller === '__unassigned__') {
         ev.target.value = previousSeller;
+        if (saveStatusEl) {
+          saveStatusEl.textContent = 'Error';
+          saveStatusEl.className = 'seller-save-status error';
+        }
         setStatus('Selecciona Haru o Vendedora para guardar la asignación.', 'error');
         return;
       }
       ev.target.disabled = true;
+      if (saveStatusEl) {
+        if (saveStatusEl._clearTimer) clearTimeout(saveStatusEl._clearTimer);
+        saveStatusEl.textContent = 'Guardando...';
+        saveStatusEl.className = 'seller-save-status';
+      }
+      beginAssignment();
       asignarVendedora(orderId, seller)
         .then(() => {
           ev.target.setAttribute('data-current-seller', seller);
+          applyLocalAssignment({ orderId, seller });
+          const nextStatusEl = row?.querySelector('[data-save-status]');
+          if (nextStatusEl) {
+            if (nextStatusEl._clearTimer) clearTimeout(nextStatusEl._clearTimer);
+            nextStatusEl.textContent = 'Guardado ✓';
+            nextStatusEl.className = 'seller-save-status ok';
+            nextStatusEl._clearTimer = setTimeout(() => {
+              nextStatusEl.textContent = '';
+              nextStatusEl.className = 'seller-save-status';
+            }, 1800);
+          }
+          loadVentasFull({ force: true }).catch((e) => setStatus(e.message || String(e), 'error'));
           setStatus(`Asignación guardada para orden ${orderId}.`);
         })
         .catch((e) => {
           ev.target.value = previousSeller;
+          if (saveStatusEl) {
+            if (saveStatusEl._clearTimer) clearTimeout(saveStatusEl._clearTimer);
+            saveStatusEl.textContent = 'Error';
+            saveStatusEl.className = 'seller-save-status error';
+          }
           setStatus(`Error al guardar asignación (${orderId}): ${e.message || String(e)}`, 'error');
         })
         .finally(() => {
+          endAssignment();
           ev.target.disabled = false;
         });
     });
