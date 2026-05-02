@@ -62,6 +62,8 @@
     .seller-save-status.ok { color: #15803d; }
     .seller-save-status.error { color: #b91c1c; }
     .ticket-tech { display:block; font-size: 11px; color:#6b7280; margin-top: 2px; }
+    .batch-actions { margin-top: 14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#fff; border:1px solid #e5e7eb; border-radius: 12px; padding: 10px; }
+    .batch-counter { font-size: 13px; color: #374151; font-weight: 600; }
     @media (max-width: 900px) { .stats { grid-template-columns: 1fr; } }
     @media (max-width: 640px) {
       .panel-back-btn { top: 14px; right: 16px; font-size: 13px; padding: 6px 12px; }
@@ -113,9 +115,19 @@
     </div>
     <div class="resumen-note">Resumen calculado con ventas pagadas</div>
 
+    <div class="batch-actions">
+      <span id="batchSelectedCount" class="batch-counter">Seleccionadas: 0</span>
+      <select id="batchSeller">
+        <option value="">Elegir vendedora</option>
+        <option value="Haru">Haru</option>
+        <option value="Vendedora">Vendedora</option>
+      </select>
+      <button id="btnAssignSelected" class="btn btn-primary" disabled>Asignar seleccionadas</button>
+    </div>
     <table>
       <thead>
         <tr>
+          <th><input id="selectAllVisible" type="checkbox" /></th>
           <th>Fecha</th>
           <th>Ticket</th>
           <th>Cliente</th>
@@ -124,7 +136,7 @@
           <th>Vendedora</th>
         </tr>
       </thead>
-      <tbody id="tbody"><tr><td colspan="6">Cargando...</td></tr></tbody>
+      <tbody id="tbody"><tr><td colspan="7">Cargando...</td></tr></tbody>
     </table>
   </div>
 
@@ -149,10 +161,32 @@
     const btnSync = document.getElementById("btnSync");
     const btnCsvResumen = document.getElementById("btnCsvResumen");
     const btnCsvDetalle = document.getElementById("btnCsvDetalle");
+    const batchSellerSelect = document.getElementById("batchSeller");
+    const btnAssignSelected = document.getElementById("btnAssignSelected");
+    const batchSelectedCountEl = document.getElementById("batchSelectedCount");
+    const selectAllVisibleEl = document.getElementById("selectAllVisible");
     let ventasActuales = [];
     let resumenActual = {};
     let lastFullReloadAt = 0;
     let assignmentInProgressCount = 0;
+    let ventasRefetchTimer = null;
+    const assignmentTimestamps = [];
+    const selectedOrderIds = new Set();
+
+    const getVentasRefetchDelayMs = () => {
+      const now = Date.now();
+      while (assignmentTimestamps.length && now - assignmentTimestamps[0] > 2000) assignmentTimestamps.shift();
+      return assignmentTimestamps.length > 5 ? 1500 : 800;
+    };
+
+    const scheduleVentasRefetch = () => {
+      if (ventasRefetchTimer) clearTimeout(ventasRefetchTimer);
+      const delayMs = getVentasRefetchDelayMs();
+      ventasRefetchTimer = setTimeout(() => {
+        ventasRefetchTimer = null;
+        loadVentasFull({ force: true }).catch((e) => setStatus(e.message || String(e), 'error'));
+      }, delayMs);
+    };
 
     const setStatus = (txt = "", type = "info") => {
       statusEl.textContent = txt;
@@ -295,7 +329,8 @@
         return searchable.includes(searchTerm);
       });
       if (!filtered.length) {
-        tbody.innerHTML = `<tr><td colspan="6">No hay ventas para este mes.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7">No hay ventas para este mes.</td></tr>`;
+        updateBatchActionsState();
         return;
       }
       tbody.innerHTML = filtered.map((venta) => {
@@ -303,6 +338,7 @@
         const noAssigned = !seller || !venta.seller_assigned;
         return `
           <tr data-order-id="${venta.order_id}">
+            <td><input type="checkbox" data-select-order ${selectedOrderIds.has(String(venta.order_id || '')) ? 'checked' : ''}></td>
             <td>${formatDate(venta.created_at, venta)}</td>
             <td>${ticketCellHtml(venta)}</td>
             <td>${venta.customer_name || "—"}</td>
@@ -311,6 +347,7 @@
             <td>${sellerSelectHtml(seller)} ${noAssigned ? '<span class="badge">Sin asignar</span>' : ''}<span class="seller-save-status" data-save-status></span></td>
           </tr>`;
       }).join("");
+      updateBatchActionsState();
     };
 
     const loadVentasFull = async ({ force = false } = {}) => {
@@ -365,6 +402,19 @@
       renderResumen(recalculateResumenFromVentas(ventasActuales));
     };
 
+    const applyLocalAssignmentsBatch = ({ orderIds = [], seller }) => {
+      orderIds.forEach((orderId) => applyLocalAssignment({ orderId, seller }));
+    };
+
+    const updateBatchActionsState = () => {
+      batchSelectedCountEl.textContent = `Seleccionadas: ${selectedOrderIds.size}`;
+      btnAssignSelected.disabled = !selectedOrderIds.size || !normalizeSeller(batchSellerSelect.value);
+      const visibleIds = Array.from(tbody.querySelectorAll('tr[data-order-id]')).map((row) => row.getAttribute('data-order-id')).filter(Boolean);
+      const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedOrderIds.has(String(id)));
+      selectAllVisibleEl.checked = allVisibleSelected;
+      selectAllVisibleEl.indeterminate = !allVisibleSelected && visibleIds.some((id) => selectedOrderIds.has(String(id)));
+    };
+
     const autoSyncVentas = async () => {
       if (assignmentInProgressCount > 0) return;
       let payload;
@@ -417,6 +467,15 @@
       }), 'No se pudo asignar vendedora');
       if (DEBUG_ASSIGNMENTS) console.debug('[ventas:assign:response]', response);
       if (response?.ok === false) throw new Error(response?.message || 'No se pudo asignar vendedora');
+      return response;
+    };
+
+    const asignarVendedoraBatch = async ({ items = [], source = 'ventas_html_batch' }) => {
+      const response = await safeJson(await fetch('/api/core?action=ventas-asignar-vendedora-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, source }),
+      }), 'No se pudo asignar lote de vendedoras');
       return response;
     };
 
@@ -502,9 +561,29 @@
       setStatus(e.message || String(e), 'error');
     }));
     searchInput.addEventListener('input', () => renderTabla(ventasActuales));
+    batchSellerSelect.addEventListener('change', updateBatchActionsState);
+    selectAllVisibleEl.addEventListener('change', (ev) => {
+      const visibleRows = Array.from(tbody.querySelectorAll('tr[data-order-id]'));
+      visibleRows.forEach((row) => {
+        const orderId = String(row.getAttribute('data-order-id') || '');
+        if (!orderId) return;
+        if (ev.target.checked) selectedOrderIds.add(orderId);
+        else selectedOrderIds.delete(orderId);
+      });
+      renderTabla(ventasActuales);
+    });
     monthInput.addEventListener('change', () => loadVentasFull().catch((e) => setStatus(e.message || String(e), 'error')));
 
     tbody.addEventListener('change', (ev) => {
+      if (ev.target instanceof HTMLInputElement && ev.target.hasAttribute('data-select-order')) {
+        const row = ev.target.closest('tr');
+        const orderId = String(row?.getAttribute('data-order-id') || '');
+        if (!orderId) return;
+        if (ev.target.checked) selectedOrderIds.add(orderId);
+        else selectedOrderIds.delete(orderId);
+        updateBatchActionsState();
+        return;
+      }
       if (!(ev.target instanceof HTMLSelectElement) || !ev.target.hasAttribute('data-seller')) return;
       const row = ev.target.closest('tr');
       const orderId = row?.getAttribute('data-order-id') || '';
@@ -527,6 +606,7 @@
         saveStatusEl.className = 'seller-save-status';
       }
       beginAssignment();
+      assignmentTimestamps.push(Date.now());
       asignarVendedora(orderId, seller)
         .then(() => {
           ev.target.setAttribute('data-current-seller', seller);
@@ -541,7 +621,7 @@
               nextStatusEl.className = 'seller-save-status';
             }, 1800);
           }
-          loadVentasFull({ force: true }).catch((e) => setStatus(e.message || String(e), 'error'));
+          scheduleVentasRefetch();
           setStatus(`Asignación guardada para orden ${orderId}.`);
         })
         .catch((e) => {
@@ -556,6 +636,38 @@
         .finally(() => {
           endAssignment();
           ev.target.disabled = false;
+        });
+    });
+
+    btnAssignSelected.addEventListener('click', () => {
+      const seller = normalizeSeller(batchSellerSelect.value);
+      const orderIds = Array.from(selectedOrderIds);
+      if (!orderIds.length || !seller) return;
+      btnAssignSelected.disabled = true;
+      setStatus('Guardando lote...');
+      const items = orderIds.map((order_id) => ({ order_id, seller }));
+      assignmentTimestamps.push(Date.now());
+      beginAssignment();
+      asignarVendedoraBatch({ items, source: 'ventas_html_batch' })
+        .then((payload) => {
+          const results = Array.isArray(payload?.results) ? payload.results : [];
+          const okIds = results.filter((item) => item?.ok).map((item) => String(item.order_id || ''));
+          const failedItems = results.filter((item) => !item?.ok);
+          applyLocalAssignmentsBatch({ orderIds: okIds, seller });
+          okIds.forEach((id) => selectedOrderIds.delete(id));
+          if (failedItems.length) {
+            setStatus(`Lote parcial: ${okIds.length} guardadas, ${failedItems.length} fallaron.`, 'error');
+          } else {
+            selectedOrderIds.clear();
+            setStatus('Lote guardado ✓');
+          }
+          renderTabla(ventasActuales);
+          scheduleVentasRefetch();
+        })
+        .catch((e) => setStatus(`Error en lote: ${e.message || String(e)}`, 'error'))
+        .finally(() => {
+          endAssignment();
+          updateBatchActionsState();
         });
     });
 
