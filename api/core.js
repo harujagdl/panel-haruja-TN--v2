@@ -10,7 +10,6 @@ import {
   getVentasComisiones,
   getVentasConfig,
   getVentasDetalle,
-  getVentasMiniPublic,
   getVentasResumen,
   getVentasSinAsignar,
   listPrendas,
@@ -182,6 +181,59 @@ const readCacheKey = {
   ventasResumen: (month = '') => `api:ventas-resumen:${String(month || '').trim()}`,
   ventasDetalle: (month = '', search = '') => `api:ventas-detalle:${String(month || '').trim()}:${String(search || '').trim()}`,
   ventasWebhookStatus: () => 'api:ventas-webhook-status',
+};
+
+const EMPTY_VENTAS_MINI_PUBLIC = {
+  month_key: '',
+  total_mes: 0,
+  total_haru: 0,
+  total_vendedora: 0,
+  sin_asignar: 0,
+  orders_count: 0,
+  ticket_promedio: 0,
+  message: 'Sin ventas para el periodo',
+};
+
+const isVentasDataAbsenceError = (error) => {
+  const message = String(error?.message || error || '').toLowerCase();
+  return [
+    'no existe',
+    'not found',
+    'header',
+    'encabezad',
+    'sin datos',
+    'empty',
+    'no tiene',
+  ].some((token) => message.includes(token));
+};
+
+const getVentasMiniPublicSafe = async (monthValue, traceId = '') => {
+  const month = String(monthValue || '').trim();
+  try {
+    const resumen = await getVentasResumen(month);
+    return {
+      ...EMPTY_VENTAS_MINI_PUBLIC,
+      ...resumen,
+      month_key: String(resumen?.month_key || month || ''),
+      total_mes: Number(resumen?.total_mes) || 0,
+      total_haru: Number(resumen?.total_haru) || 0,
+      total_vendedora: Number(resumen?.total_vendedora) || 0,
+      sin_asignar: Number(resumen?.sin_asignar) || 0,
+      orders_count: Number(resumen?.orders_count) || 0,
+      ticket_promedio: Number(resumen?.ticket_promedio) || 0,
+    };
+  } catch (error) {
+    if (!isVentasDataAbsenceError(error)) throw error;
+    logWarn('api.core.ventas_mini_public.empty_fallback', {
+      traceId,
+      month,
+      message: getErrorMessage(error),
+    });
+    return {
+      ...EMPTY_VENTAS_MINI_PUBLIC,
+      month_key: month,
+    };
+  }
 };
 
 
@@ -1080,7 +1132,26 @@ export default async function handler(req, res) {
     }
 
     if (action === 'ventas-resumen' || action === 'resumen') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasResumen(req.query?.month), API_READ_CACHE_TTL_MS.ventasResumen, () => getVentasResumen(req.query?.month)));
-    if (action === 'ventas-mini-public') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasMiniPublic(req.query?.month), API_READ_CACHE_TTL_MS.ventasMiniPublic, () => getVentasMiniPublic(req.query?.month)));
+    if (action === 'ventas-mini-public') {
+      const month = req.query?.month;
+      try {
+        return sendOk(
+          res,
+          await getOrSetMemoryCache(
+            readCacheKey.ventasMiniPublic(month),
+            API_READ_CACHE_TTL_MS.ventasMiniPublic,
+            () => getVentasMiniPublicSafe(month, traceId),
+          ),
+          traceId,
+        );
+      } catch (error) {
+        logError('api.core.ventas_mini_public.error', { traceId, month: String(month || ''), message: getErrorMessage(error) });
+        if (isVentasDataAbsenceError(error)) {
+          return sendOk(res, { ...EMPTY_VENTAS_MINI_PUBLIC, month_key: String(month || '') }, traceId);
+        }
+        return sendErr(res, 500, getErrorMessage(error), error, 'VENTAS_MINI_PUBLIC_ERROR', traceId);
+      }
+    }
     if (action === 'ventas-detalle' || action === 'detalle') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasDetalle(req.query?.month, req.query?.q || req.query?.search), API_READ_CACHE_TTL_MS.ventasDetalle, () => getVentasDetalle(req.query?.month, req.query?.q || req.query?.search)));
     if (action === 'ventas-webhook-status') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasWebhookStatus(), API_READ_CACHE_TTL_MS.ventasWebhookStatus, () => getLatestWebhookEvent()));
     if (action === 'catalogos') return sendOk(res, await getCatalogosCached());
