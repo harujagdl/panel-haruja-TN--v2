@@ -196,6 +196,18 @@ const EMPTY_VENTAS_MINI_PUBLIC = {
   message: 'Sin ventas para el periodo',
 };
 
+
+const isSheetsQuotaError = (error) => {
+  const message = String(error?.message || error || '').toLowerCase();
+  return [
+    'quota',
+    'rate limit',
+    '429',
+    'too many requests',
+    'resource_exhausted',
+    'user-rate limit',
+  ].some((token) => message.includes(token));
+};
 const isVentasDataAbsenceError = (error) => {
   const message = String(error?.message || error || '').toLowerCase();
   return [
@@ -1137,21 +1149,30 @@ export default async function handler(req, res) {
     if (action === 'ventas-mini-public') {
       const month = req.query?.month;
       try {
-        return sendOk(
-          res,
-          await getOrSetMemoryCache(
-            readCacheKey.ventasMiniPublic(month),
-            API_READ_CACHE_TTL_MS.ventasMiniPublic,
-            () => getVentasMiniPublicSafe(month, traceId),
-          ),
-          traceId,
+        const data = await getOrSetMemoryCache(
+          readCacheKey.ventasMiniPublic(month),
+          API_READ_CACHE_TTL_MS.ventasMiniPublic,
+          () => getVentasMiniPublicSafe(month, traceId),
         );
+        return sendOk(res, {
+          ...data,
+          traceId,
+        });
       } catch (error) {
-        logError('api.core.ventas_mini_public.error', { traceId, month: String(month || ''), message: getErrorMessage(error) });
-        if (isVentasDataAbsenceError(error)) {
-          return sendOk(res, { ...EMPTY_VENTAS_MINI_PUBLIC, month_key: String(month || '') }, traceId);
+        logError('api.core.ventas_mini_public.error', {
+          traceId,
+          month: String(month || ''),
+          message: getErrorMessage(error),
+          stack: error?.stack,
+        });
+        if (isSheetsQuotaError(error)) {
+          return sendErr(res, 429, 'Servicio temporalmente limitado por cuota de Google Sheets.', error, 'VENTAS_MINI_PUBLIC_QUOTA', traceId);
         }
-        return sendErr(res, 500, getErrorMessage(error), error, 'VENTAS_MINI_PUBLIC_ERROR', traceId);
+        return sendOk(res, {
+          ...EMPTY_VENTAS_MINI_PUBLIC,
+          month_key: String(month || ''),
+          traceId,
+        });
       }
     }
     if (action === 'ventas-detalle' || action === 'detalle') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasDetalle(req.query?.month, req.query?.q || req.query?.search), API_READ_CACHE_TTL_MS.ventasDetalle, () => getVentasDetalle(req.query?.month, req.query?.q || req.query?.search)));

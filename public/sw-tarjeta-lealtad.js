@@ -1,4 +1,4 @@
-const RELEASE_TAG = '2026-05-02-b3.2';
+const RELEASE_TAG = '2026-05-02-b3.3';
 const CACHE_PREFIX = 'tarjeta-lealtad-shell';
 const CACHE_NAME = `${CACHE_PREFIX}-${RELEASE_TAG}`;
 const SW_LABEL = '[SW tarjeta]';
@@ -66,7 +66,6 @@ self.addEventListener('fetch', (event) => {
   const isPanelNavigation = isNavigationRequest && (requestUrl.pathname === '/' || requestUrl.pathname === '/index.html');
 
   if (!isSameOrigin || isApiRequest) {
-    event.respondWith(fetch(request).catch(() => Response.error()));
     return;
   }
 
@@ -94,7 +93,6 @@ self.addEventListener('fetch', (event) => {
 
   const isStaticAsset = STATIC_CACHE_PATTERNS.some((pattern) => pattern.test(requestUrl.pathname));
   if (!isStaticAsset) {
-    event.respondWith(fetch(request));
     return;
   }
 
