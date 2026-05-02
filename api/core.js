@@ -104,6 +104,7 @@ const PUBLIC_ACTIONS = new Set([
   'catalogo-ia-draft-archive',
   'catalogo-ia-generate',
   'catalogo-ia-export-csv',
+  'ventas-asignar-vendedora-batch',
 ]);
 const ADMIN_ACTIONS = new Set([
   'prendas-update',
@@ -154,6 +155,7 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['ventas-mini-public', new Set(['GET'])],
   ['assign-seller', new Set(['POST'])],
   ['venta-asignar-vendedora', new Set(['POST'])],
+  ['ventas-asignar-vendedora-batch', new Set(['POST'])],
   ['admin-session', new Set(['GET', 'POST'])],
   ['apartados', new Set(['GET', 'POST'])],
   ['catalogo-ia-ensure-sheets', new Set(['POST'])],
@@ -1232,6 +1234,38 @@ export default async function handler(req, res) {
     if (action === 'ventas-config-save') { const out = await saveVentasConfig({ ...(req.body || {}), traceId }); invalidateVentasReadCaches(); return sendOk(res, out); }
     if (action === 'ventas-sin-asignar') return sendOk(res, await getVentasSinAsignar(req.query?.month));
     if (action === 'assign-seller' || action === 'venta-asignar-vendedora') { const out = await assignVentaSeller({ ...(req.body || {}), traceId }); invalidateVentasReadCaches(); return sendOk(res, out); }
+    if (action === 'ventas-asignar-vendedora-batch') {
+      const items = Array.isArray(req.body?.items) ? req.body.items : null;
+      const source = String(req.body?.source || 'ventas_html_batch').trim() || 'ventas_html_batch';
+      if (!items) return sendError(res, 400, 'items debe ser un array');
+      if (!items.length) return sendError(res, 400, 'items no puede estar vacío');
+      if (items.length > 50) return sendError(res, 400, 'Máximo 50 asignaciones por request');
+      const results = [];
+      let saved = 0;
+      for (const rawItem of items) {
+        const orderId = String(rawItem?.order_id || '').trim();
+        const seller = String(rawItem?.seller || '').trim();
+        if (!orderId) {
+          results.push({ order_id: orderId, seller, ok: false, message: 'order_id es requerido' });
+          continue;
+        }
+        if (seller !== 'Haru' && seller !== 'Vendedora') {
+          results.push({ order_id: orderId, seller, ok: false, message: 'seller inválida. Usa Haru o Vendedora' });
+          continue;
+        }
+        try {
+          await assignVentaSeller({ order_id: orderId, seller, source, traceId });
+          saved += 1;
+          results.push({ order_id: orderId, seller, ok: true });
+        } catch (error) {
+          results.push({ order_id: orderId, seller, ok: false, message: error?.message || 'No se pudo asignar vendedora' });
+        }
+      }
+      invalidateVentasReadCaches();
+      const failed = items.length - saved;
+      const payload = { ok: failed === 0, total: items.length, saved, failed, results };
+      return sendJson(res, failed > 0 ? 207 : 200, payload);
+    }
     if (action === 'ventas-rebuild') { const out = await rebuildVentasResumen(req.body?.month || req.query?.month); invalidateVentasReadCaches(); return sendOk(res, out); }
     if (action === 'ventas-repair-month-keys') { const out = await repairVentasMonthKeys({ dryRun: String(req.body?.dryRun ?? req.query?.dryRun ?? 'true').toLowerCase() !== 'false' }); invalidateVentasReadCaches(); return sendOk(res, out); }
     if (action === 'tiendanube-webhooks-register') return sendOk(res, await registerTiendanubeWebhooks(getBaseUrl(req)));
