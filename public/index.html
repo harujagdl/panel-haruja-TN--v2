@@ -6255,7 +6255,7 @@ const copyHealthTraceId = async () => {
         salesMiniUnassigned.textContent = "—";
       };
 
-      function formatMoney(value) {
+      function formatSalesMiniMoney(value) {
         const amount = Number(value || 0);
         const safeAmount = Number.isFinite(amount) ? amount : 0;
         return safeAmount.toLocaleString("es-MX", {
@@ -6291,8 +6291,8 @@ const copyHealthTraceId = async () => {
         const sinAsignarEl = document.querySelector("[data-sales-mini='sin-asignar']");
         if (!totalMesEl || !vendedoraEl || !sinAsignarEl) return;
 
-        totalMesEl.textContent = formatMoney(summary.totalMes);
-        vendedoraEl.innerHTML = `Haru ${formatMoney(summary.totalHaru)}<br>Vendedora ${formatMoney(summary.totalVendedora)}`;
+        totalMesEl.textContent = formatSalesMiniMoney(summary.totalMes);
+        vendedoraEl.innerHTML = `Haru ${formatSalesMiniMoney(summary.totalHaru)}<br>Vendedora ${formatSalesMiniMoney(summary.totalVendedora)}`;
         sinAsignarEl.textContent = String(summary.sinAsignar);
       }
 
