@@ -97,7 +97,7 @@
         <button id="btnLoad" class="btn btn-secondary">Ver detalle</button>
         <button id="btnCsvResumen" class="btn btn-secondary">Exportar resumen</button>
         <button id="btnCsvDetalle" class="btn btn-secondary">Exportar detalle</button>
-        <a href="/api/tiendanube?action=connect" class="btn btn-secondary">Conectar Tiendanube</a>
+        <a id="btnReconnectTiendanube" href="/api/tiendanube?action=connect" class="btn btn-secondary">Conectar Tiendanube</a>
         <button id="btnSync" class="btn btn-primary">Forzar sincronización</button>
       </div>
       <div id="status" class="status"></div>
@@ -161,6 +161,8 @@
     const btnSync = document.getElementById("btnSync");
     const btnCsvResumen = document.getElementById("btnCsvResumen");
     const btnCsvDetalle = document.getElementById("btnCsvDetalle");
+
+    const btnReconnectTiendanube = document.getElementById("btnReconnectTiendanube");
     const batchSellerSelect = document.getElementById("batchSeller");
     const btnAssignSelected = document.getElementById("btnAssignSelected");
     const batchSelectedCountEl = document.getElementById("batchSelectedCount");
@@ -441,6 +443,24 @@
       }
     };
 
+
+    const refreshTiendanubeOAuthStatus = async () => {
+      try {
+        const payload = await safeJson(await fetch('/api/tiendanube?action=status'), 'No se pudo consultar estado Tiendanube');
+        const data = payload?.data || {};
+        const connected = Boolean(String(data.store_id || '').trim() && String(data.access_token || '').trim());
+        if (btnReconnectTiendanube) {
+          btnReconnectTiendanube.textContent = connected ? 'Reconectar Tiendanube' : 'Conectar Tiendanube';
+          btnReconnectTiendanube.href = '/api/tiendanube?action=connect';
+        }
+      } catch (_error) {
+        if (btnReconnectTiendanube) {
+          btnReconnectTiendanube.textContent = 'Conectar Tiendanube';
+          btnReconnectTiendanube.href = '/api/tiendanube?action=connect';
+        }
+      }
+    };
+
     const forceSyncVentas = async () => {
       btnSync.disabled = true;
       btnSync.textContent = 'Sincronizando...';
@@ -675,6 +695,7 @@
     storeIdInput.value = STORE_ID;
     (async () => {
       try {
+        await refreshTiendanubeOAuthStatus();
         await loadVentasFull();
         setInterval(() => autoSyncVentas().catch((e) => setStatus(e.message || String(e), 'error')), AUTO_SYNC_MS);
       } catch (e) {
