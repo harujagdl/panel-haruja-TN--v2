@@ -99,6 +99,7 @@
         <button id="btnCsvDetalle" class="btn btn-secondary">Exportar detalle</button>
         <a href="/api/tiendanube?action=connect" class="btn btn-secondary">Conectar Tiendanube</a>
         <button id="btnSync" class="btn btn-primary">Forzar sincronización</button>
+        <button id="btnReconnectTiendanube" class="btn" style="display:none">Reconectar Tiendanube</button>
       </div>
       <div id="status" class="status"></div>
       <div class="status">Actualización automática por Tiendanube + refresh cada 60 s.</div>
@@ -159,6 +160,7 @@
     const lastWebhookEventEl = document.getElementById("lastWebhookEvent");
     const lastWebhookOrderEl = document.getElementById("lastWebhookOrder");
     const btnSync = document.getElementById("btnSync");
+    const btnReconnectTiendanube = document.getElementById("btnReconnectTiendanube");
     const btnCsvResumen = document.getElementById("btnCsvResumen");
     const btnCsvDetalle = document.getElementById("btnCsvDetalle");
     const batchSellerSelect = document.getElementById("batchSeller");
@@ -240,10 +242,27 @@
       return `${parts.year}-${String(parts.month).padStart(2, '0')}`;
     };
 
+    const shouldShowReconnect = (error) => {
+      const payload = error?.payload || {};
+      const code = String(payload?.code || '').toUpperCase();
+      const message = String(payload?.message || error?.message || '').toLowerCase();
+      return code === 'TIENDANUBE_AUTH_ERROR'
+        || code === 'TIENDANUBE_NOT_CONFIGURED'
+        || message.includes('oauth')
+        || message.includes('token');
+    };
+
+    const toggleReconnectButton = (show = false) => {
+      btnReconnectTiendanube.style.display = show ? 'inline-flex' : 'none';
+    };
+
     const buildSyncErrorMessage = (error) => {
       const payload = error?.payload || {};
       if (payload?.code === "TIENDANUBE_AUTH_ERROR") {
         return "No fue posible autenticar con Tiendanube. Revisa la conexión OAuth o elimina variables viejas de Vercel (TIENDANUBE_ACCESS_TOKEN / TIENDANUBE_STORE_ID).";
+      }
+      if (payload?.code === "TIENDANUBE_NOT_CONFIGURED") {
+        return "Tiendanube no está conectada. Reconecta la tienda para reactivar la sincronización automática.";
       }
       if (payload?.code === "TIENDANUBE_NOT_FOUND") {
         return "Error consultando Tiendanube: recurso no encontrado. Revisar endpoint/store_id de sincronización.";
@@ -421,14 +440,18 @@
       try {
         payload = await safeJson(await fetch('/api/ventas/sync-auto', { method: 'POST' }), 'No se pudo ejecutar sync automática');
       } catch (error) {
+        toggleReconnectButton(shouldShowReconnect(error));
         setStatus(`${buildSyncErrorMessage(error)} Mostrando la última información disponible.`, 'error');
         return;
       }
       if (payload?.skipped) return;
       if (payload?.ok === false) {
-        setStatus(`${buildSyncErrorMessage({ payload })} Mostrando la última información disponible.`, 'error');
+        const wrappedError = { payload };
+        toggleReconnectButton(shouldShowReconnect(wrappedError));
+        setStatus(`${buildSyncErrorMessage(wrappedError)} Mostrando la última información disponible.`, 'error');
         return;
       }
+      toggleReconnectButton(false);
       if (payload?.changed) {
         await loadVentasFull();
         return;
@@ -446,8 +469,10 @@
       btnSync.textContent = 'Sincronizando...';
       try {
         await safeJson(await fetch('/api/ventas/sync', { method: 'POST' }), 'No se pudo sincronizar ventas');
+        toggleReconnectButton(false);
         await loadVentasFull();
       } catch (error) {
+        toggleReconnectButton(shouldShowReconnect(error));
         setStatus(`${buildSyncErrorMessage(error)} Mostrando la última información disponible.`, 'error');
       } finally {
         btnSync.disabled = false;
@@ -554,6 +579,9 @@
 
     document.getElementById('btnLoad').addEventListener('click', () => loadVentasFull().catch((e) => setStatus(e.message || String(e), 'error')));
     document.getElementById('btnSync').addEventListener('click', () => forceSyncVentas().catch((e) => setStatus(e.message || String(e), 'error')));
+    btnReconnectTiendanube.addEventListener('click', () => {
+      window.location.href = '/api/tiendanube/auth';
+    });
     btnCsvResumen.addEventListener('click', exportResumenCsv);
     btnCsvDetalle.addEventListener('click', () => exportDetalleCsv().catch((e) => {
       btnCsvDetalle.disabled = false;
