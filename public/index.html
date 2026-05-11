@@ -7800,10 +7800,10 @@ const copyHealthTraceId = async () => {
         const toolbarButtons = [
           mkBtn(adminEnabled ? "btn-admin-exit" : "btn-admin-enter", adminLabel),
           mkBtn("btn-etiquetas", "Etiquetas"),
-          mkBtn("btn-export-csv", "Exportar CSV")
+          mkBtn("btn-export-csv", "Exportar Excel")
         ];
         if (adminEnabled) {
-          toolbarButtons.push(mkBtn("btn-export-csv-admin", "Exportar CSV Admin"));
+          toolbarButtons.push(mkBtn("btn-export-csv-admin", "Exportar Excel Admin"));
         }
         if (adminEnabled) {
           toolbarButtons.push(mkBtn("btn-upload-corrections", "Subir correcciones"));
@@ -7948,15 +7948,8 @@ const copyHealthTraceId = async () => {
         return `${year}-${month}-${day}`;
       };
 
-      const toCsvValue = (value) => {
-        const stringValue = value === null || value === undefined ? "" : String(value);
-        const escaped = stringValue.replace(/"/g, '""');
-        return /[",\n\r]/.test(escaped) ? `"${escaped}"` : escaped;
-      };
-
-      const buildCsv = (rows = [], columns = CSV_COLUMNS_PUBLIC) => {
-        const header = columns.map((column) => toCsvValue(column.label)).join(",");
-        const lines = rows.map((row) => {
+      const buildExportRows = (rows = [], columns = CSV_COLUMNS_PUBLIC) => {
+        return rows.map((row) => {
           const resolvedPrice = getLabelPriceNumber(row);
           const normalizedRow = {
             ...row,
@@ -7969,42 +7962,39 @@ const copyHealthTraceId = async () => {
             lastInventorySyncAtText: safeString(row?.lastInventorySyncAtText).trim(),
             tn: safeString(row?.tn).trim().toUpperCase() === "OK" ? "OK" : "N/A"
           };
-          return columns.map((column) => toCsvValue(normalizedRow?.[column.key])).join(",");
+          return columns.reduce((acc, column) => {
+            acc[column.label] = normalizedRow?.[column.key] ?? "";
+            return acc;
+          }, {});
         });
-        return [header, ...lines].join("\n");
       };
 
-      const downloadFile = (content, filename, mime) => {
-        const blob = new Blob(["\uFEFF" + content], { type: mime });
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = filename;
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
-        URL.revokeObjectURL(url);
-      };
-
-      const exportRowsToCsv = (rows, { mode = "public" } = {}) => {
+      const exportRowsToExcel = (rows, { mode = "public" } = {}) => {
         if (!Array.isArray(rows) || !rows.length) {
           setPrendasAlert("No hay filas para exportar.");
           return;
         }
+        if (!window.XLSX) {
+          setPrendasAlert("No se pudo cargar la librería de Excel.");
+          return;
+        }
         const columns = mode === "admin" ? CSV_COLUMNS_ADMIN : CSV_COLUMNS_PUBLIC;
-        const csv = buildCsv(rows, columns);
+        const exportRows = buildExportRows(rows, columns);
+        const worksheet = XLSX.utils.json_to_sheet(exportRows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Base de códigos");
         const filename = mode === "admin"
-          ? `haruja_prendas_admin_${getTodayIso()}.csv`
-          : `haruja_prendas_public_${getTodayIso()}.csv`;
-        downloadFile(csv, filename, "text/csv;charset=utf-8;");
+          ? `haruja_prendas_admin_${getTodayIso()}.xlsx`
+          : `haruja_prendas_public_${getTodayIso()}.xlsx`;
+        XLSX.writeFile(workbook, filename);
         setPrendasAlert(`Exportación completada: ${rows.length} registros.`);
       };
 
-      const exportCsv = ({ mode = "public" } = {}) => {
+      const exportExcel = ({ mode = "public" } = {}) => {
         const rows = prendasState?.rowsAfterAll?.length
           ? prendasState.rowsAfterAll
           : (prendasState?.baseRows || []);
-        exportRowsToCsv(rows, { mode });
+        exportRowsToExcel(rows, { mode });
       };
 
       const getLabelLogoSrc = () => {
@@ -11493,12 +11483,12 @@ const createPrendaRow = (item) => {
         }
 
         if (event.target.closest("#btn-export-csv")) {
-          exportCsv({ mode: "public" });
+          exportExcel({ mode: "public" });
           return;
         }
 
         if (event.target.closest("#btn-export-csv-admin")) {
-          exportCsv({ mode: "admin" });
+          exportExcel({ mode: "admin" });
           return;
         }
 
