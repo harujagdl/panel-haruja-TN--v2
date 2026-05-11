@@ -188,6 +188,16 @@ const readCacheKey = {
   ventasWebhookStatus: () => 'api:ventas-webhook-status',
 };
 
+
+const sendAdminSessionState = (res, { authenticated = false, email = null } = {}) =>
+  res.status(200).json({
+    ok: true,
+    data: {
+      authenticated: Boolean(authenticated),
+      ...(authenticated && email ? { email } : {}),
+    },
+  });
+
 const EMPTY_VENTAS_MINI_PUBLIC = {
   month_key: '',
   total_mes: 0,
@@ -768,7 +778,6 @@ async function handleAdminSession(req, res) {
         touchActivity: false,
         reason: 'admin-status-check',
       });
-      const now = Date.now();
       const isExpired = !session?.authenticated || !session?.isAdmin;
       if (!session?.authenticated || !session?.isAdmin || isExpired) {
         logWarn('admin.session.expired', {
@@ -779,18 +788,13 @@ async function handleAdminSession(req, res) {
           errorCode: 'ADMIN_SESSION_REQUIRED',
         });
       }
-      return res.status(200).json({
-        ok: true,
+      return sendAdminSessionState(res, {
         authenticated: Boolean(session?.authenticated) && !isExpired,
         email: isExpired ? null : session?.email || null,
-        isAdmin: Boolean(session?.isAdmin) && !isExpired,
-        expiresAt: isExpired ? null : Number(session?.expiresAt || 0) || null,
-        now,
-        googleClientId: GOOGLE_CLIENT_ID || null,
       });
     } catch (error) {
-      if (isAdminSessionConfigError(error)) return sendAdminUnavailable(res);
-      throw error;
+      if (isAdminSessionConfigError(error)) return sendAdminSessionState(res, { authenticated: false });
+      return sendAdminSessionState(res, { authenticated: false });
     }
   }
 
@@ -826,22 +830,14 @@ async function handleAdminSession(req, res) {
       }
 
       createAdminSession(res, { email, sub: verified?.sub });
-      const now = Date.now();
-      return res.status(200).json({
-        ok: true,
-        authenticated: true,
-        email,
-        isAdmin: true,
-        expiresAt: now + SESSION_MAX_AGE_MS,
-        now,
-      });
+      return sendAdminSessionState(res, { authenticated: true, email });
     } catch (error) {
       clearAdminSession(res);
       if (isAdminSessionConfigError(error)) {
         if (isAllowedAdminEmail(verifiedEmail)) {
           console.warn('[admin-session] allowlisted email but missing/invalid backend admin session');
         }
-        return sendAdminUnavailable(res);
+        return sendAdminSessionState(res, { authenticated: false });
       }
       logError('admin.session.login_failed', {
         action: 'admin-session',
@@ -850,16 +846,16 @@ async function handleAdminSession(req, res) {
         errorCode: 'GOOGLE_AUTH_FAILED',
         message: getErrorMessage(error),
       });
-      return sendErr(res, 401, 'No se pudo validar la cuenta de Google.', error, 'GOOGLE_AUTH_FAILED');
+      return sendAdminSessionState(res, { authenticated: false });
     }
   }
 
   if (req.method === 'POST' && op === 'logout') {
     clearAdminSession(res);
-    return res.status(200).json({ ok: true, authenticated: false, isAdmin: false, email: null, expiresAt: null, now: Date.now() });
+    return sendAdminSessionState(res, { authenticated: false });
   }
 
-  return sendErr(res, 400, 'Operación inválida para action=admin-session.');
+  return sendAdminSessionState(res, { authenticated: false });
 }
 
 async function handleApartados(req, res) {
