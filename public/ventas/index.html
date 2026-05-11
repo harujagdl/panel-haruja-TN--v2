@@ -163,6 +163,8 @@
     const btnCsvDetalle = document.getElementById("btnCsvDetalle");
 
     const btnReconnectTiendanube = document.getElementById("btnReconnectTiendanube");
+    let hasAdminSession = false;
+
     const batchSellerSelect = document.getElementById("batchSeller");
     const btnAssignSelected = document.getElementById("btnAssignSelected");
     const batchSelectedCountEl = document.getElementById("batchSelectedCount");
@@ -444,7 +446,32 @@
     };
 
 
+    const applyReadOnlyUi = () => {
+      if (btnReconnectTiendanube) {
+        btnReconnectTiendanube.style.display = 'none';
+        btnReconnectTiendanube.setAttribute('aria-hidden', 'true');
+      }
+      btnSync.disabled = true;
+      btnSync.title = 'Inicia sesión admin para sincronizar Tiendanube.';
+      btnAssignSelected.disabled = true;
+      batchSellerSelect.disabled = true;
+      setStatus('Modo lectura: inicia sesión admin para sincronizar Tiendanube.');
+    };
+
+    const loadAdminSessionStatus = async () => {
+      try {
+        const payload = await safeJson(await fetch('/api/core?action=admin-session'), 'No se pudo validar sesión admin');
+        hasAdminSession = Boolean(payload?.ok && payload?.data?.authenticated);
+      } catch (_error) {
+        hasAdminSession = false;
+      }
+      if (!hasAdminSession) applyReadOnlyUi();
+      return hasAdminSession;
+    };
+
+
     const refreshTiendanubeOAuthStatus = async () => {
+      if (!hasAdminSession) return;
       try {
         const payload = await safeJson(await fetch('/api/tiendanube?action=status'), 'No se pudo consultar estado Tiendanube');
         const data = payload?.data || {};
@@ -453,7 +480,11 @@
           btnReconnectTiendanube.textContent = connected ? 'Reconectar Tiendanube' : 'Conectar Tiendanube';
           btnReconnectTiendanube.href = '/api/tiendanube?action=connect';
         }
-      } catch (_error) {
+      } catch (error) {
+        if (error?.payload?.code === 'ADMIN_SESSION_REQUIRED') {
+          setStatus('Modo lectura: inicia sesión admin para sincronizar Tiendanube.');
+          return;
+        }
         if (btnReconnectTiendanube) {
           btnReconnectTiendanube.textContent = 'Conectar Tiendanube';
           btnReconnectTiendanube.href = '/api/tiendanube?action=connect';
@@ -470,12 +501,13 @@
       } catch (error) {
         setStatus(`${buildSyncErrorMessage(error)} Mostrando la última información disponible.`, 'error');
       } finally {
-        btnSync.disabled = false;
+        btnSync.disabled = !hasAdminSession;
         btnSync.textContent = 'Forzar sincronización';
       }
     };
 
     const asignarVendedora = async (orderId, seller) => {
+      if (!hasAdminSession) throw new Error('Modo lectura: inicia sesión admin para asignar vendedora.');
       const normalized = normalizeSeller(seller);
       if (!normalized) throw new Error('Selecciona una vendedora válida (Haru o Vendedora)');
       const body = { order_id: orderId, seller: normalized, source: 'ventas_html' };
@@ -491,6 +523,7 @@
     };
 
     const asignarVendedoraBatch = async ({ items = [], source = 'ventas_html_batch' }) => {
+      if (!hasAdminSession) throw new Error('Modo lectura: inicia sesión admin para asignar vendedora.');
       const response = await safeJson(await fetch('/api/core?action=ventas-asignar-vendedora-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -573,7 +606,10 @@
     };
 
     document.getElementById('btnLoad').addEventListener('click', () => loadVentasFull().catch((e) => setStatus(e.message || String(e), 'error')));
-    document.getElementById('btnSync').addEventListener('click', () => forceSyncVentas().catch((e) => setStatus(e.message || String(e), 'error')));
+    document.getElementById('btnSync').addEventListener('click', () => {
+      if (!hasAdminSession) return setStatus('Modo lectura: inicia sesión admin para sincronizar Tiendanube.');
+      return forceSyncVentas().catch((e) => setStatus(e.message || String(e), 'error'));
+    });
     btnCsvResumen.addEventListener('click', exportResumenCsv);
     btnCsvDetalle.addEventListener('click', () => exportDetalleCsv().catch((e) => {
       btnCsvDetalle.disabled = false;
@@ -695,9 +731,10 @@
     storeIdInput.value = STORE_ID;
     (async () => {
       try {
-        await refreshTiendanubeOAuthStatus();
+        await loadAdminSessionStatus();
+        if (hasAdminSession) await refreshTiendanubeOAuthStatus();
         await loadVentasFull();
-        setInterval(() => autoSyncVentas().catch((e) => setStatus(e.message || String(e), 'error')), AUTO_SYNC_MS);
+        if (hasAdminSession) setInterval(() => autoSyncVentas().catch((e) => setStatus(e.message || String(e), 'error')), AUTO_SYNC_MS);
       } catch (e) {
         setStatus(e.message || String(e), 'error');
       }

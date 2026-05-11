@@ -1,6 +1,7 @@
 import { resolveTiendanubeConnection, syncVentasFromTiendanubeIncremental } from '../../lib/api/core.js';
 import { createTraceId, logError, logInfo, logWarn } from '../../lib/observability/logger.js';
 import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
+import { ADMIN_SESSION_REQUIRED_MESSAGE, requireAdminSession } from '../core.js';
 import {
   acquireVentasSyncLock,
   readVentasSyncState,
@@ -21,6 +22,15 @@ export default async function handler(req, res) {
   const traceId = createTraceId(req?.headers?.['x-trace-id'] || req?.headers?.['x-request-id'] || req?.body?.traceId || req?.query?.traceId);
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed.', traceId });
+  }
+
+
+  if (!requireAdminSession(req, res, {
+    logDenied: '[admin-session] ventas sync denied without valid session',
+    touchActivity: true,
+    reason: 'ventas-sync',
+  })) {
+    return res.status(401).json({ ok: false, code: 'ADMIN_SESSION_REQUIRED', message: ADMIN_SESSION_REQUIRED_MESSAGE, traceId });
   }
 
   logInfo('ventas.sync_auto.start', { traceId, result: 'started' });
