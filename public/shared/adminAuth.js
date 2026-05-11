@@ -47,10 +47,15 @@ const getGoogleClientId = async () => {
     googleClientIdPromise = (async () => {
       const hinted = readGoogleClientIdFromWindow();
       if (hinted) return hinted;
-      const status = await getAdminSession();
-      const fromBackend = String(status?.googleClientId || "").trim();
+      const payload = await getAdminSession();
+      const googleClientId =
+        payload?.data?.googleClientId ||
+        payload?.googleClientId ||
+        window.GOOGLE_CLIENT_ID ||
+        '';
+      const fromBackend = String(googleClientId || "").trim();
       if (!fromBackend) {
-        throw new Error("Falta configurar GOOGLE_CLIENT_ID en el backend.");
+        throw new Error("Falta configurar GOOGLE_CLIENT_ID en Vercel Production y hacer redeploy.");
       }
       return fromBackend;
     })();

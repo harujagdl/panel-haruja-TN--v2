@@ -71,7 +71,12 @@ const ADMIN_ALLOWLIST = [
   'harujagdl.ventas@gmail.com',
 ].map((email) => String(email || '').trim().toLowerCase());
 const ADMIN_ALLOWLIST_SET = new Set(ADMIN_ALLOWLIST);
-const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim();
+const GOOGLE_CLIENT_ID = String(
+  process.env.GOOGLE_CLIENT_ID ||
+  process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+  process.env.GOOGLE_OAUTH_CLIENT_ID ||
+  ''
+).trim();
 const SESSION_MAX_AGE_SECONDS = 15 * 60;
 const SESSION_MAX_AGE_MS = SESSION_MAX_AGE_SECONDS * 1000;
 const ADMIN_SESSION_REFRESH_WINDOW_MS = 5 * 60 * 1000;
@@ -189,14 +194,18 @@ const readCacheKey = {
 };
 
 
-const sendAdminSessionState = (res, { authenticated = false, email = null } = {}) =>
-  res.status(200).json({
+const sendAdminSessionState = (res, { authenticated = false, email = null } = {}) => {
+  const googleClientId = GOOGLE_CLIENT_ID || null;
+  return res.status(200).json({
     ok: true,
     data: {
       authenticated: Boolean(authenticated),
       ...(authenticated && email ? { email } : {}),
+      googleClientId,
     },
+    googleClientId,
   });
+};
 
 const EMPTY_VENTAS_MINI_PUBLIC = {
   month_key: '',
