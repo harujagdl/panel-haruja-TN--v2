@@ -194,13 +194,22 @@ const readCacheKey = {
 };
 
 
-const sendAdminSessionState = (res, { authenticated = false, email = null } = {}) => {
+const sendAdminSessionState = (res, {
+  authenticated = false,
+  email = null,
+  isAdmin = false,
+  expiresAt = null,
+  now = Date.now(),
+} = {}) => {
   const googleClientId = GOOGLE_CLIENT_ID || null;
   return res.status(200).json({
     ok: true,
     data: {
       authenticated: Boolean(authenticated),
+      isAdmin: Boolean(isAdmin),
       ...(authenticated && email ? { email } : {}),
+      ...(authenticated && expiresAt ? { expiresAt: Number(expiresAt) } : {}),
+      ...(authenticated ? { now: Number(now) || Date.now() } : {}),
       googleClientId,
     },
     googleClientId,
@@ -799,7 +808,10 @@ async function handleAdminSession(req, res) {
       }
       return sendAdminSessionState(res, {
         authenticated: Boolean(session?.authenticated) && !isExpired,
+        isAdmin: Boolean(session?.isAdmin) && !isExpired,
         email: isExpired ? null : session?.email || null,
+        expiresAt: isExpired ? null : Number(session?.expiresAt || 0) || null,
+        now: Date.now(),
       });
     } catch (error) {
       if (isAdminSessionConfigError(error)) return sendAdminSessionState(res, { authenticated: false });
@@ -839,7 +851,13 @@ async function handleAdminSession(req, res) {
       }
 
       createAdminSession(res, { email, sub: verified?.sub });
-      return sendAdminSessionState(res, { authenticated: true, email });
+      return sendAdminSessionState(res, {
+        authenticated: true,
+        isAdmin: true,
+        email,
+        expiresAt: Date.now() + SESSION_MAX_AGE_MS,
+        now: Date.now(),
+      });
     } catch (error) {
       clearAdminSession(res);
       if (isAdminSessionConfigError(error)) {

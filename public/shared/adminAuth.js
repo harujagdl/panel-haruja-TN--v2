@@ -32,7 +32,17 @@ const callAdminSession = async (op, { method = "GET", body } = {}) => {
     error.payload = payload;
     throw error;
   }
-  return payload;
+
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
+  return {
+    ...payload,
+    ...data,
+    authenticated: payload?.authenticated === true || data?.authenticated === true,
+    isAdmin: payload?.isAdmin === true || data?.isAdmin === true,
+    email: String(payload?.email || data?.email || "").trim().toLowerCase() || null,
+    expiresAt: Number(payload?.expiresAt || data?.expiresAt || 0) || null,
+    now: Number(payload?.now || data?.now || 0) || Date.now(),
+  };
 };
 
 const readGoogleClientIdFromWindow = () => {
