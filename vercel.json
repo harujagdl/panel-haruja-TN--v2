@@ -112,6 +112,10 @@
       "destination": "/app/lealtad/:path*"
     },
     {
+      "source": "/api/tiendanube/callback",
+      "destination": "/api/tiendanube"
+    },
+    {
       "source": "/",
       "destination": "/index.html"
     }
