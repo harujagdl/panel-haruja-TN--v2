@@ -17,7 +17,8 @@ const readTraceFromRequest = (req = {}) =>
   createTraceId(req?.headers?.['x-trace-id'] || req?.headers?.['x-request-id'] || req?.body?.traceId || req?.query?.traceId);
 
 function buildRedirect(query = {}) {
-  const url = new URL('/ventas', 'http://local');
+  const url = new URL('/', 'http://local');
+  url.searchParams.set('view', 'health');
   Object.entries(query).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') return;
     url.searchParams.set(key, String(value));
