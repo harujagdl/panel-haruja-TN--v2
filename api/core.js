@@ -1035,21 +1035,36 @@ const runHealthChecks = async (traceId = '') => {
 
   const tiendanube = await timedHealthCheck('tiendanube', traceId, async () => {
     const config = await getVentasConfig();
-    const storeId = String(config?.store_id || process.env.TIENDANUBE_STORE_ID || '').trim();
-    const accessTokenConfigured = Boolean(String(config?.access_token || process.env.TIENDANUBE_ACCESS_TOKEN || '').trim());
-    const appIdConfigured = Boolean(String(config?.app_id || process.env.TIENDANUBE_APP_ID || '').trim());
+    const appId = String(config?.client_id || config?.app_id || process.env.TIENDANUBE_CLIENT_ID || process.env.TIENDANUBE_APP_ID || '').trim();
+    const clientSecret = String(process.env.TIENDANUBE_CLIENT_SECRET || '').trim();
+    const redirectUri = String(process.env.TIENDANUBE_REDIRECT_URI || '').trim();
+    const storeId = String(config?.store_id || config?.user_id || '').trim();
+    const accessTokenConfigured = Boolean(String(config?.access_token || '').trim());
     const missing = [];
+    if (!appId) missing.push('app_id');
+    if (!clientSecret) missing.push('client_secret');
+    if (!redirectUri) missing.push('redirect_uri');
     if (!storeId) missing.push('store_id');
     if (!accessTokenConfigured) missing.push('access_token');
     if (missing.length) {
-      return { status: 'warning', message: `Configuración incompleta (${missing.join(', ')}).`, storeIdConfigured: Boolean(storeId), accessTokenConfigured, appIdConfigured };
+      return {
+        status: 'warning',
+        message: `Configuración incompleta (${missing.join(', ')}).`,
+        hasAppId: Boolean(appId),
+        hasClientSecret: Boolean(clientSecret),
+        hasRedirectUri: Boolean(redirectUri),
+        hasAccessTokenFromConfig: accessTokenConfigured,
+        hasStoreIdFromConfig: Boolean(storeId),
+      };
     }
     return {
-      status: appIdConfigured ? 'ok' : 'warning',
-      message: appIdConfigured ? 'Configuración base lista.' : 'Falta app_id (opcional para algunos flujos).',
-      storeIdConfigured: true,
-      accessTokenConfigured: true,
-      appIdConfigured,
+      status: 'ok',
+      message: 'Configuración OAuth lista.',
+      hasAppId: true,
+      hasClientSecret: true,
+      hasRedirectUri: true,
+      hasAccessTokenFromConfig: true,
+      hasStoreIdFromConfig: true,
     };
   });
 
