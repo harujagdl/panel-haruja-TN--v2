@@ -3268,6 +3268,7 @@ body.haruja-col-resizing{
               <div class="health-overview">
                 <span id="healthOverallChip" class="health-chip">Estado general: —</span>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <button type="button" id="healthConnectTiendanubeBtn" class="secondary small">Conectar Tiendanube</button>
                   <button type="button" id="healthRegisterWebhooksBtn" class="secondary small">Registrar webhooks</button>
                   <button type="button" id="healthSyncVentasBtn" class="secondary small">Sync ventas ahora</button>
                   <button type="button" id="healthCopyTraceBtn" class="secondary small">Copiar traceId</button>
@@ -4522,6 +4523,7 @@ Errores: 0</pre>
       const healthDashboard = document.getElementById("healthDashboard");
       const healthOverallChip = document.getElementById("healthOverallChip");
       const healthRefreshBtn = document.getElementById("healthRefreshBtn");
+      const healthConnectTiendanubeBtn = document.getElementById("healthConnectTiendanubeBtn");
       const healthRegisterWebhooksBtn = document.getElementById("healthRegisterWebhooksBtn");
       const healthSyncVentasBtn = document.getElementById("healthSyncVentasBtn");
       const healthCopyTraceBtn = document.getElementById("healthCopyTraceBtn");
@@ -4535,6 +4537,15 @@ Errores: 0</pre>
       let healthCurrentTraceId = "";
       let systemAlertsLoading = false;
       let healthAutoRecoveryRunning = false;
+      const healthUrlParams = new URLSearchParams(window.location.search);
+      const oauthStatus = safeString(healthUrlParams.get("oauth")).toLowerCase();
+      const oauthErrorMessage = safeString(healthUrlParams.get("message"));
+      let healthOauthNotice = "";
+      if (oauthStatus === "success") {
+        healthOauthNotice = "Tiendanube conectada correctamente.";
+      } else if (oauthStatus === "error") {
+        healthOauthNotice = oauthErrorMessage || "No se pudo conectar Tiendanube.";
+      }
       const HEALTH_AUTO_RECOVERY_COOLDOWN_MS = 10 * 60 * 1000;
       const HEALTH_AUTO_RECOVERY_LAST_RUN_KEY = "haruja:health:autoRecovery:lastRun";
 
@@ -4581,6 +4592,10 @@ Errores: 0</pre>
           healthRegisterWebhooksBtn.disabled = false;
           await loadHealthDashboard();
         }
+      };
+
+      const runHealthConnectTiendanube = () => {
+        window.location.href = "/api/tiendanube?action=connect";
       };
 
       const runHealthSyncVentas = async () => {
@@ -4913,7 +4928,15 @@ const copyHealthTraceId = async () => {
         if (healthAuthMessage) healthAuthMessage.classList.toggle("hidden", isAdmin);
         if (healthLoginBtn) healthLoginBtn.classList.toggle("hidden", isAdmin);
         if (healthDashboard) healthDashboard.classList.toggle("hidden", !isAdmin);
-        if (healthActionResult) healthActionResult.textContent = isAdmin ? "—" : "Inicia sesión como admin para ejecutar acciones.";
+        if (healthActionResult) {
+          if (!isAdmin) {
+            healthActionResult.textContent = "Inicia sesión como admin para ejecutar acciones.";
+          } else if (healthOauthNotice) {
+            healthActionResult.textContent = healthOauthNotice;
+          } else {
+            healthActionResult.textContent = "—";
+          }
+        }
         if (!isAdmin) return;
         if (healthLoading) return;
         healthLoading = true;
@@ -4936,6 +4959,7 @@ const copyHealthTraceId = async () => {
         }
       };
       if (healthRefreshBtn) healthRefreshBtn.addEventListener("click", loadHealthDashboard);
+      if (healthConnectTiendanubeBtn) healthConnectTiendanubeBtn.addEventListener("click", runHealthConnectTiendanube);
       if (healthLoginBtn) {
         healthLoginBtn.addEventListener("click", async () => {
           await handleAdminLogin();
