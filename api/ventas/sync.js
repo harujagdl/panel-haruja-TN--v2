@@ -158,7 +158,7 @@ export default async function handler(req, res) {
       last_sync_message: String(error?.message || error),
     });
     logError('ventas.sync.failed', { traceId, result: 'failed', processed: 0, inserted: 0, updated: 0, monthsRebuilt: 0, durationMs: Date.now() - startedAt, errorCode });
-    return res.status(500).json({ ok: false, code: 'SYNC_MANUAL_ERROR', message: String(error?.message || error), traceId });
+    return res.status(500).json({ ok: false, code: errorCode, message: String(error?.message || error), traceId });
   } finally {
     await releaseVentasSyncLock(lockOwnerId);
   }

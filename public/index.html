@@ -4605,7 +4605,13 @@ Errores: 0</pre>
         try {
           const response = await fetch("/api/ventas/sync", { method: "POST", credentials: "same-origin" });
           const payload = await response.json().catch(() => ({}));
-          if (!response.ok || payload?.ok === false) throw new Error(payload?.message || "No se pudo ejecutar sync de ventas.");
+          if (!response.ok || payload?.ok === false) {
+            throw new Error([
+              payload?.code || `HTTP ${response.status}`,
+              payload?.message || "No se pudo ejecutar sync de ventas.",
+              payload?.traceId ? `traceId=${payload.traceId}` : "",
+            ].filter(Boolean).join(" · "));
+          }
           const details = [
             `processed=${safeString(payload?.processed) || "0"}`,
             `inserted=${safeString(payload?.inserted) || "0"}`,
