@@ -4538,8 +4538,8 @@ Errores: 0</pre>
       let systemAlertsLoading = false;
       let healthAutoRecoveryRunning = false;
       const healthUrlParams = new URLSearchParams(window.location.search);
-      const oauthStatus = safeString(healthUrlParams.get("oauth")).toLowerCase();
-      const oauthErrorMessage = safeString(healthUrlParams.get("message"));
+      const oauthStatus = String(healthUrlParams.get("oauth") || "").trim().toLowerCase();
+      const oauthErrorMessage = String(healthUrlParams.get("message") || "").trim();
       let healthOauthNotice = "";
       if (oauthStatus === "success") {
         healthOauthNotice = "Tiendanube conectada correctamente.";
