@@ -56,8 +56,11 @@ async function connectCallback(req, res) {
     const storeId = String(tokenPayload.user_id || tokenPayload.store_id || '').trim();
     await saveTiendanubeOAuthConfig({
       store_id: storeId,
+      user_id: storeId,
       app_id: String(process.env.TIENDANUBE_APP_ID || '').trim(),
+      client_id: String(process.env.TIENDANUBE_CLIENT_ID || process.env.TIENDANUBE_APP_ID || '').trim(),
       access_token: String(tokenPayload.access_token || '').trim(),
+      scope: String(tokenPayload.scope || '').trim(),
     });
     clearStateCookie(res);
     return res.redirect(302, buildRedirect({ oauth: 'success' }));
