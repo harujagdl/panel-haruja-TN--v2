@@ -1,17 +1,106 @@
-import { syncVentasFromTiendanube } from '../../lib/api/core.js';
+import { getVentasConfig, syncVentasFromTiendanube } from '../../lib/api/core.js';
+import { createSheetsClient, getSpreadsheetMetadata } from '../../lib/google/sheetsClient.js';
 import { createTraceId, logError, logInfo, logWarn } from '../../lib/observability/logger.js';
 import { invalidateVentasFullCache } from '../../lib/ventas/cache.js';
 import { invalidateMemoryCache } from '../../lib/api/memoryCache.js';
 import { ADMIN_SESSION_REQUIRED_MESSAGE, requireAdminSession } from '../core.js';
 import {
   acquireVentasSyncLock,
+  readVentasSyncStateSafe,
   releaseVentasSyncLock,
   writeVentasSyncState,
 } from '../../lib/ventas/syncState.js';
 
+function getVentasSpreadsheetId() {
+  return String(
+    process.env.VENTAS_SHEET_ID
+    || process.env.GOOGLE_SHEETS_ID
+    || process.env.MASTER_SHEET_ID
+    || '',
+  ).trim();
+}
+
 export default async function handler(req, res) {
   const startedAt = Date.now();
   const traceId = createTraceId(req?.headers?.['x-trace-id'] || req?.headers?.['x-request-id'] || req?.body?.traceId || req?.query?.traceId);
+  if (req.method === 'GET') {
+    const env = {
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: Boolean(String(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '').trim()),
+      GOOGLE_PRIVATE_KEY: Boolean(String(process.env.GOOGLE_PRIVATE_KEY || '').trim()),
+      VENTAS_SHEET_ID: Boolean(String(process.env.VENTAS_SHEET_ID || '').trim()),
+      GOOGLE_SHEETS_ID: Boolean(String(process.env.GOOGLE_SHEETS_ID || '').trim()),
+      MASTER_SHEET_ID: Boolean(String(process.env.MASTER_SHEET_ID || '').trim()),
+      TIENDANUBE_CLIENT_ID: Boolean(String(process.env.TIENDANUBE_CLIENT_ID || '').trim()),
+      TIENDANUBE_CLIENT_SECRET: Boolean(String(process.env.TIENDANUBE_CLIENT_SECRET || '').trim()),
+      TIENDANUBE_STORE_ID: Boolean(String(process.env.TIENDANUBE_STORE_ID || '').trim()),
+      TIENDANUBE_ACCESS_TOKEN: Boolean(String(process.env.TIENDANUBE_ACCESS_TOKEN || '').trim()),
+    };
+    const checks = {
+      env: { ok: true },
+      tiendanubeConfig: { ok: false },
+      sheetsConfig: { ok: false },
+      sheetsAccess: { ok: false },
+    };
+    try {
+      const ventasConfig = await getVentasConfig();
+      const storeId = String(
+        ventasConfig?.store_id
+        || ventasConfig?.storeId
+        || process.env.TIENDANUBE_STORE_ID
+        || process.env.TIENDANUBE_USER_ID
+        || ''
+      ).trim();
+      const token = String(
+        ventasConfig?.access_token
+        || ventasConfig?.accessToken
+        || ventasConfig?.token
+        || process.env.TIENDANUBE_ACCESS_TOKEN
+        || ''
+      ).trim();
+      checks.tiendanubeConfig = {
+        ok: Boolean(storeId && token),
+        hasStoreId: Boolean(storeId),
+        hasToken: Boolean(token),
+      };
+    } catch (_) {}
+
+    const spreadsheetId = getVentasSpreadsheetId();
+    checks.sheetsConfig = {
+      ok: Boolean(
+        spreadsheetId
+        && env.GOOGLE_SERVICE_ACCOUNT_EMAIL
+        && env.GOOGLE_PRIVATE_KEY,
+      ),
+      spreadsheetId,
+    };
+
+    if (checks.sheetsConfig.ok) {
+      try {
+        const sheets = createSheetsClient({ readOnly: true });
+        const metadata = await getSpreadsheetMetadata(sheets);
+        checks.sheetsAccess = {
+          ok: Boolean(metadata?.spreadsheetId || metadata?.properties?.title),
+          title: String(metadata?.properties?.title || ''),
+        };
+      } catch (error) {
+        checks.sheetsAccess = { ok: false, error: String(error?.message || error) };
+      }
+    }
+
+    const syncState = await readVentasSyncStateSafe().catch(() => ({}));
+    return res.status(200).json({
+      ok: true,
+      traceId,
+      checks,
+      env,
+      lastSync: {
+        at: String(syncState?.last_sync_at || ''),
+        result: String(syncState?.last_sync_result || ''),
+        message: String(syncState?.last_sync_message || ''),
+      },
+    });
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed.', traceId });
   }
@@ -34,7 +123,7 @@ export default async function handler(req, res) {
   const lockOwnerId = String(lock.ownerId || '').trim();
 
   try {
-    const data = await syncVentasFromTiendanube();
+    const data = await syncVentasFromTiendanube({ traceId });
     const now = new Date().toISOString();
     await writeVentasSyncState({
       mode: 'automatico',
