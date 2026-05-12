@@ -34,7 +34,7 @@ export default async function handler(req, res) {
   const lockOwnerId = String(lock.ownerId || '').trim();
 
   try {
-    const data = await syncVentasFromTiendanube();
+    const data = await syncVentasFromTiendanube({ traceId });
     const now = new Date().toISOString();
     await writeVentasSyncState({
       mode: 'automatico',
@@ -58,9 +58,20 @@ export default async function handler(req, res) {
           if (String(key || '').startsWith('api:ventas-')) invalidateMemoryCache(key);
         });
       }
+      logInfo('ventas.cache.invalidated', { traceId });
     }
     logInfo('ventas.sync.success', { traceId, result: 'success', processed, inserted, updated, monthsRebuilt, durationMs: Date.now() - startedAt });
-    return res.status(200).json({ ok: true, ...data, traceId });
+    return res.status(200).json({
+      ok: true,
+      traceId,
+      ordersFetched: Number(data?.synced || 0),
+      ordersWritten: processed,
+      inserted,
+      updated,
+      summaryUpdated: Boolean(data?.summaryUpdated ?? (monthsRebuilt > 0 || processed === 0)),
+      months_rebuilt: data?.months_rebuilt || [],
+      lastSyncAt: now,
+    });
   } catch (error) {
     const errorCode = String(error?.code || 'SYNC_MANUAL_ERROR');
     await writeVentasSyncState({
