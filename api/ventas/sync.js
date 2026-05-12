@@ -26,6 +26,14 @@ export default async function handler(req, res) {
   }
 
   logInfo('ventas.sync.start', { traceId, result: 'started' });
+  logInfo('ventas.sync.env.check', {
+    traceId,
+    hasToken: Boolean(process.env.TIENDANUBE_ACCESS_TOKEN),
+    hasStoreId: Boolean(process.env.TIENDANUBE_STORE_ID || process.env.TIENDANUBE_USER_ID),
+    hasSheetsId: Boolean(process.env.VENTAS_SHEET_ID || process.env.GOOGLE_SHEETS_ID || process.env.MASTER_SHEET_ID),
+    hasGoogleServiceAccountEmail: Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL),
+    hasGooglePrivateKey: Boolean(process.env.GOOGLE_PRIVATE_KEY),
+  });
   const lock = await acquireVentasSyncLock();
   if (!lock.acquired) {
     logWarn('ventas.sync.skipped', { traceId, result: 'skipped', reason: 'sync_running', durationMs: Date.now() - startedAt });
@@ -34,7 +42,7 @@ export default async function handler(req, res) {
   const lockOwnerId = String(lock.ownerId || '').trim();
 
   try {
-    const data = await syncVentasFromTiendanube();
+    const data = await syncVentasFromTiendanube({ traceId });
     const now = new Date().toISOString();
     await writeVentasSyncState({
       mode: 'automatico',
@@ -60,7 +68,17 @@ export default async function handler(req, res) {
       }
     }
     logInfo('ventas.sync.success', { traceId, result: 'success', processed, inserted, updated, monthsRebuilt, durationMs: Date.now() - startedAt });
-    return res.status(200).json({ ok: true, ...data, traceId });
+    return res.status(200).json({
+      ok: true,
+      traceId,
+      ordersFetched: Number(data?.synced || 0),
+      ordersWritten: Number(data?.inserted || 0) + Number(data?.updated || 0),
+      inserted: Number(data?.inserted || 0),
+      updated: Number(data?.updated || 0),
+      summaryUpdated: monthsRebuilt > 0,
+      monthsRebuilt: Array.isArray(data?.months_rebuilt) ? data.months_rebuilt : [],
+      lastSyncAt: now,
+    });
   } catch (error) {
     const errorCode = String(error?.code || 'SYNC_MANUAL_ERROR');
     await writeVentasSyncState({
@@ -69,7 +87,13 @@ export default async function handler(req, res) {
       last_sync_message: String(error?.message || error),
     });
     logError('ventas.sync.failed', { traceId, result: 'failed', processed: 0, inserted: 0, updated: 0, monthsRebuilt: 0, durationMs: Date.now() - startedAt, errorCode });
-    return res.status(500).json({ ok: false, code: 'SYNC_MANUAL_ERROR', message: String(error?.message || error), traceId });
+    const status = Number(error?.status || 500);
+    return res.status(status >= 400 && status < 600 ? status : 500).json({
+      ok: false,
+      traceId,
+      code: errorCode,
+      message: String(error?.message || error),
+    });
   } finally {
     await releaseVentasSyncLock(lockOwnerId);
   }
