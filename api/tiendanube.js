@@ -78,7 +78,7 @@ async function connectCallback(req, res) {
       clearStateCookie(res);
       return res.redirect(302, buildRedirect({
         oauth: 'error',
-        message: 'Tiendanube devolvió token inválido al validar conexión',
+        message: 'Tiendanube devolvió token, pero la API lo rechazó. Revisar configuración de app/credenciales en Tiendanube.',
       }));
     }
 
