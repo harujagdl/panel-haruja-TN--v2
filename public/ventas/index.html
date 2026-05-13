@@ -101,6 +101,7 @@
         <button id="btnSync" class="btn btn-primary">Forzar sincronización</button>
       </div>
       <div id="status" class="status"></div>
+      <div id="syncLastSuccess" class="status">Última sincronización exitosa: —</div>
       <div class="status">Actualización automática por Tiendanube + refresh cada 60 s.</div>
       <div class="status" id="webhookMode">Modo: Automático</div>
       <div class="status" id="lastWebhookEvent">Último evento recibido: —</div>
@@ -161,6 +162,7 @@
     const btnSync = document.getElementById("btnSync");
     const btnCsvResumen = document.getElementById("btnCsvResumen");
     const btnCsvDetalle = document.getElementById("btnCsvDetalle");
+    const syncLastSuccessEl = document.getElementById("syncLastSuccess");
 
     const btnReconnectTiendanube = document.getElementById("btnReconnectTiendanube");
     let hasAdminSession = false;
@@ -174,6 +176,8 @@
     let lastFullReloadAt = 0;
     let assignmentInProgressCount = 0;
     let ventasRefetchTimer = null;
+    let ventasSyncInFlight = false;
+    let ventasSyncSlowTimer = null;
     const assignmentTimestamps = [];
     const selectedOrderIds = new Set();
 
@@ -195,6 +199,17 @@
     const setStatus = (txt = "", type = "info") => {
       statusEl.textContent = txt;
       statusEl.style.color = type === "error" ? "#b91c1c" : "#6b7280";
+    };
+
+    const setSyncUiBusy = (busy = false) => {
+      const isBusy = Boolean(busy);
+      const controls = [monthInput, searchInput, btnLoad, btnCsvResumen, btnCsvDetalle];
+      controls.forEach((control) => {
+        if (control) control.disabled = isBusy;
+      });
+      document.body.style.cursor = isBusy ? "wait" : "";
+      btnSync.style.cursor = isBusy ? "wait" : "";
+      btnSync.textContent = isBusy ? "Sincronizando… ⏳" : "Forzar sincronización";
     };
 
     const safeJson = async (res, fallbackError = "Error inesperado") => {
@@ -246,13 +261,14 @@
 
     const buildSyncErrorMessage = (error) => {
       const payload = error?.payload || {};
-      if (payload?.code === "TIENDANUBE_AUTH_ERROR") {
-        return "No fue posible autenticar con Tiendanube. Revisa la conexión OAuth o elimina variables viejas de Vercel (TIENDANUBE_ACCESS_TOKEN / TIENDANUBE_STORE_ID).";
+      const status = Number(error?.status || payload?.status || 0);
+      if (status === 401 || payload?.code === "ADMIN_SESSION_REQUIRED") {
+        return "Inicia sesión como admin para forzar sincronización.";
       }
-      if (payload?.code === "TIENDANUBE_NOT_FOUND") {
-        return "Error consultando Tiendanube: recurso no encontrado. Revisar endpoint/store_id de sincronización.";
-      }
-      return error?.message || "No fue posible actualizar con Tiendanube en este momento.";
+      const code = payload?.code || error?.code || "";
+      const message = payload?.message || error?.message || "No se pudo ejecutar sync de ventas.";
+      const traceId = payload?.traceId || error?.traceId || "";
+      return [code, message, traceId ? `traceId=${traceId}` : ""].filter(Boolean).join(" · ");
     };
 
     const formatMoney = (value) => moneyMx.format(Number(value) || 0);
@@ -493,16 +509,56 @@
     };
 
     const forceSyncVentas = async () => {
+      if (ventasSyncInFlight) {
+        setStatus('Ya hay una sincronización en proceso.', 'warning');
+        return;
+      }
+      ventasSyncInFlight = true;
+      setSyncUiBusy(true);
+      if (ventasSyncSlowTimer) clearTimeout(ventasSyncSlowTimer);
+      ventasSyncSlowTimer = setTimeout(() => {
+        if (!ventasSyncInFlight) return;
+        setStatus("Tiendanube está tardando más de lo normal...", "warning");
+      }, 8000);
       btnSync.disabled = true;
-      btnSync.textContent = 'Sincronizando...';
       try {
-        await safeJson(await fetch('/api/ventas/sync', { method: 'POST' }), 'No se pudo sincronizar ventas');
+        const response = await fetch('/api/ventas/sync', {
+          method: 'POST',
+          credentials: 'same-origin',
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) {
+          const syncError = new Error([
+            payload?.code || `HTTP ${response.status}`,
+            payload?.message || 'No se pudo ejecutar sync de ventas.',
+            payload?.traceId ? `traceId=${payload.traceId}` : '',
+          ].filter(Boolean).join(' · '));
+          syncError.payload = payload;
+          syncError.status = response.status;
+          throw syncError;
+        }
+        ventasActuales = [];
+        resumenActual = {};
+        if (ventasRefetchTimer) {
+          clearTimeout(ventasRefetchTimer);
+          ventasRefetchTimer = null;
+        }
         await loadVentasFull();
+        const successMsg = payload?.traceId ? `Sync ventas OK · traceId=${payload.traceId}` : 'Sync ventas OK.';
+        setStatus(successMsg, 'ok');
+        if (syncLastSuccessEl) {
+          syncLastSuccessEl.textContent = `Última sincronización exitosa: ${new Date().toLocaleString("es-MX")}`;
+        }
       } catch (error) {
         setStatus(`${buildSyncErrorMessage(error)} Mostrando la última información disponible.`, 'error');
       } finally {
+        if (ventasSyncSlowTimer) {
+          clearTimeout(ventasSyncSlowTimer);
+          ventasSyncSlowTimer = null;
+        }
+        ventasSyncInFlight = false;
+        setSyncUiBusy(false);
         btnSync.disabled = !hasAdminSession;
-        btnSync.textContent = 'Forzar sincronización';
       }
     };
 
