@@ -3908,6 +3908,13 @@ Errores: 0</pre>
 <div id="adminSessionExpiredModal" class="edit-modal hidden" aria-hidden="true">
   <div class="edit-modal-overlay"></div>
   <div class="edit-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="adminSessionExpiredTitle">
+    <button
+      id="adminSessionExpiredCloseBtn"
+      type="button"
+      class="icon-button"
+      aria-label="Cerrar aviso de sesión expirada"
+      style="position:absolute; top:12px; right:12px;"
+    >✕</button>
     <h3 id="adminSessionExpiredTitle" style="margin:0 0 8px;">Sesión admin expirada</h3>
     <p style="margin:0; color:#475467;">Tu sesión admin expiró. Vuelve a autenticarte con Google.</p>
     <p id="adminSessionExpiredMessage" class="status warning" style="margin:10px 0 0;"></p>
@@ -4296,6 +4303,7 @@ Errores: 0</pre>
       const correctionsResults = document.getElementById("correctionsResults");
       const adminSessionExpiredModal = document.getElementById("adminSessionExpiredModal");
       const adminSessionReauthBtn = document.getElementById("adminSessionReauthBtn");
+      const adminSessionExpiredCloseBtn = document.getElementById("adminSessionExpiredCloseBtn");
       const adminSessionExpiredMessage = document.getElementById("adminSessionExpiredMessage");
       const VIEWS = ["panel", "registro", "codigos", "meta-vs-venta", "catalogo-ia", "health"];
 
@@ -4600,6 +4608,7 @@ Errores: 0</pre>
 
       const runHealthSyncVentas = async () => {
         if (!healthSyncVentasBtn) return;
+        let actionMessage = "";
         healthSyncVentasBtn.disabled = true;
         if (healthActionResult) healthActionResult.textContent = "Sincronizando ventas...";
         try {
@@ -4613,17 +4622,33 @@ Errores: 0</pre>
             ].filter(Boolean).join(" · "));
           }
           const details = [
-            `processed=${safeString(payload?.processed) || "0"}`,
+            `processed=${safeString(
+              payload?.processed
+              ?? payload?.ordersWritten
+              ?? payload?.ordersFetched
+            ) || "0"}`,
             `inserted=${safeString(payload?.inserted) || "0"}`,
             `updated=${safeString(payload?.updated) || "0"}`,
             `skipped=${safeString(payload?.skipped) || "0"}`,
           ].join(" · ");
-          if (healthActionResult) healthActionResult.textContent = `Sync ventas OK. ${details}`;
+          actionMessage = `Sync ventas OK. ${details}`;
+          if (healthActionResult) {
+            healthActionResult.textContent = actionMessage;
+          }
         } catch (error) {
-          if (healthActionResult) healthActionResult.textContent = safeString(error?.message) || "Error al sincronizar ventas.";
+          actionMessage = safeString(error?.message) || "Error al sincronizar ventas.";
+          if (actionMessage.includes("HTTP 401")) {
+            actionMessage = "Inicia sesión como admin para forzar sincronización.";
+          }
+          if (healthActionResult) {
+            healthActionResult.textContent = actionMessage;
+          }
         } finally {
           healthSyncVentasBtn.disabled = false;
           await loadHealthDashboard();
+          if (actionMessage && healthActionResult) {
+            healthActionResult.textContent = actionMessage;
+          }
         }
       };
 
@@ -11727,6 +11752,9 @@ const createPrendaRow = (item) => {
           }
         });
       }
+      if (adminSessionExpiredCloseBtn) {
+        adminSessionExpiredCloseBtn.addEventListener("click", hideAdminSessionExpiredModal);
+      }
       if (correctionsProcessBtn) {
         correctionsProcessBtn.addEventListener("click", async () => {
           correctionsProcessBtn.disabled = true;
@@ -11746,6 +11774,9 @@ const createPrendaRow = (item) => {
         }
         if (event.key === "Escape" && correctionsModal && !correctionsModal.classList.contains("hidden")) {
           window.closeCorrectionsModal();
+        }
+        if (event.key === "Escape" && adminSessionExpiredModal && !adminSessionExpiredModal.classList.contains("hidden")) {
+          hideAdminSessionExpiredModal();
         }
       });
 
