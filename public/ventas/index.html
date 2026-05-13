@@ -482,6 +482,10 @@
         hasAdminSession = false;
       }
       if (!hasAdminSession) applyReadOnlyUi();
+      console.log('[ventas.ui.init]', {
+        hasBtnSync: Boolean(btnSync),
+        hasAdminSession,
+      });
       return hasAdminSession;
     };
 
@@ -509,6 +513,10 @@
     };
 
     const forceSyncVentas = async () => {
+      if (!hasAdminSession) {
+        setStatus('Inicia sesión como admin para forzar sincronización.', 'error');
+        return;
+      }
       if (ventasSyncInFlight) {
         setStatus('Ya hay una sincronización en proceso.', 'warning');
         return;
@@ -522,11 +530,22 @@
       }, 8000);
       btnSync.disabled = true;
       try {
+        console.log('[ventas.ui.force_sync.request]', {
+          endpoint: '/api/ventas/sync',
+          method: 'POST',
+        });
         const response = await fetch('/api/ventas/sync', {
           method: 'POST',
           credentials: 'same-origin',
         });
         const payload = await response.json().catch(() => ({}));
+        console.log('[ventas.ui.force_sync.response]', {
+          status: response.status,
+          ok: response.ok,
+          payloadOk: payload?.ok,
+          code: payload?.code || '',
+          traceId: payload?.traceId || '',
+        });
         if (!response.ok || payload?.ok === false) {
           const syncError = new Error([
             payload?.code || `HTTP ${response.status}`,
@@ -662,10 +681,13 @@
     };
 
     document.getElementById('btnLoad').addEventListener('click', () => loadVentasFull().catch((e) => setStatus(e.message || String(e), 'error')));
-    document.getElementById('btnSync').addEventListener('click', () => {
-      if (!hasAdminSession) return setStatus('Modo lectura: inicia sesión admin para sincronizar Tiendanube.');
-      return forceSyncVentas().catch((e) => setStatus(e.message || String(e), 'error'));
-    });
+    if (btnSync) {
+      btnSync.addEventListener('click', (event) => {
+        event.preventDefault();
+        console.log('[ventas.ui.force_sync.click]', { hasAdminSession, disabled: btnSync.disabled });
+        forceSyncVentas().catch((e) => setStatus(e.message || String(e), 'error'));
+      });
+    }
     btnCsvResumen.addEventListener('click', exportResumenCsv);
     btnCsvDetalle.addEventListener('click', () => exportDetalleCsv().catch((e) => {
       btnCsvDetalle.disabled = false;
