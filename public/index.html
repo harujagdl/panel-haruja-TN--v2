@@ -4610,16 +4610,23 @@ Errores: 0</pre>
         if (!healthSyncVentasBtn) return;
         let actionMessage = "";
         healthSyncVentasBtn.disabled = true;
+        healthSyncVentasBtn.dataset.loading = 'true';
+        healthSyncVentasBtn.textContent = 'Sincronizando...';
         if (healthActionResult) healthActionResult.textContent = "Sincronizando ventas...";
         try {
           const response = await fetch("/api/ventas/sync", { method: "POST", credentials: "same-origin" });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok || payload?.ok === false) {
             throw new Error([
-              payload?.code || `HTTP ${response.status}`,
-              payload?.message || "No se pudo ejecutar sync de ventas.",
-              payload?.traceId ? `traceId=${payload.traceId}` : "",
-            ].filter(Boolean).join(" · "));
+              payload?.code || '',
+              payload?.message || '',
+              payload?.details
+                ? JSON.stringify(payload.details)
+                : '',
+              payload?.traceId
+                ? `traceId=${payload.traceId}`
+                : '',
+            ].filter(Boolean).join(' · '));
           }
           const details = [
             `processed=${safeString(
@@ -4645,6 +4652,8 @@ Errores: 0</pre>
           }
         } finally {
           healthSyncVentasBtn.disabled = false;
+          healthSyncVentasBtn.dataset.loading = 'false';
+          healthSyncVentasBtn.textContent = 'Forzar sincronización';
           await loadHealthDashboard();
           if (actionMessage && healthActionResult) {
             healthActionResult.textContent = actionMessage;
