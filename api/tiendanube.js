@@ -6,7 +6,13 @@ import {
   syncVentasFromTiendanube,
 } from '../lib/api/core.js';
 import { ADMIN_SESSION_REQUIRED_MESSAGE, requireAdminSession } from './core.js';
-import { buildTiendanubeAuthUrl, clearStateCookie, exchangeCodeForToken, parseCookies } from '../lib/tiendanube/oauth.js';
+import {
+  buildTiendanubeAuthUrl,
+  clearStateCookie,
+  exchangeCodeForToken,
+  parseCookies,
+  validateTiendanubeAccessToken,
+} from '../lib/tiendanube/oauth.js';
 import { createTraceId } from '../lib/observability/logger.js';
 
 function json(res, status, payload) {
@@ -54,14 +60,36 @@ async function connectCallback(req, res) {
 
   try {
     const tokenPayload = await exchangeCodeForToken(code);
+    console.log('[tiendanube.oauth.token_payload]', {
+      hasAccessToken: Boolean(tokenPayload?.access_token),
+      accessTokenLength: String(tokenPayload?.access_token || '').length,
+      accessTokenPrefix: String(tokenPayload?.access_token || '').slice(0, 8),
+      accessTokenSuffix: String(tokenPayload?.access_token || '').slice(-4),
+      user_id: String(tokenPayload?.user_id || ''),
+      store_id: String(tokenPayload?.store_id || ''),
+      scope: String(tokenPayload?.scope || ''),
+      token_type: String(tokenPayload?.token_type || ''),
+    });
+
     const storeId = String(tokenPayload.user_id || tokenPayload.store_id || '').trim();
+    const accessToken = String(tokenPayload.access_token || '').trim();
+    const isValidToken = await validateTiendanubeAccessToken(storeId, accessToken);
+    if (!isValidToken) {
+      clearStateCookie(res);
+      return res.redirect(302, buildRedirect({
+        oauth: 'error',
+        message: 'Tiendanube devolvió token inválido al validar conexión',
+      }));
+    }
+
     await saveTiendanubeOAuthConfig({
       store_id: storeId,
       user_id: storeId,
-      app_id: String(process.env.TIENDANUBE_APP_ID || '').trim(),
+      app_id: String(process.env.TIENDANUBE_APP_ID || process.env.TIENDANUBE_CLIENT_ID || '').trim(),
       client_id: String(process.env.TIENDANUBE_CLIENT_ID || process.env.TIENDANUBE_APP_ID || '').trim(),
-      access_token: String(tokenPayload.access_token || '').trim(),
+      access_token: accessToken,
       scope: String(tokenPayload.scope || '').trim(),
+      token_validated: true,
     });
     clearStateCookie(res);
     return res.redirect(302, buildRedirect({ oauth: 'success' }));
