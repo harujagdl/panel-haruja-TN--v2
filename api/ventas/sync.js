@@ -138,9 +138,28 @@ export default async function handler(req, res) {
     const updated = Number(data?.updated || 0);
     const monthsRebuilt = Array.isArray(data?.months_rebuilt) ? data.months_rebuilt.length : 0;
     if (processed > 0) {
-      const touched = Array.isArray(data.months_rebuilt) ? data.months_rebuilt : [];
-      if (touched.length) touched.forEach((month) => invalidateVentasFullCache(month));
-      else invalidateVentasFullCache();
+      const touched = Array.isArray(data?.months_rebuilt)
+        ? data.months_rebuilt
+        : [];
+      if (touched.length) {
+        touched.forEach((month) => {
+          try {
+            invalidateVentasFullCache(month);
+          } catch (error) {
+            console.error('[ventas.cache.invalidate.failed]', {
+              message: error?.message || '',
+            });
+          }
+        });
+      } else {
+        try {
+          invalidateVentasFullCache();
+        } catch (error) {
+          console.error('[ventas.cache.invalidate.failed]', {
+            message: error?.message || '',
+          });
+        }
+      }
       const store = globalThis.__apiMemoryCacheStore;
       if (store) {
         [...store.keys()].forEach((key) => {
@@ -152,13 +171,39 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, ...data, traceId });
   } catch (error) {
     const errorCode = String(error?.code || 'SYNC_MANUAL_ERROR');
+    const errorMessage = String(error?.message || error || 'Unknown sync error');
+
     await writeVentasSyncState({
       last_sync_at: new Date().toISOString(),
       last_sync_result: 'error',
-      last_sync_message: String(error?.message || error),
+      last_sync_message: errorMessage,
     });
-    logError('ventas.sync.failed', { traceId, result: 'failed', processed: 0, inserted: 0, updated: 0, monthsRebuilt: 0, durationMs: Date.now() - startedAt, errorCode });
-    return res.status(500).json({ ok: false, code: errorCode, message: String(error?.message || error), traceId });
+
+    logError('ventas.sync.failed', {
+      traceId,
+      result: 'failed',
+      processed: 0,
+      inserted: 0,
+      updated: 0,
+      monthsRebuilt: 0,
+      durationMs: Date.now() - startedAt,
+      errorCode,
+      errorMessage,
+      stack: error?.stack || '',
+      details: error?.details || null,
+    });
+
+    return res.status(500).json({
+      ok: false,
+      code: errorCode,
+      message: errorMessage,
+      details: error?.details || null,
+      stack:
+        process.env.NODE_ENV !== 'production'
+          ? String(error?.stack || '')
+          : undefined,
+      traceId,
+    });
   } finally {
     await releaseVentasSyncLock(lockOwnerId);
   }
