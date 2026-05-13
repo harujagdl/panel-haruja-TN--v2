@@ -1195,6 +1195,13 @@ export default async function handler(req, res) {
           API_READ_CACHE_TTL_MS.ventasMiniPublic,
           () => getVentasMiniPublicSafe(month, traceId),
         );
+        console.log('[home.ventas.summary]', {
+          month: String(month || data?.month_key || ''),
+          total_mes: Number(data?.total_mes) || 0,
+          orders_count: Number(data?.orders_count) || 0,
+          sin_asignar: Number(data?.sin_asignar) || 0,
+          source: 'VentasResumen/VentasTN',
+        });
         return sendOk(res, {
           ...data,
           traceId,

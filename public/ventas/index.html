@@ -467,7 +467,7 @@
         btnReconnectTiendanube.style.display = 'none';
         btnReconnectTiendanube.setAttribute('aria-hidden', 'true');
       }
-      btnSync.disabled = true;
+      btnSync.disabled = false;
       btnSync.title = 'Inicia sesión admin para sincronizar Tiendanube.';
       btnAssignSelected.disabled = true;
       batchSellerSelect.disabled = true;
@@ -476,8 +476,20 @@
 
     const loadAdminSessionStatus = async () => {
       try {
-        const payload = await safeJson(await fetch('/api/core?action=admin-session'), 'No se pudo validar sesión admin');
-        hasAdminSession = Boolean(payload?.ok && payload?.data?.authenticated);
+        const payload = await safeJson(await fetch('/api/core?action=admin-session', { credentials: 'same-origin' }), 'No se pudo validar sesión admin');
+        console.log('[ventas.admin.session.response]', payload);
+        const expiresAtCandidate = Number(payload?.data?.expiresAt ?? payload?.expiresAt ?? 0);
+        const hasUnexpiredSession = !Number.isFinite(expiresAtCandidate) || expiresAtCandidate <= 0 || expiresAtCandidate > Date.now();
+        hasAdminSession = Boolean(
+          payload?.ok
+          && (
+            payload?.data?.authenticated
+            || payload?.authenticated
+            || payload?.data?.isAdmin
+            || payload?.isAdmin
+          )
+          && hasUnexpiredSession
+        );
       } catch (_error) {
         hasAdminSession = false;
       }
@@ -577,7 +589,7 @@
         }
         ventasSyncInFlight = false;
         setSyncUiBusy(false);
-        btnSync.disabled = !hasAdminSession;
+        btnSync.disabled = false;
       }
     };
 
@@ -682,6 +694,7 @@
 
     document.getElementById('btnLoad').addEventListener('click', () => loadVentasFull().catch((e) => setStatus(e.message || String(e), 'error')));
     if (btnSync) {
+      btnSync.disabled = false;
       btnSync.addEventListener('click', (event) => {
         event.preventDefault();
         console.log('[ventas.ui.force_sync.click]', { hasAdminSession, disabled: btnSync.disabled });

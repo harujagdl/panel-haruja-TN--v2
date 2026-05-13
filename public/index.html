@@ -4327,7 +4327,10 @@ Errores: 0</pre>
           view.classList.toggle("is-active", viewName === nextView);
         });
 
-        if (nextView === "panel") loadSystemAlertsBar();
+        if (nextView === "panel") {
+          loadSystemAlertsBar();
+          loadSalesMiniDashboard({ force: true });
+        }
         if (nextView === "registro") initRegistroView();
         if (nextView === "codigos") initDbView();
         if (nextView === "meta-vs-venta") {
@@ -6299,9 +6302,20 @@ const copyHealthTraceId = async () => {
       const salesMiniTopSeller = document.getElementById("salesMiniTopSeller");
       const salesMiniUnassigned = document.getElementById("salesMiniUnassigned");
 
+      const currentMonthKeyMx = () => {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/Mexico_City',
+          year: 'numeric',
+          month: '2-digit',
+        }).formatToParts(new Date());
+        const year = parts.find((part) => part.type === 'year')?.value || '';
+        const month = parts.find((part) => part.type === 'month')?.value || '';
+        return `${year}-${month}`;
+      };
+
       const resolveSalesContext = () => {
         const query = new URLSearchParams(window.location.search);
-        const month = query.get("month") || new Date().toISOString().slice(0, 7);
+        const month = query.get("month") || currentMonthKeyMx();
         return {month};
       };
 
@@ -6373,7 +6387,7 @@ const copyHealthTraceId = async () => {
       let salesMiniDashboardLoaded = false;
       let salesMiniDashboardCache = null;
 
-      const loadSalesMiniDashboard = async () => {
+      const loadSalesMiniDashboard = async ({ force = false } = {}) => {
         if (!salesMiniTotal || !salesMiniTopSeller || !salesMiniUnassigned) return;
         if (isEmbeddedApp) {
           setSalesMiniNeutralCard("Modo embed");
@@ -6381,12 +6395,17 @@ const copyHealthTraceId = async () => {
           return;
         }
 
+        if (force) {
+          salesMiniDashboardLoaded = false;
+          salesMiniDashboardCache = null;
+        }
+
         if (salesMiniDashboardLoading) return salesMiniDashboardCache;
-        if (salesMiniDashboardLoaded && salesMiniDashboardCache) return salesMiniDashboardCache;
+        if (!force && salesMiniDashboardLoaded && salesMiniDashboardCache) return salesMiniDashboardCache;
 
         salesMiniDashboardLoading = true;
         try {
-          const month = new Date().toISOString().slice(0, 7);
+          const { month } = resolveSalesContext();
           const response = await fetch(`/api/core?action=ventas-mini-public&month=${encodeURIComponent(month)}`, { cache: "no-store" });
           const data = await response.json().catch(() => null);
           if (!response.ok) throw new Error(`ventas-mini-public HTTP ${response.status}`);
