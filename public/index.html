@@ -6140,19 +6140,17 @@ const copyHealthTraceId = async () => {
           const apiUrl = new URL("/api/core", window.location.origin);
           // Fuente unificada: el backend de /api/core?action=meta-vs-venta devuelve ventas y metas desde Sheets.
           apiUrl.searchParams.set("action", "meta-vs-venta");
-          const metaResponse = await fetch(apiUrl.toString(), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              year: metaState.year,
-              fromMonth: startMonth,
-              toMonth: endMonth,
-              view: metaState.view
-            })
-          });
+          apiUrl.searchParams.set("year", String(metaState.year));
+          apiUrl.searchParams.set("fromMonth", String(startMonth));
+          apiUrl.searchParams.set("toMonth", String(endMonth));
+          apiUrl.searchParams.set("view", String(metaState.view || "monthly"));
+          const metaResponse = await fetch(apiUrl.toString(), { method: "GET", cache: "no-store" });
           const metaPayload = await safeJson(metaResponse);
           if (!metaResponse.ok || !metaPayload?.ok) {
-            throw new Error(metaPayload?.message || "No se pudo cargar meta vs venta.");
+            const err = new Error(metaPayload?.message || "No se pudo cargar meta vs venta.");
+            err.status = metaResponse.status;
+            err.code = metaPayload?.code || "";
+            throw err;
           }
 
           const rowsByMonth = {};
@@ -6182,6 +6180,15 @@ const copyHealthTraceId = async () => {
           renderMeta();
         } catch (error) {
           console.error("[MetaVsVenta]", error?.code, error?.message, error?.stack);
+          if (error?.status === 401 || error?.code === "ADMIN_SESSION_REQUIRED") {
+            setMetaError(null);
+            if (metaAdminMessage) {
+              metaAdminMessage.textContent = "Vista pública cargada. Inicia sesión admin para editar metas.";
+              metaAdminMessage.classList.remove("hidden", "error");
+            }
+            setMetaStatus("Vista pública cargada.", "warning");
+            return;
+          }
           setMetaError(error);
           setMetaStatus("", "error");
         } finally {
@@ -6406,7 +6413,7 @@ const copyHealthTraceId = async () => {
         salesMiniDashboardLoading = true;
         try {
           const { month } = resolveSalesContext();
-          const response = await fetch(`/api/core?action=ventas-mini-public&month=${encodeURIComponent(month)}`, { cache: "no-store" });
+          const response = await fetch(`/api/core?action=ventas-mini-public&month=${encodeURIComponent(month)}&refresh=1`, { cache: "no-store" });
           const data = await response.json().catch(() => null);
           if (!response.ok) throw new Error(`ventas-mini-public HTTP ${response.status}`);
           if (!data || data.ok === false) {
