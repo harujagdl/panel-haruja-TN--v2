@@ -6081,6 +6081,13 @@ const copyHealthTraceId = async () => {
       };
 
       const renderMeta = () => {
+        console.log("[meta.render.start]", {
+          rowsByMonth: metaState.rowsByMonth,
+          annualRow: metaState.annualRow,
+          view: metaState.view,
+          fromMonth: metaState.fromMonth,
+          toMonth: metaState.toMonth
+        });
         if (!metaMonthlyTbody) return;
         metaMonthlyView?.classList.toggle("hidden", metaState.view !== "monthly");
         metaAnnualView?.classList.toggle("hidden", metaState.view !== "annual");
@@ -6146,6 +6153,13 @@ const copyHealthTraceId = async () => {
           apiUrl.searchParams.set("view", String(metaState.view || "monthly"));
           const metaResponse = await fetch(apiUrl.toString(), { method: "GET", cache: "no-store" });
           const metaPayload = await safeJson(metaResponse);
+          console.log("[meta.front.response]", {
+            status: metaResponse.status,
+            ok: metaResponse.ok,
+            payloadOk: metaPayload?.ok,
+            rows: metaPayload?.data?.rows,
+            raw: metaPayload,
+          });
           if (!metaResponse.ok || !metaPayload?.ok) {
             const err = new Error(metaPayload?.message || "No se pudo cargar meta vs venta.");
             err.status = metaResponse.status;
@@ -6176,8 +6190,13 @@ const copyHealthTraceId = async () => {
           }
           metaState.annualRow = annualRow;
           metaState.initialized = true;
-          setMetaStatus("");
+          console.log("[meta.front.render_input]", {
+            rowsByMonth,
+            annualRow,
+            metaState
+          });
           renderMeta();
+          setMetaStatus("");
         } catch (error) {
           console.error("[MetaVsVenta]", error?.code, error?.message, error?.stack);
           if (error?.status === 401 || error?.code === "ADMIN_SESSION_REQUIRED") {
