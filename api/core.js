@@ -99,6 +99,7 @@ const PUBLIC_ACTIONS = new Set([
   'prendas-create',
   'apartados',
   'ventas-mini-public',
+  'meta-vs-venta',
   'ventas-resumen',
   'resumen',
   'ventas-detalle',
@@ -131,6 +132,9 @@ const ADMIN_ACTIONS = new Set([
   'assign-seller',
   'venta-asignar-vendedora',
   'ventas-asignar-vendedora-batch',
+  'meta-vs-venta-save',
+  'meta-vs-venta-update',
+  'meta-goals-save',
 ]);
 const APARTADOS_PUBLIC_OPS = new Set(['list', 'next', 'search', 'detail', 'historial', 'create', 'abono', 'pdf-webapp-proxy']);
 const APARTADOS_ADMIN_OPS = new Set(['update-status', 'missing-pdf', 'pdf-refresh', 'pdf-drive-test', 'cancel']);
@@ -149,6 +153,9 @@ const ADMIN_ALLOWED_METHODS_BY_ACTION = new Map([
   ['assign-seller', new Set(['POST'])],
   ['venta-asignar-vendedora', new Set(['POST'])],
   ['ventas-asignar-vendedora-batch', new Set(['POST'])],
+  ['meta-vs-venta-save', new Set(['POST'])],
+  ['meta-vs-venta-update', new Set(['POST'])],
+  ['meta-goals-save', new Set(['POST'])],
 ]);
 const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['catalogos', new Set(['GET'])],
@@ -1342,8 +1349,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'meta-vs-venta') {
-      const payload = req.method === 'POST' ? (req.body || {}) : (req.query || {});
-      return sendOk(res, await getMetaVsVentaData(payload));
+      return sendOk(res, await getMetaVsVentaData(req.query || {}));
     }
 
     if (action === 'ventas-config') return sendOk(res, await getVentasConfig());
