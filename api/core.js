@@ -120,7 +120,6 @@ const ADMIN_ACTIONS = new Set([
   'prendas-update',
   'prendas',
   'ventas-comisiones',
-  'meta-vs-venta',
   'ventas-config',
   'ventas-config-save',
   'ventas-sin-asignar',
@@ -139,7 +138,6 @@ const ADMIN_ALLOWED_METHODS_BY_ACTION = new Map([
   ['prendas-update', new Set(['POST'])],
   ['prendas', new Set(['GET', 'POST'])],
   ['ventas-comisiones', new Set(['GET', 'POST'])],
-  ['meta-vs-venta', new Set(['GET', 'POST'])],
   ['ventas-config', new Set(['GET'])],
   ['ventas-config-save', new Set(['POST'])],
   ['ventas-sin-asignar', new Set(['GET'])],
@@ -159,6 +157,7 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['prendas-generar-codigo', new Set(['POST'])],
   ['prendas-create', new Set(['POST'])],
   ['ventas-mini-public', new Set(['GET'])],
+  ['meta-vs-venta', new Set(['GET'])],
   ['ventas-resumen', new Set(['GET'])],
   ['resumen', new Set(['GET'])],
   ['ventas-detalle', new Set(['GET'])],
@@ -254,19 +253,64 @@ const isVentasDataAbsenceError = (error) => {
 
 const getVentasMiniPublicSafe = async (monthValue, traceId = '') => {
   const month = String(monthValue || '').trim();
+  console.log('[ventas.mini.debug.start]', { month });
+  const parseMoney = (value) => {
+    const parsed = Number(String(value ?? '').replace(/[$,\s]/g, '').trim());
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const isPaid = (row = {}) => {
+    const paymentStatus = String(row.payment_status || row.paymentstatus || '').trim().toLowerCase();
+    const status = String(row.status || '').trim().toLowerCase();
+    if (['cancelled', 'canceled', 'anulada', 'anulado', 'cancelada', 'cancelado'].includes(status)) return false;
+    if (!paymentStatus) return true;
+    return ['paid', 'pagado', 'approved', 'accredited'].includes(paymentStatus);
+  };
   try {
     const resumen = await getVentasResumen(month);
-    return {
+    const hasSummaryData = (Number(resumen?.total_mes) || 0) > 0 || (Number(resumen?.orders_count) || 0) > 0;
+    if (hasSummaryData) {
+      const result = {
+        ...EMPTY_VENTAS_MINI_PUBLIC,
+        ...resumen,
+        month_key: String(resumen?.month_key || month || ''),
+        total_mes: Number(resumen?.total_mes) || 0,
+        total_haru: Number(resumen?.total_haru) || 0,
+        total_vendedora: Number(resumen?.total_vendedora) || 0,
+        sin_asignar: Number(resumen?.sin_asignar) || 0,
+        orders_count: Number(resumen?.orders_count) || 0,
+        ticket_promedio: Number(resumen?.ticket_promedio) || 0,
+      };
+      console.log('[ventas.mini.debug.result]', { month, source: 'VentasResumen', total_mes: result.total_mes, orders_count: result.orders_count, sin_asignar: result.sin_asignar });
+      return result;
+    }
+
+    const rows = await getVentasDetalle(month);
+    const headers = rows.length ? Object.keys(rows[0] || {}) : [];
+    console.log('[ventas.mini.debug.rows]', { month, totalRows: rows.length, headers, sampleRow: rows[0] || [] });
+    const monthRows = rows
+      .filter((row) => String(row?.month_key || '').trim() === month)
+      .filter((row) => isPaid(row));
+    const total_mes = monthRows.reduce((acc, row) => acc + parseMoney(row?.total_pagado ?? row?.total_paid ?? row?.total ?? row?.venta ?? 0), 0);
+    const total_haru = monthRows
+      .filter((row) => String(row?.seller || row?.vendedora || '').trim().toLowerCase() === 'haru')
+      .reduce((acc, row) => acc + parseMoney(row?.total_pagado ?? row?.total_paid ?? row?.total ?? row?.venta ?? 0), 0);
+    const total_vendedora = monthRows
+      .filter((row) => String(row?.seller || row?.vendedora || '').trim().toLowerCase() === 'vendedora')
+      .reduce((acc, row) => acc + parseMoney(row?.total_pagado ?? row?.total_paid ?? row?.total ?? row?.venta ?? 0), 0);
+    const sin_asignar = monthRows.filter((row) => !String(row?.seller || row?.vendedora || '').trim()).length;
+    const orders_count = monthRows.length;
+    const result = {
       ...EMPTY_VENTAS_MINI_PUBLIC,
-      ...resumen,
-      month_key: String(resumen?.month_key || month || ''),
-      total_mes: Number(resumen?.total_mes) || 0,
-      total_haru: Number(resumen?.total_haru) || 0,
-      total_vendedora: Number(resumen?.total_vendedora) || 0,
-      sin_asignar: Number(resumen?.sin_asignar) || 0,
-      orders_count: Number(resumen?.orders_count) || 0,
-      ticket_promedio: Number(resumen?.ticket_promedio) || 0,
+      month_key: month,
+      total_mes,
+      total_haru,
+      total_vendedora,
+      sin_asignar,
+      orders_count,
+      ticket_promedio: orders_count > 0 ? total_mes / orders_count : 0,
     };
+    console.log('[ventas.mini.debug.result]', { month, source: 'VentasTN(detalle)', total_mes: result.total_mes, orders_count: result.orders_count, sin_asignar: result.sin_asignar });
+    return result;
   } catch (error) {
     if (!isVentasDataAbsenceError(error)) throw error;
     logWarn('api.core.ventas_mini_public.empty_fallback', {
@@ -1189,12 +1233,15 @@ export default async function handler(req, res) {
     if (action === 'ventas-resumen' || action === 'resumen') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasResumen(req.query?.month), API_READ_CACHE_TTL_MS.ventasResumen, () => getVentasResumen(req.query?.month)));
     if (action === 'ventas-mini-public') {
       const month = req.query?.month;
+      const forceRefresh = String(req.query?.refresh || '') === '1';
       try {
-        const data = await getOrSetMemoryCache(
-          readCacheKey.ventasMiniPublic(month),
-          API_READ_CACHE_TTL_MS.ventasMiniPublic,
-          () => getVentasMiniPublicSafe(month, traceId),
-        );
+        const data = forceRefresh
+          ? await getVentasMiniPublicSafe(month, traceId)
+          : await getOrSetMemoryCache(
+            readCacheKey.ventasMiniPublic(month),
+            API_READ_CACHE_TTL_MS.ventasMiniPublic,
+            () => getVentasMiniPublicSafe(month, traceId),
+          );
         console.log('[home.ventas.summary]', {
           month: String(month || data?.month_key || ''),
           total_mes: Number(data?.total_mes) || 0,
