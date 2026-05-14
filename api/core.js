@@ -1388,7 +1388,7 @@ export default async function handler(req, res) {
       const payload = { ok: failed === 0, total: items.length, saved, failed, results };
       return sendJson(res, failed > 0 ? 207 : 200, payload);
     }
-    if (action === 'ventas-rebuild') { const out = await rebuildVentasResumen(req.body?.month || req.query?.month); invalidateVentasReadCaches(); return sendOk(res, out); }
+    if (action === 'ventas-rebuild') { const month = req.body?.month || req.query?.month; const summary = await rebuildVentasResumen(month); invalidateVentasReadCaches(); return res.status(200).json({ ok: true, month: summary?.month_key || month || null, summary }); }
     if (action === 'ventas-repair-month-keys') { const out = await repairVentasMonthKeys({ dryRun: String(req.body?.dryRun ?? req.query?.dryRun ?? 'true').toLowerCase() !== 'false' }); invalidateVentasReadCaches(); return sendOk(res, out); }
     if (action === 'tiendanube-webhooks-register') return sendOk(res, await registerTiendanubeWebhooks(getBaseUrl(req)));
 
