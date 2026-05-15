@@ -4329,18 +4329,18 @@ Errores: 0</pre>
 
         if (nextView === "panel") {
           loadSystemAlertsBar();
-          loadSalesMiniDashboard({ force: true });
+          loadSalesMiniDashboard();
         }
         if (nextView === "registro") initRegistroView();
         if (nextView === "codigos") initDbView();
         if (nextView === "meta-vs-venta") {
-          loadMetaVsVenta({ force: true });
+          loadMetaVsVenta();
         }
         if (nextView === "catalogo-ia") {
           initCatalogoIA();
         }
         if (nextView === "health") {
-          loadHealthDashboard();
+          loadHealthDashboard({ skipAutoRecovery: true });
         }
 
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -6132,10 +6132,20 @@ const copyHealthTraceId = async () => {
         if (metaAnnualDiff) metaAnnualDiff.textContent = moneyMx.format(annualVenta - annualMeta);
       };
 
+      let metaVsVentaRequestInFlight = null;
       const loadMetaVsVenta = async ({ force = false } = {}) => {
+        if (!force && metaState.initialized && Object.keys(metaState.rowsByMonth || {}).length > 0) {
+          console.info("[quota.guard.skip]", { module: "meta-vs-venta", reason: "frontend-cache-hit" });
+          return;
+        }
+        if (metaVsVentaRequestInFlight) {
+          console.info("[quota.guard.skip]", { module: "meta-vs-venta", reason: "request-in-flight" });
+          return metaVsVentaRequestInFlight;
+        }
         if (metaState.loading) return;
         if (metaState.initialized && !force) return;
 
+        metaVsVentaRequestInFlight = (async () => {
         try {
           metaState.loading = true;
           setMetaStatus("Cargando…");
@@ -6190,6 +6200,7 @@ const copyHealthTraceId = async () => {
           }
           metaState.annualRow = annualRow;
           metaState.initialized = true;
+          console.info("[cache.hit.meta]", { source: "frontend-memory", rows: Object.keys(rowsByMonth || {}).length });
           console.log("[meta.front.render_input]", {
             rowsByMonth,
             annualRow,
@@ -6212,6 +6223,12 @@ const copyHealthTraceId = async () => {
           setMetaStatus("", "error");
         } finally {
           metaState.loading = false;
+        }
+        })();
+        try {
+          return await metaVsVentaRequestInFlight;
+        } finally {
+          metaVsVentaRequestInFlight = null;
         }
       };
 
@@ -6426,8 +6443,14 @@ const copyHealthTraceId = async () => {
           salesMiniDashboardCache = null;
         }
 
-        if (salesMiniDashboardLoading) return salesMiniDashboardCache;
-        if (!force && salesMiniDashboardLoaded && salesMiniDashboardCache) return salesMiniDashboardCache;
+        if (salesMiniDashboardLoading) {
+          console.info("[quota.guard.skip]", { module: "ventas-mini-public", reason: "request-in-flight" });
+          return salesMiniDashboardCache;
+        }
+        if (!force && salesMiniDashboardLoaded && salesMiniDashboardCache) {
+          console.info("[cache.hit.ventas]", { source: "frontend-memory" });
+          return salesMiniDashboardCache;
+        }
 
         salesMiniDashboardLoading = true;
         try {
@@ -12290,8 +12313,14 @@ document.addEventListener("keydown", (event) => {
         setupClarity();
         initMetaFilters();
         init();
-        loadSalesMiniDashboard();
-        navigateTo(getViewFromUrl(), { replace: true });
+        (async () => {
+          await loadSalesMiniDashboard();
+          const salesContext = resolveSalesContext();
+          if (isValidMonthKey(salesContext.month)) {
+            await refreshMonthData(salesContext.month, { keepFocus: true });
+          }
+          navigateTo(getViewFromUrl(), { replace: true });
+        })();
         updateDebugPanel();
       });
 
