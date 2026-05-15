@@ -185,8 +185,9 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
 
 const API_READ_CACHE_TTL_MS = {
   prendasList: 20_000,
-  ventasMiniPublic: 30_000,
-  ventasResumen: 30_000,
+  ventasMiniPublic: 120_000,
+  ventasResumen: 120_000,
+  metaVsVenta: 60_000,
   ventasDetalle: 20_000,
   ventasWebhookStatus: 15_000,
 };
@@ -195,6 +196,7 @@ const readCacheKey = {
   prendasList: () => 'api:prendas-list',
   ventasMiniPublic: (month = '') => `api:ventas-mini-public:${String(month || '').trim()}`,
   ventasResumen: (month = '') => `api:ventas-resumen:${String(month || '').trim()}`,
+  metaVsVenta: (year = '', fromMonth = '', toMonth = '', view = 'monthly') => `api:meta-vs-venta:${String(year || '').trim()}:${String(fromMonth || '').trim()}:${String(toMonth || '').trim()}:${String(view || 'monthly').trim()}`,
   ventasDetalle: (month = '', search = '') => `api:ventas-detalle:${String(month || '').trim()}:${String(search || '').trim()}`,
   ventasWebhookStatus: () => 'api:ventas-webhook-status',
 };
@@ -1349,7 +1351,10 @@ export default async function handler(req, res) {
     }
 
     if (action === 'meta-vs-venta') {
-      return sendOk(res, await getMetaVsVentaData(req.query || {}));
+      const query = req.query || {};
+      const cacheKey = readCacheKey.metaVsVenta(query?.year, query?.fromMonth, query?.toMonth, query?.view);
+      const data = await getOrSetMemoryCache(cacheKey, API_READ_CACHE_TTL_MS.metaVsVenta, () => getMetaVsVentaData(query));
+      return sendOk(res, data);
     }
 
     if (action === 'ventas-config') return sendOk(res, await getVentasConfig());
