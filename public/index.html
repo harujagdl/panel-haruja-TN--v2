@@ -12316,8 +12316,8 @@ document.addEventListener("keydown", (event) => {
         (async () => {
           await loadSalesMiniDashboard();
           const salesContext = resolveSalesContext();
-          if (isValidMonthKey(salesContext.month)) {
-            await refreshMonthData(salesContext.month, { keepFocus: true });
+          if (isValidMonthKey(salesContext.month) && typeof loadSalesMiniDashboard === "function") {
+            await loadSalesMiniDashboard({ force: true });
           }
           navigateTo(getViewFromUrl(), { replace: true });
         })();
