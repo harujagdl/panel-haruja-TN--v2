@@ -4438,14 +4438,14 @@ Errores: 0</pre>
         return rows;
       };
 
-      const loadBaseRows = async () => {
+      const loadBaseRows = async ({ forceRefresh = false } = {}) => {
         const cacheKey = "sheets";
 
-        if (prendasState.baseRows.length && prendasState.baseRowsCacheKey === cacheKey) {
+        if (!forceRefresh && prendasState.baseRows.length && prendasState.baseRowsCacheKey === cacheKey) {
           return prendasState.baseRows;
         }
 
-        const rows = await loadBaseRowsFromSheets();
+        const rows = await loadBaseRowsFromSheets({ forceRefresh });
         console.log(`[admin-table] baseRows loaded: ${Array.isArray(rows) ? rows.length : 0}`);
 
         const orderedRows = [...rows].sort(compareItemsByOrdenAsc);
@@ -7181,6 +7181,7 @@ const copyHealthTraceId = async () => {
         countToken: 0,
         metadataTotal: null,
         metadataLoaded: false,
+        lastDataVersion: null,
         headerPopover: null,
         sort: { ...DEFAULT_PRENDAS_SORT },
         adminMap: new Map(),
@@ -7932,7 +7933,8 @@ const copyHealthTraceId = async () => {
         const toolbarButtons = [
           mkBtn(adminEnabled ? "btn-admin-exit" : "btn-admin-enter", adminLabel),
           mkBtn("btn-etiquetas", "Etiquetas"),
-          mkBtn("btn-export-csv", "Exportar Excel")
+          mkBtn("btn-export-csv", "Exportar Excel"),
+          mkBtn("btn-refresh-base", "Actualizar")
         ];
         if (adminEnabled) {
           toolbarButtons.push(mkBtn("btn-export-csv-admin", "Exportar Excel Admin"));
@@ -9571,7 +9573,7 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
             prendasState.pageIndex = 0;
             renderLoadingPlaceholder();
           }
-          const baseRows = await loadBaseRows();
+          const baseRows = await loadBaseRows({ forceRefresh: reason === "manual-refresh" || reason === "auto-data-version" });
           const rows = Array.isArray(baseRows) ? baseRows : [];
           console.log("[Prendas] baseRows:", rows.length);
           const rowsAfterAll = applyAllFilters(rows);
@@ -11537,6 +11539,33 @@ const createPrendaRow = (item) => {
           }
         }
       };
+
+      const checkPrendasDataVersion = async () => {
+        try {
+          const res = await fetch(`/api/core?action=data-version&_=${Date.now()}`, { cache: "no-store" });
+          if (!res.ok) return;
+          const payload = await res.json();
+          const dataVersion = Number(payload?.data?.dataVersion ?? payload?.dataVersion ?? 0);
+          if (!Number.isFinite(dataVersion)) return;
+          if (prendasState.lastDataVersion === null) {
+            prendasState.lastDataVersion = dataVersion;
+            return;
+          }
+          if (dataVersion !== prendasState.lastDataVersion) {
+            prendasState.lastDataVersion = dataVersion;
+            if (getViewFromUrl() === "codigos") {
+              prendasState.baseRows = [];
+              prendasState.baseRowsCacheKey = null;
+              await loadPrendasPage({ reset: true, reason: "auto-data-version" });
+              setPrendasAlert("Base actualizada desde Sheets.", "success");
+            }
+          }
+        } catch (error) {
+          console.warn("[Panel TD] No se pudo verificar data-version", error);
+        }
+      };
+
+      setInterval(checkPrendasDataVersion, 20000);
       const refreshAdminSession = async () => {
         try {
           const session = await getAdminSession();
@@ -11621,6 +11650,15 @@ const createPrendaRow = (item) => {
 
         if (event.target.closest("#btn-export-csv-admin")) {
           exportExcel({ mode: "admin" });
+          return;
+        }
+
+        if (event.target.closest("#btn-refresh-base")) {
+          setPrendasAlert("Actualizando base...", "info");
+          prendasState.baseRows = [];
+          prendasState.baseRowsCacheKey = null;
+          await loadPrendasPage({ reset: true, reason: "manual-refresh" });
+          setPrendasAlert("Base actualizada.", "success");
           return;
         }
 

@@ -115,6 +115,8 @@ const PUBLIC_ACTIONS = new Set([
   'catalogo-ia-draft-archive',
   'catalogo-ia-generate',
   'catalogo-ia-export-csv',
+  'data-version',
+  'sheets-data-changed',
   // ventas-asignar-vendedora-batch requiere admin
 ]);
 const ADMIN_ACTIONS = new Set([
@@ -181,10 +183,12 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['catalogo-ia-draft-archive', new Set(['POST'])],
   ['catalogo-ia-generate', new Set(['POST'])],
   ['catalogo-ia-export-csv', new Set(['POST'])],
+  ['data-version', new Set(['GET'])],
+  ['sheets-data-changed', new Set(['POST'])],
 ]);
 
 const API_READ_CACHE_TTL_MS = {
-  prendasList: 20_000,
+  prendasList: 10_000,
   ventasMiniPublic: 120_000,
   ventasResumen: 120_000,
   metaVsVenta: 60_000,
@@ -200,6 +204,20 @@ const readCacheKey = {
   ventasDetalle: (month = '', search = '') => `api:ventas-detalle:${String(month || '').trim()}:${String(search || '').trim()}`,
   ventasWebhookStatus: () => 'api:ventas-webhook-status',
 };
+
+const setNoStoreHeaders = (res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+};
+
+const getDataVersion = () => Number(globalThis.__HARUJA_DATA_VERSION__ || 0);
+const bumpDataVersion = () => {
+  const next = Date.now();
+  globalThis.__HARUJA_DATA_VERSION__ = next;
+  return next;
+};
+
 
 
 const sendAdminSessionState = (res, {
@@ -337,6 +355,7 @@ const getVentasMiniPublicSafe = async (monthValue, traceId = '') => {
 
 const invalidatePrendasReadCaches = () => {
   invalidateMemoryCache(readCacheKey.prendasList());
+  bumpDataVersion();
 };
 
 const invalidateVentasReadCaches = () => {
@@ -1239,6 +1258,22 @@ export default async function handler(req, res) {
       console.log(`[permissions] public action allowed: ${action}`);
     }
 
+    if (action === 'data-version') {
+      setNoStoreHeaders(res);
+      return sendOk(res, { dataVersion: getDataVersion() }, traceId);
+    }
+
+    if (action === 'sheets-data-changed') {
+      if (req.method !== 'POST') return sendErr(res, 405, 'Method not allowed', null, 'METHOD_NOT_ALLOWED', traceId);
+      const secret = String(req.headers['x-haruja-webhook-secret'] || '').trim();
+      const expected = String(process.env.HARUJA_SHEETS_WEBHOOK_SECRET || '').trim();
+      if (!expected || secret !== expected) return sendErr(res, 401, 'Unauthorized', null, 'UNAUTHORIZED', traceId);
+      invalidatePrendasReadCaches();
+      const dataVersion = getDataVersion();
+      setNoStoreHeaders(res);
+      return sendOk(res, { dataVersion }, traceId);
+    }
+
     if (action === 'ventas-resumen' || action === 'resumen') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasResumen(req.query?.month), API_READ_CACHE_TTL_MS.ventasResumen, () => getVentasResumen(req.query?.month)));
     if (action === 'ventas-mini-public') {
       const month = req.query?.month;
@@ -1295,7 +1330,11 @@ export default async function handler(req, res) {
     }
 
     if (action === 'prendas-list') {
-      const rows = await getOrSetMemoryCache(readCacheKey.prendasList(), API_READ_CACHE_TTL_MS.prendasList, () => listPrendas());
+      setNoStoreHeaders(res);
+      const forceRefresh = String(req.query?.force || '') === '1';
+      const rows = forceRefresh
+        ? await listPrendas()
+        : await getOrSetMemoryCache(readCacheKey.prendasList(), API_READ_CACHE_TTL_MS.prendasList, () => listPrendas());
       console.info('[prendas-list] spreadsheetId', getSpreadsheetId?.() || process.env.GOOGLE_SHEETS_SPREADSHEET_ID);
       console.info('[prendas-list] rows count', rows.length);
       console.info('[prendas-list] first raw row', rows[0]);
