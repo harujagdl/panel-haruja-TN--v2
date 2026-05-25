@@ -51,8 +51,9 @@ const formatFechaDisplay = (value) => {
   return raw;
 };
 
-export async function loadBaseRowsFromSheets() {
-  const res = await fetch("/api/core?action=prendas-list");
+export async function loadBaseRowsFromSheets({ forceRefresh = false } = {}) {
+  const url = `/api/core?action=prendas-list${forceRefresh ? "&force=1" : ""}&_=${Date.now()}`;
+  const res = await fetch(url, { cache: "no-store" });
 
   if (!res.ok) {
     throw new Error("Error cargando datos desde Sheets");
