@@ -1335,10 +1335,15 @@ export default async function handler(req, res) {
       const rows = forceRefresh
         ? await listPrendas()
         : await getOrSetMemoryCache(readCacheKey.prendasList(), API_READ_CACHE_TTL_MS.prendasList, () => listPrendas());
-      console.info('[prendas-list] spreadsheetId', getSpreadsheetId?.() || process.env.GOOGLE_SHEETS_SPREADSHEET_ID);
-      console.info('[prendas-list] rows count', rows.length);
-      console.info('[prendas-list] first raw row', rows[0]);
-      console.info('[prendas-list] first raw keys', Object.keys(rows[0] || {}));
+      console.info('[prendas-list.debug]', {
+        spreadsheetId: getSpreadsheetId?.() || process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
+        forceRefresh,
+        rowsCount: rows.length,
+        firstRow: rows[0],
+        firstStatus: rows[0]?.Status || rows[0]?.status,
+        firstDisponibilidad: rows[0]?.Disponibilidad || rows[0]?.disponibilidad,
+        firstCodigo: rows[0]?.['Código'],
+      });
       return sendOk(res, sanitizePrendasPublicRows(rows));
     }
     if (action === 'prendas-generar-codigo') return sendOk(res, await generarCodigoPrenda(req.body || {}));

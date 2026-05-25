@@ -8795,7 +8795,9 @@ const buildLabelZpl = ({ sku, price, qty = 1 }) => {
         const lastInventorySyncAt = data.lastInventorySyncAt ?? null;
         const lastInventorySyncAtText = safeString(data.lastInventorySyncAtText).trim();
         const updatedAt = data.updatedAt ?? null;
-        const tn = safeString(data.tnMatch).trim().toUpperCase() === "OK" ? "OK" : "N/A";
+        const tn = safeString(
+          data.tn ?? data.TN ?? data["TN"] ?? data.tnMatch ?? ""
+        ).trim() || "N/A";
         const descripcionLower = descripcion.toLowerCase();
         const codigoUpper = codigo.toUpperCase();
         const _searchKey = `${codigo} ${descripcion}`.toLowerCase().trim();
@@ -9693,8 +9695,9 @@ const createPrendaRow = (item) => {
         const rowDisp = item.manualOverride
           ? (item.disponibilidadManual || item.disponibilidadCanon || item.disponibilidad)
           : (item.disponibilidadCanon || item.disponibilidad);
-        const tnValue = safeString(item.tnMatch).trim().toUpperCase() === "OK" ? "OK" : "N/A";
-        const tnBadgeClass = tnValue === "OK" ? "badge-ok" : "badge-na";
+        const tnValueRaw = safeString(item.tn || item.TN || "").trim();
+        const tnValue = tnValueRaw || "N/A";
+        const tnBadgeClass = tnValueRaw && tnValueRaw.toUpperCase() !== "N/A" ? "badge-ok" : "badge-na";
         const tipoParts = resolveDisplayParts(item, "tipo");
         const proveedorParts = resolveDisplayParts(item, "proveedor");
         const colorParts = resolveDisplayParts(item, "color");

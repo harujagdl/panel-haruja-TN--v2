@@ -91,7 +91,7 @@ export async function loadBaseRowsFromSheets({ forceRefresh = false } = {}) {
       talla: row["Talla"] || "",
       proveedor: proveedorValue,
 
-      tn: row["TN"] || "",
+      tn: row.TN || row.tn || row["TN"] || "",
       status: row["Status"] || "",
       statusCanon: row["Status"] || "",
       disponibilidad: row["Disponibilidad"] || "",
