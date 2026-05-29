@@ -221,10 +221,18 @@
 
     const syncVentas = async () => {
       setStatus("Sincronizando con Tiendanube...");
-      const res = await fetch("/api/tiendanube?action=sync", { method: "POST" });
+      const res = await fetch("/api/core?action=ventas-sync", { method: "POST", credentials: "same-origin" });
       const payload = await safeJson(res, "No se pudo sincronizar ventas");
       if (!payload?.ok) throw new Error(payload?.message || "No se pudo sincronizar ventas");
-      const data = payload.data || {};
+      const data = payload.data || payload || {};
+      if (data.status === "running") {
+        setStatus("Ya hay una sincronización en curso.");
+        return;
+      }
+      if (data.status === "paused" || data.reason === "sheets_quota_cooldown") {
+        setStatus("Google Sheets está limitando temporalmente las lecturas. Espera 2-5 minutos y vuelve a intentar.", "error");
+        return;
+      }
       setStatus(`Sync OK: ${data.synced || 0} pedidos (${data.inserted || 0} nuevos / ${data.updated || 0} actualizados).`);
       await loadData();
     };

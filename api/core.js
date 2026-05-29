@@ -48,8 +48,9 @@ import {
 } from '../lib/api/catalogoIA.js';
 import { AdminSessionConfigError, getAdminSessionSecret } from '../lib/security/adminSessionConfig.js';
 import { createTraceId, getErrorMessage, logError, logInfo, logWarn } from '../lib/observability/logger.js';
-import { createSheetsClient, getSpreadsheetId, getSpreadsheetMetadata } from '../lib/google/sheetsClient.js';
-import { readVentasSyncState } from '../lib/ventas/syncState.js';
+import { getSpreadsheetId } from '../lib/google/sheetsClient.js';
+import { readVentasSyncStateSafe } from '../lib/ventas/syncState.js';
+import { runVentasPublicSync } from '../lib/ventas/syncRunner.js';
 import { getOrSetMemoryCache, invalidateMemoryCache } from '../lib/api/memoryCache.js';
 
 export const sendOk = (res, data, traceId = '') => res.status(200).json({ ok: true, data, ...(traceId ? { traceId } : {}) });
@@ -105,6 +106,7 @@ const PUBLIC_ACTIONS = new Set([
   'ventas-detalle',
   'detalle',
   'ventas-webhook-status',
+  'ventas-sync',
   'admin-session',
   'catalogo-ia-ensure-sheets',
   'catalogo-ia-base-products',
@@ -172,6 +174,7 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['ventas-detalle', new Set(['GET'])],
   ['detalle', new Set(['GET'])],
   ['ventas-webhook-status', new Set(['GET'])],
+  ['ventas-sync', new Set(['POST'])],
   ['admin-session', new Set(['GET', 'POST'])],
   ['apartados', new Set(['GET', 'POST'])],
   ['catalogo-ia-ensure-sheets', new Set(['POST'])],
@@ -1096,47 +1099,46 @@ const foldHealthStatus = (checks = {}) => {
 const runHealthChecks = async (traceId = '') => {
   const sheets = await timedHealthCheck('sheets', traceId, async () => {
     const spreadsheetId = getSpreadsheetId();
-    if (!spreadsheetId) return { status: 'error', message: 'Falta SHEET_ID.' };
-    const client = createSheetsClient({ readOnly: true });
-    const metadata = await getSpreadsheetMetadata(client);
-    const titles = Array.isArray(metadata?.sheets)
-      ? metadata.sheets.map((sheet) => String(sheet?.properties?.title || '').trim()).filter(Boolean)
-      : [];
-    return { status: 'ok', spreadsheetConfigured: true, sheetCount: titles.length, sampleSheets: titles.slice(0, 5) };
+    const serviceAccountConfigured = Boolean(String(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '').trim() && String(process.env.GOOGLE_PRIVATE_KEY || '').trim());
+    if (!spreadsheetId) return { status: 'error', message: 'Falta SHEET_ID.', spreadsheetConfigured: false, serviceAccountConfigured };
+    if (!serviceAccountConfigured) return { status: 'warning', message: 'Credenciales de Google Sheets incompletas.', spreadsheetConfigured: true, serviceAccountConfigured: false };
+    return { status: 'ok', message: 'Configuración de Sheets presente; health no ejecuta lecturas pesadas.', spreadsheetConfigured: true, serviceAccountConfigured: true };
   });
 
+  const syncState = await timedHealthCheck('ventasSyncState', traceId, async () => readVentasSyncStateSafe());
+  const state = syncState?.status === 'error' ? {} : (syncState || {});
+
   const tiendanube = await timedHealthCheck('tiendanube', traceId, async () => {
-    const config = await getVentasConfig();
-    const appId = String(config?.client_id || config?.app_id || process.env.TIENDANUBE_CLIENT_ID || process.env.TIENDANUBE_APP_ID || '').trim();
+    const appId = String(process.env.TIENDANUBE_CLIENT_ID || process.env.TIENDANUBE_APP_ID || '').trim();
     const clientSecret = String(process.env.TIENDANUBE_CLIENT_SECRET || '').trim();
     const redirectUri = String(process.env.TIENDANUBE_REDIRECT_URI || '').trim();
-    const storeId = String(config?.store_id || config?.user_id || '').trim();
-    const accessTokenConfigured = Boolean(String(config?.access_token || '').trim());
+    const envStoreId = String(process.env.TIENDANUBE_STORE_ID || process.env.TIENDANUBE_USER_ID || '').trim();
+    const envToken = String(process.env.TIENDANUBE_ACCESS_TOKEN || '').trim();
     const missing = [];
     if (!appId) missing.push('app_id');
     if (!clientSecret) missing.push('client_secret');
     if (!redirectUri) missing.push('redirect_uri');
-    if (!storeId) missing.push('store_id');
-    if (!accessTokenConfigured) missing.push('access_token');
+    if (!envStoreId) missing.push('store_id');
+    if (!envToken) missing.push('access_token');
     if (missing.length) {
       return {
-        status: 'warning',
-        message: `Configuración incompleta (${missing.join(', ')}).`,
+        status: missing.length >= 4 ? 'warning' : 'ok',
+        message: missing.length >= 4 ? `Configuración env incompleta (${missing.join(', ')}). Puede existir en VentasConfig; health no lee esa hoja.` : `Configuración env parcial (${missing.join(', ')}); puede completarse desde VentasConfig.`,
         hasAppId: Boolean(appId),
         hasClientSecret: Boolean(clientSecret),
         hasRedirectUri: Boolean(redirectUri),
-        hasAccessTokenFromConfig: accessTokenConfigured,
-        hasStoreIdFromConfig: Boolean(storeId),
+        hasAccessTokenFromEnv: Boolean(envToken),
+        hasStoreIdFromEnv: Boolean(envStoreId),
       };
     }
     return {
       status: 'ok',
-      message: 'Configuración OAuth lista.',
+      message: 'Configuración OAuth de entorno lista.',
       hasAppId: true,
       hasClientSecret: true,
       hasRedirectUri: true,
-      hasAccessTokenFromConfig: true,
-      hasStoreIdFromConfig: true,
+      hasAccessTokenFromEnv: true,
+      hasStoreIdFromEnv: true,
     };
   });
 
@@ -1151,14 +1153,19 @@ const runHealthChecks = async (traceId = '') => {
   });
 
   const ventasSync = await timedHealthCheck('ventasSync', traceId, async () => {
-    const state = await readVentasSyncState();
+    if (syncState?.status === 'error') {
+      return { status: 'warning', message: 'No se pudo leer estado de sync; se evita retry pesado en health.' };
+    }
     const lastResult = String(state?.last_sync_result || '').trim().toLowerCase();
-    const status = !lastResult ? 'warning' : (lastResult.includes('ok') || lastResult.includes('success') ? 'ok' : 'error');
+    const lastMessage = String(state?.last_sync_message || '').trim();
+    const quotaLimited = lastMessage.toLowerCase().includes('quota') || lastMessage.toLowerCase().includes('limitando');
+    const status = !lastResult ? 'warning' : (lastResult.includes('ok') || lastResult.includes('success') ? 'ok' : (quotaLimited ? 'warning' : 'error'));
     return {
       status,
+      message: quotaLimited ? 'Google Sheets está limitando lecturas; espera unos minutos antes de reintentar.' : undefined,
       last_sync_at: String(state?.last_sync_at || '').trim() || null,
       last_sync_result: String(state?.last_sync_result || '').trim() || null,
-      last_sync_message: String(state?.last_sync_message || '').trim() || null,
+      last_sync_message: lastMessage || null,
     };
   });
 
@@ -1316,6 +1323,7 @@ export default async function handler(req, res) {
     }
     if (action === 'ventas-detalle' || action === 'detalle') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasDetalle(req.query?.month, req.query?.q || req.query?.search), API_READ_CACHE_TTL_MS.ventasDetalle, () => getVentasDetalle(req.query?.month, req.query?.q || req.query?.search)));
     if (action === 'ventas-webhook-status') return sendOk(res, await getOrSetMemoryCache(readCacheKey.ventasWebhookStatus(), API_READ_CACHE_TTL_MS.ventasWebhookStatus, () => getLatestWebhookEvent()));
+    if (action === 'ventas-sync') return sendOk(res, await runVentasPublicSync({ traceId, source: 'public' }));
     if (action === 'catalogos') return sendOk(res, await getCatalogosCached());
     if (action === 'health') {
       logInfo('health.start', { traceId });

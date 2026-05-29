@@ -4617,7 +4617,7 @@ Errores: 0</pre>
         healthSyncVentasBtn.textContent = 'Sincronizando...';
         if (healthActionResult) healthActionResult.textContent = "Sincronizando ventas...";
         try {
-          const response = await fetch("/api/ventas/sync", { method: "POST", credentials: "same-origin" });
+          const response = await fetch("/api/core?action=ventas-sync", { method: "POST", credentials: "same-origin" });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok || payload?.ok === false) {
             throw new Error([
@@ -4631,24 +4631,37 @@ Errores: 0</pre>
                 : '',
             ].filter(Boolean).join(' · '));
           }
-          const details = [
-            `processed=${safeString(
-              payload?.processed
-              ?? payload?.ordersWritten
-              ?? payload?.ordersFetched
-            ) || "0"}`,
-            `inserted=${safeString(payload?.inserted) || "0"}`,
-            `updated=${safeString(payload?.updated) || "0"}`,
-            `skipped=${safeString(payload?.skipped) || "0"}`,
-          ].join(" · ");
-          actionMessage = `Sync ventas OK. ${details}`;
+          const data = payload?.data || payload || {};
+          const syncStatus = safeString(data?.status || payload?.status || "").toLowerCase();
+          if (syncStatus === "running") {
+            actionMessage = "Ya hay una sincronización en curso.";
+          } else if (syncStatus === "paused" || data?.reason === "sheets_quota_cooldown") {
+            actionMessage = "Google Sheets está limitando temporalmente las lecturas. Espera 2-5 minutos y vuelve a intentar.";
+          } else if (syncStatus === "cached") {
+            actionMessage = "Sync reciente: mostrando datos cacheados para proteger la cuota de Google Sheets.";
+          } else {
+            const details = [
+              `processed=${safeString(
+                data?.processed
+                ?? data?.ordersWritten
+                ?? data?.ordersFetched
+              ) || "0"}`,
+              `inserted=${safeString(data?.inserted) || "0"}`,
+              `updated=${safeString(data?.updated) || "0"}`,
+              `skipped=${safeString(data?.skipped) || "0"}`,
+            ].join(" · ");
+            actionMessage = `Sync ventas OK. ${details}`;
+          }
           if (healthActionResult) {
             healthActionResult.textContent = actionMessage;
           }
         } catch (error) {
           actionMessage = safeString(error?.message) || "Error al sincronizar ventas.";
           if (actionMessage.includes("HTTP 401")) {
-            actionMessage = "Inicia sesión como admin para forzar sincronización.";
+            actionMessage = "La sincronización pública no debería pedir admin. Recarga e intenta de nuevo.";
+          }
+          if (actionMessage.toLowerCase().includes("quota") || actionMessage.toLowerCase().includes("limitando")) {
+            actionMessage = "Google Sheets está limitando temporalmente las lecturas. Espera 2-5 minutos y vuelve a intentar.";
           }
           if (healthActionResult) {
             healthActionResult.textContent = actionMessage;

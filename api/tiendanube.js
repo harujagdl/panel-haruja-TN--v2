@@ -3,8 +3,8 @@ import {
   fetchTiendanubeVariantById,
   getVentasConfig,
   saveTiendanubeOAuthConfig,
-  syncVentasFromTiendanube,
 } from '../lib/api/core.js';
+import { syncVentasFromTiendanube } from '../lib/ventas/tiendanubeSync.js';
 import { ADMIN_SESSION_REQUIRED_MESSAGE, requireAdminSession } from './core.js';
 import {
   buildTiendanubeAuthUrl,

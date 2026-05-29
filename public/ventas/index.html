@@ -143,7 +143,7 @@
 
   <script>
     const STORE_ID = "6432936";
-    const AUTO_SYNC_MS = 120000;
+    const AUTO_SYNC_MS = 5 * 60 * 1000;
     const FULL_RELOAD_MS = 180000;
     const moneyMx = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 });
 
@@ -263,10 +263,13 @@
       const payload = error?.payload || {};
       const status = Number(error?.status || payload?.status || 0);
       if (status === 401 || payload?.code === "ADMIN_SESSION_REQUIRED") {
-        return "Inicia sesión como admin para forzar sincronización.";
+        return "La sincronización pública no debería pedir admin. Recarga e intenta de nuevo.";
       }
       const code = payload?.code || error?.code || "";
-      const message = payload?.message || error?.message || "No se pudo ejecutar sync de ventas.";
+      let message = payload?.message || error?.message || "No se pudo ejecutar sync de ventas.";
+      if (payload?.code === "SHEETS_QUOTA_EXCEEDED" || payload?.reason === "sheets_quota_cooldown" || String(message).toLowerCase().includes("quota") || String(message).toLowerCase().includes("limitando")) {
+        message = "Google Sheets está limitando temporalmente las lecturas. Espera 2-5 minutos y vuelve a intentar.";
+      }
       const traceId = payload?.traceId || error?.traceId || "";
       return [code, message, traceId ? `traceId=${traceId}` : ""].filter(Boolean).join(" · ");
     };
@@ -439,22 +442,27 @@
       if (assignmentInProgressCount > 0) return;
       let payload;
       try {
-        payload = await safeJson(await fetch('/api/ventas/sync-auto', { method: 'POST' }), 'No se pudo ejecutar sync automática');
+        payload = await safeJson(await fetch('/api/core?action=ventas-sync', { method: 'POST', credentials: 'same-origin' }), 'No se pudo ejecutar sync automática');
       } catch (error) {
         setStatus(`${buildSyncErrorMessage(error)} Mostrando la última información disponible.`, 'error');
         return;
       }
-      if (payload?.skipped) return;
-      if (payload?.ok === false) {
-        setStatus(`${buildSyncErrorMessage({ payload })} Mostrando la última información disponible.`, 'error');
+      const data = payload?.data || payload || {};
+      if (data?.status === 'paused' || data?.reason === 'sheets_quota_cooldown') {
+        setStatus('Google Sheets está limitando temporalmente las lecturas. Espera 2-5 minutos y vuelve a intentar.', 'warning');
         return;
       }
-      if (payload?.changed) {
+      if (data?.skipped || data?.status === 'cached' || data?.status === 'running') return;
+      if (payload?.ok === false || data?.ok === false) {
+        setStatus(`${buildSyncErrorMessage({ payload: data })} Mostrando la última información disponible.`, 'error');
+        return;
+      }
+      if (data?.changed || Number(data?.processed || 0) > 0) {
         await loadVentasFull();
         return;
       }
-      if (payload?.status) {
-        renderWebhookStatus({ ...(payload.status || {}), mode: 'automatico' });
+      if (data?.status) {
+        renderWebhookStatus({ ...(data || {}), mode: 'automatico' });
       }
       if (Date.now() - lastFullReloadAt >= FULL_RELOAD_MS) {
         await loadVentasFull();
@@ -468,10 +476,10 @@
         btnReconnectTiendanube.setAttribute('aria-hidden', 'true');
       }
       btnSync.disabled = false;
-      btnSync.title = 'Inicia sesión admin para sincronizar Tiendanube.';
+      btnSync.title = 'Sincronizar ventas con Tiendanube/Sheets.';
       btnAssignSelected.disabled = true;
       batchSellerSelect.disabled = true;
-      setStatus('Modo lectura: inicia sesión admin para sincronizar Tiendanube.');
+      setStatus('Modo lectura: puedes sincronizar ventas; las asignaciones requieren admin.');
     };
 
     const loadAdminSessionStatus = async () => {
@@ -525,10 +533,6 @@
     };
 
     const forceSyncVentas = async () => {
-      if (!hasAdminSession) {
-        setStatus('Inicia sesión como admin para forzar sincronización.', 'error');
-        return;
-      }
       if (ventasSyncInFlight) {
         setStatus('Ya hay una sincronización en proceso.', 'warning');
         return;
@@ -543,10 +547,10 @@
       btnSync.disabled = true;
       try {
         console.log('[ventas.ui.force_sync.request]', {
-          endpoint: '/api/ventas/sync',
+          endpoint: '/api/core?action=ventas-sync',
           method: 'POST',
         });
-        const response = await fetch('/api/ventas/sync', {
+        const response = await fetch('/api/core?action=ventas-sync', {
           method: 'POST',
           credentials: 'same-origin',
         });
@@ -568,6 +572,15 @@
           syncError.status = response.status;
           throw syncError;
         }
+        const syncStatus = String(payload?.data?.status || payload?.status || '').toLowerCase();
+        if (syncStatus === 'running') {
+          setStatus('Ya hay una sincronización en curso.', 'warning');
+          return;
+        }
+        if (syncStatus === 'paused' || payload?.data?.reason === 'sheets_quota_cooldown' || payload?.reason === 'sheets_quota_cooldown') {
+          setStatus('Google Sheets está limitando temporalmente las lecturas. Espera 2-5 minutos y vuelve a intentar.', 'warning');
+          return;
+        }
         ventasActuales = [];
         resumenActual = {};
         if (ventasRefetchTimer) {
@@ -575,7 +588,10 @@
           ventasRefetchTimer = null;
         }
         await loadVentasFull();
-        const successMsg = payload?.traceId ? `Sync ventas OK · traceId=${payload.traceId}` : 'Sync ventas OK.';
+        const data = payload?.data || payload || {};
+        const successMsg = data?.status === 'cached'
+          ? 'Sync reciente: mostrando datos cacheados para proteger la cuota de Google Sheets.'
+          : (payload?.traceId || data?.traceId ? `Sync ventas OK · traceId=${payload?.traceId || data?.traceId}` : 'Sync ventas OK.');
         setStatus(successMsg, 'ok');
         if (syncLastSuccessEl) {
           syncLastSuccessEl.textContent = `Última sincronización exitosa: ${new Date().toLocaleString("es-MX")}`;
@@ -825,7 +841,7 @@
         await loadAdminSessionStatus();
         if (hasAdminSession) await refreshTiendanubeOAuthStatus();
         await loadVentasFull();
-        if (hasAdminSession) setInterval(() => autoSyncVentas().catch((e) => setStatus(e.message || String(e), 'error')), AUTO_SYNC_MS);
+        setInterval(() => autoSyncVentas().catch((e) => setStatus(e.message || String(e), 'error')), AUTO_SYNC_MS);
       } catch (e) {
         setStatus(e.message || String(e), 'error');
       }
