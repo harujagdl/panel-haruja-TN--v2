@@ -478,7 +478,13 @@
       btnSync.disabled = false;
       btnSync.title = 'Sincronizar ventas con Tiendanube/Sheets.';
       batchSellerSelect.disabled = false;
-      updateBatchButtonState();
+      if (typeof updateBatchButtonState === 'function') {
+        updateBatchButtonState();
+      } else if (btnAssignSelected) {
+        const hasSeller = Boolean(batchSellerSelect?.value);
+        const hasCheckedRows = document.querySelectorAll('.venta-check:checked').length > 0;
+        btnAssignSelected.disabled = !(hasSeller && hasCheckedRows);
+      }
       setStatus('Modo public: puedes asignar vendedora; acciones admin siguen protegidas.');
     };
 
