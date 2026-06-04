@@ -119,7 +119,8 @@ const PUBLIC_ACTIONS = new Set([
   'catalogo-ia-export-csv',
   'data-version',
   'sheets-data-changed',
-  // ventas-asignar-vendedora-batch requiere admin
+  'venta-asignar-vendedora',
+  'ventas-asignar-vendedora-batch',
 ]);
 const ADMIN_ACTIONS = new Set([
   'prendas-update',
@@ -134,8 +135,6 @@ const ADMIN_ACTIONS = new Set([
   'tiendanube-webhooks-register',
   'health',
   'assign-seller',
-  'venta-asignar-vendedora',
-  'ventas-asignar-vendedora-batch',
   'meta-vs-venta-save',
   'meta-vs-venta-update',
   'meta-goals-save',
@@ -155,8 +154,6 @@ const ADMIN_ALLOWED_METHODS_BY_ACTION = new Map([
   ['tiendanube-webhooks-register', new Set(['POST'])],
   ['health', new Set(['GET'])],
   ['assign-seller', new Set(['POST'])],
-  ['venta-asignar-vendedora', new Set(['POST'])],
-  ['ventas-asignar-vendedora-batch', new Set(['POST'])],
   ['meta-vs-venta-save', new Set(['POST'])],
   ['meta-vs-venta-update', new Set(['POST'])],
   ['meta-goals-save', new Set(['POST'])],
@@ -188,6 +185,8 @@ const PUBLIC_ALLOWED_METHODS_BY_ACTION = new Map([
   ['catalogo-ia-export-csv', new Set(['POST'])],
   ['data-version', new Set(['GET'])],
   ['sheets-data-changed', new Set(['POST'])],
+  ['venta-asignar-vendedora', new Set(['POST'])],
+  ['ventas-asignar-vendedora-batch', new Set(['POST'])],
 ]);
 
 const API_READ_CACHE_TTL_MS = {
@@ -206,6 +205,64 @@ const readCacheKey = {
   metaVsVenta: (year = '', fromMonth = '', toMonth = '', view = 'monthly') => `api:meta-vs-venta:${String(year || '').trim()}:${String(fromMonth || '').trim()}:${String(toMonth || '').trim()}:${String(view || 'monthly').trim()}`,
   ventasDetalle: (month = '', search = '') => `api:ventas-detalle:${String(month || '').trim()}:${String(search || '').trim()}`,
   ventasWebhookStatus: () => 'api:ventas-webhook-status',
+};
+
+
+const PUBLIC_ASSIGNMENT_TOP_LEVEL_FIELDS = new Set(['order_id', 'orderId', 'seller', 'vendedora', 'source']);
+const PUBLIC_ASSIGNMENT_BATCH_FIELDS = new Set(['items', 'source']);
+const PUBLIC_ASSIGNMENT_ITEM_FIELDS = new Set(['order_id', 'orderId', 'seller', 'vendedora']);
+const PUBLIC_ASSIGNMENT_SELLERS = new Set(['Haru', 'Vendedora']);
+
+const normalizePublicAssignmentSeller = (value) => {
+  const raw = String(value || '').trim();
+  const lower = raw.toLowerCase();
+  if (lower === 'haru') return 'Haru';
+  if (lower === 'vendedora') return 'Vendedora';
+  return '';
+};
+
+const assertOnlyAllowedFields = (payload = {}, allowedFields = new Set(), context = 'payload') => {
+  const unexpectedFields = Object.keys(payload || {}).filter((key) => !allowedFields.has(key));
+  if (unexpectedFields.length) {
+    throw new Error(`${context} contiene campos no permitidos: ${unexpectedFields.join(', ')}`);
+  }
+};
+
+const parsePublicAssignmentItem = (payload = {}, context = 'payload') => {
+  assertOnlyAllowedFields(payload, PUBLIC_ASSIGNMENT_ITEM_FIELDS, context);
+  const orderId = String(payload.order_id || payload.orderId || '').trim();
+  const seller = normalizePublicAssignmentSeller(payload.seller ?? payload.vendedora ?? '');
+  if (!orderId) throw new Error('order_id es requerido');
+  if (!PUBLIC_ASSIGNMENT_SELLERS.has(seller)) {
+    throw new Error('Vendedora inválida. Usa Haru o Vendedora');
+  }
+  return { order_id: orderId, seller };
+};
+
+const parsePublicSingleAssignmentPayload = (payload = {}) => {
+  assertOnlyAllowedFields(payload, PUBLIC_ASSIGNMENT_TOP_LEVEL_FIELDS, 'payload');
+  const item = {
+    order_id: payload.order_id,
+    orderId: payload.orderId,
+    seller: payload.seller,
+    vendedora: payload.vendedora,
+  };
+  return {
+    ...parsePublicAssignmentItem(item, 'payload'),
+    source: String(payload.source || 'ventas_html_public').trim() || 'ventas_html_public',
+  };
+};
+
+const parsePublicBatchAssignmentPayload = (payload = {}) => {
+  assertOnlyAllowedFields(payload, PUBLIC_ASSIGNMENT_BATCH_FIELDS, 'payload');
+  const items = Array.isArray(payload.items) ? payload.items : null;
+  if (!items) throw new Error('items debe ser un array');
+  if (!items.length) throw new Error('items no puede estar vacío');
+  if (items.length > 50) throw new Error('Máximo 50 asignaciones por request');
+  return {
+    items: items.map((item, index) => parsePublicAssignmentItem(item, `items[${index}]`)),
+    source: String(payload.source || 'ventas_html_batch_public').trim() || 'ventas_html_batch_public',
+  };
 };
 
 const setNoStoreHeaders = (res) => {
@@ -1412,38 +1469,30 @@ export default async function handler(req, res) {
     if (action === 'ventas-config') return sendOk(res, await getVentasConfig());
     if (action === 'ventas-config-save') { const out = await saveVentasConfig({ ...(req.body || {}), traceId }); invalidateVentasReadCaches(); return sendOk(res, out); }
     if (action === 'ventas-sin-asignar') return sendOk(res, await getVentasSinAsignar(req.query?.month));
-    if (action === 'assign-seller' || action === 'venta-asignar-vendedora') { const out = await assignVentaSeller({ ...(req.body || {}), traceId }); invalidateVentasReadCaches(); return sendOk(res, out); }
+    if (action === 'assign-seller') { const out = await assignVentaSeller({ ...(req.body || {}), traceId }); invalidateVentasReadCaches(); return sendOk(res, out); }
+    if (action === 'venta-asignar-vendedora') {
+      const assignment = parsePublicSingleAssignmentPayload(req.body || {});
+      const out = await assignVentaSeller({ ...assignment, traceId });
+      invalidateVentasReadCaches();
+      return sendOk(res, out);
+    }
     if (action === 'ventas-asignar-vendedora-batch') {
-      const items = Array.isArray(req.body?.items) ? req.body.items : null;
-      const source = String(req.body?.source || 'ventas_html_batch').trim() || 'ventas_html_batch';
-      if (!items) return sendError(res, 400, 'items debe ser un array');
-      if (!items.length) return sendError(res, 400, 'items no puede estar vacío');
-      if (items.length > 50) return sendError(res, 400, 'Máximo 50 asignaciones por request');
+      const { items, source } = parsePublicBatchAssignmentPayload(req.body || {});
       const results = [];
       let saved = 0;
-      for (const rawItem of items) {
-        const orderId = String(rawItem?.order_id || '').trim();
-        const seller = String(rawItem?.seller || '').trim();
-        if (!orderId) {
-          results.push({ order_id: orderId, seller, ok: false, message: 'order_id es requerido' });
-          continue;
-        }
-        if (seller !== 'Haru' && seller !== 'Vendedora') {
-          results.push({ order_id: orderId, seller, ok: false, message: 'seller inválida. Usa Haru o Vendedora' });
-          continue;
-        }
+      for (const item of items) {
         try {
-          await assignVentaSeller({ order_id: orderId, seller, source, traceId });
+          await assignVentaSeller({ ...item, source, traceId });
           saved += 1;
-          results.push({ order_id: orderId, seller, ok: true });
+          results.push({ order_id: item.order_id, seller: item.seller, ok: true });
         } catch (error) {
-          results.push({ order_id: orderId, seller, ok: false, message: error?.message || 'No se pudo asignar vendedora' });
+          results.push({ order_id: item.order_id, seller: item.seller, ok: false, message: error?.message || 'No se pudo asignar vendedora' });
         }
       }
       invalidateVentasReadCaches();
       const failed = items.length - saved;
       const payload = { ok: failed === 0, total: items.length, saved, failed, results };
-      return sendJson(res, failed > 0 ? 207 : 200, payload);
+      return res.status(failed > 0 ? 207 : 200).json(payload);
     }
     if (action === 'ventas-rebuild') { const month = req.body?.month || req.query?.month; const summary = await rebuildVentasResumen(month); invalidateVentasReadCaches(); return res.status(200).json({ ok: true, month: summary?.month_key || month || null, summary }); }
     if (action === 'ventas-repair-month-keys') { const out = await repairVentasMonthKeys({ dryRun: String(req.body?.dryRun ?? req.query?.dryRun ?? 'true').toLowerCase() !== 'false' }); invalidateVentasReadCaches(); return sendOk(res, out); }
@@ -1467,6 +1516,9 @@ export default async function handler(req, res) {
         null,
         'SHEETS_QUOTA_EXCEEDED',
       );
+    }
+    if (action === 'venta-asignar-vendedora' || action === 'ventas-asignar-vendedora-batch') {
+      return sendErr(res, 400, errorMessage || 'No se pudo asignar vendedora.', null, 'VENTAS_ASSIGNMENT_INVALID', traceId);
     }
     return res.status(400).json({
       ok: false,

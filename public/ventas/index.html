@@ -477,9 +477,9 @@
       }
       btnSync.disabled = false;
       btnSync.title = 'Sincronizar ventas con Tiendanube/Sheets.';
-      btnAssignSelected.disabled = true;
-      batchSellerSelect.disabled = true;
-      setStatus('Modo lectura: puedes sincronizar ventas; las asignaciones requieren admin.');
+      batchSellerSelect.disabled = false;
+      updateBatchButtonState();
+      setStatus('Modo public: puedes asignar vendedora; acciones admin siguen protegidas.');
     };
 
     const loadAdminSessionStatus = async () => {
@@ -610,7 +610,6 @@
     };
 
     const asignarVendedora = async (orderId, seller) => {
-      if (!hasAdminSession) throw new Error('Modo lectura: inicia sesión admin para asignar vendedora.');
       const normalized = normalizeSeller(seller);
       if (!normalized) throw new Error('Selecciona una vendedora válida (Haru o Vendedora)');
       const body = { order_id: orderId, seller: normalized, source: 'ventas_html' };
@@ -626,7 +625,6 @@
     };
 
     const asignarVendedoraBatch = async ({ items = [], source = 'ventas_html_batch' }) => {
-      if (!hasAdminSession) throw new Error('Modo lectura: inicia sesión admin para asignar vendedora.');
       const response = await safeJson(await fetch('/api/core?action=ventas-asignar-vendedora-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
