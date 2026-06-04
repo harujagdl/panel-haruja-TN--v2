@@ -6430,11 +6430,11 @@ const copyHealthTraceId = async () => {
         sinAsignarEl.textContent = String(summary.sinAsignar);
       }
 
-      function renderSalesMiniDashboardError() {
+      function renderSalesMiniDashboardError(message = "No se pudo cargar") {
         const totalMesEl = document.querySelector("[data-sales-mini='total-mes']");
         const vendedoraEl = document.querySelector("[data-sales-mini='vendedora']");
         const sinAsignarEl = document.querySelector("[data-sales-mini='sin-asignar']");
-        if (totalMesEl) totalMesEl.textContent = "No se pudo cargar";
+        if (totalMesEl) totalMesEl.textContent = message;
         if (vendedoraEl) vendedoraEl.textContent = "—";
         if (sinAsignarEl) sinAsignarEl.textContent = "—";
       }
@@ -6442,6 +6442,7 @@ const copyHealthTraceId = async () => {
       let salesMiniDashboardLoading = false;
       let salesMiniDashboardLoaded = false;
       let salesMiniDashboardCache = null;
+      let salesMiniDashboardCooldownUntil = 0;
 
       const loadSalesMiniDashboard = async ({ force = false } = {}) => {
         if (!salesMiniTotal || !salesMiniTopSeller || !salesMiniUnassigned) return;
@@ -6453,7 +6454,6 @@ const copyHealthTraceId = async () => {
 
         if (force) {
           salesMiniDashboardLoaded = false;
-          salesMiniDashboardCache = null;
         }
 
         if (salesMiniDashboardLoading) {
@@ -6464,12 +6464,25 @@ const copyHealthTraceId = async () => {
           console.info("[cache.hit.ventas]", { source: "frontend-memory" });
           return salesMiniDashboardCache;
         }
+        if (Date.now() < salesMiniDashboardCooldownUntil) {
+          console.info("[quota.guard.skip]", { module: "ventas-mini-public", reason: "cooldown-429" });
+          if (salesMiniDashboardCache) {
+            renderSalesMiniDashboard(salesMiniDashboardCache);
+            return salesMiniDashboardCache;
+          }
+          renderSalesMiniDashboardError("Temporalmente no disponible");
+          return null;
+        }
 
         salesMiniDashboardLoading = true;
         try {
           const { month } = resolveSalesContext();
           const response = await fetch(`/api/core?action=ventas-mini-public&month=${encodeURIComponent(month)}&refresh=1`, { cache: "no-store" });
           const data = await response.json().catch(() => null);
+          if (response.status === 429) {
+            salesMiniDashboardCooldownUntil = Date.now() + 120000;
+            throw new Error("ventas-mini-public HTTP 429");
+          }
           if (!response.ok) throw new Error(`ventas-mini-public HTTP ${response.status}`);
           if (!data || data.ok === false) {
             throw new Error(data?.message || data?.error || "Respuesta inválida de ventas-mini-public");
@@ -6479,6 +6492,16 @@ const copyHealthTraceId = async () => {
           renderSalesMiniDashboard(data);
           return data;
         } catch (error) {
+          const message = error?.message || "";
+          if (message.includes("HTTP 429")) {
+            console.warn("sales mini dashboard cooldown", error);
+            if (salesMiniDashboardCache) {
+              renderSalesMiniDashboard(salesMiniDashboardCache);
+              return salesMiniDashboardCache;
+            }
+            renderSalesMiniDashboardError("Temporalmente no disponible");
+            return null;
+          }
           console.error("sales mini dashboard error", error);
           renderSalesMiniDashboardError();
           return null;
